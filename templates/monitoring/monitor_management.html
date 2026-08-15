@@ -1,0 +1,529 @@
+<!-- templates/monitor_management.html -->
+{% extends 'base.html' %}
+
+{% block title %}系统监控管理 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h1 class="h2">系统监控管理</h1>
+            <p class="text-muted mb-0">定时监控设备状态，自动发现异常</p>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-server fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">总设备数</h6>
+                            <h3 class="mb-0" id="totalDevices">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-wifi fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">在线设备</h6>
+                            <h3 class="mb-0" id="onlineDevices">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-plug fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">离线设备</h6>
+                            <h3 class="mb-0" id="offlineDevices">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-exchange-alt fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">24小时状态变化</h6>
+                            <h3 class="mb-0" id="statusChanges">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 左侧：监控配置 -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">监控配置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="monitorConfigForm">
+                        <div class="mb-3">
+                            <label class="form-label">自动监控</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoMonitorEnabled" name="autoMonitorEnabled">
+                                <label class="form-check-label" for="autoMonitorEnabled">启用定时自动监控</label>
+                            </div>
+                            <div class="form-text">启用后系统将定时自动检测设备状态</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="monitorInterval" class="form-label">监控间隔（分钟）</label>
+                            <input type="number" class="form-control" id="monitorInterval" name="monitorInterval" min="1" max="1440" value="5">
+                            <div class="form-text">每隔多少分钟检测一次设备状态</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="concurrentWorkers" class="form-label">并发数量</label>
+                            <input type="number" class="form-control" id="concurrentWorkers" name="concurrentWorkers" min="1" max="50" value="10">
+                            <div class="form-text">同时检测的设备数量，越多速度越快</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pingTimeout" class="form-label">Ping超时时间（秒）</label>
+                            <input type="number" class="form-control" id="pingTimeout" name="pingTimeout" min="1" max="10" value="2">
+                            <div class="form-text">Ping检测的超时时间</div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> 保存配置
+                            </button>
+                            <button type="button" class="btn btn-success" id="runMonitorNowBtn">
+                                <i class="fas fa-play me-1"></i> 立即执行监控
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">监控任务状态</h5>
+                </div>
+                <div class="card-body">
+                    <div id="taskStatus">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：监控日志 -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">监控日志</h5>
+                    <div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="showStatusChangedOnly">
+                            <label class="form-check-label" for="showStatusChangedOnly">仅显示状态变化</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" id="refreshLogsBtn">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>设备名称</th>
+                                    <th>IP地址</th>
+                                    <th>状态变化</th>
+                                    <th>响应时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitorLogsBody">
+                                <!-- 日志动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center mt-3">
+                        <button class="btn btn-outline-primary btn-sm" id="loadMoreLogsBtn">
+                            <i class="fas fa-chevron-down me-1"></i> 加载更多
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    let currentLogPage = 1;
+    let isLoadingLogs = false;
+    let hasMoreLogs = true;
+    let showStatusChangedOnly = false;
+    
+    // 加载监控统计
+    function loadMonitorStatistics() {
+        $.ajax({
+            url: '/api/monitor/statistics',
+            type: 'GET',
+            success: function(res) {
+                if (res.success) {
+                    $('#totalDevices').text(res.data.total_devices);
+                    $('#onlineDevices').text(res.data.online_devices);
+                    $('#offlineDevices').text(res.data.offline_devices);
+                    $('#statusChanges').text(res.data.status_changes_24h);
+                }
+            }
+        });
+    }
+    
+    // 加载监控配置
+    function loadMonitorConfig() {
+        $.ajax({
+            url: '/api/system/configs',
+            type: 'GET',
+            success: function(res) {
+                if (res.success) {
+                    res.data.forEach(config => {
+                        switch(config.key) {
+                            case 'auto_monitor_enabled':
+                                $('#autoMonitorEnabled').prop('checked', config.value === 'true');
+                                break;
+                            case 'auto_monitor_interval':
+                                $('#monitorInterval').val(config.value);
+                                break;
+                            case 'auto_monitor_concurrent':
+                                $('#concurrentWorkers').val(config.value);
+                                break;
+                            case 'auto_monitor_timeout':
+                                $('#pingTimeout').val(config.value);
+                                break;
+                        }
+                    });
+                }
+            }
+        });
+    }
+    
+    // 加载任务状态
+    function loadTaskStatus() {
+        $.ajax({
+            url: '/api/monitor/tasks',
+            type: 'GET',
+            success: function(res) {
+                if (res.success) {
+                    const task = res.data.tasks[0];
+                    const scheduler = res.data.scheduler;
+                    
+                    let html = '';
+                    if (task) {
+                        html = `
+                            <div class="mb-3">
+                                <h6>${task.description}</h6>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-${task.is_active ? 'success' : 'secondary'}">
+                                        ${task.is_active ? '运行中' : '已停止'}
+                                    </span>
+                                    <button class="btn btn-sm btn-${task.is_active ? 'warning' : 'success'}" 
+                                            onclick="toggleMonitorTask(${task.id}, ${!task.is_active})">
+                                        ${task.is_active ? '停止' : '启动'}
+                                    </button>
+                                </div>
+                                <p class="mb-1"><small>调度类型:</small> ${task.schedule_type}</p>
+                                <p class="mb-1"><small>间隔:</small> ${task.schedule_value.interval_minutes} 分钟</p>
+                                <p class="mb-1"><small>上次运行:</small> ${task.last_run ? new Date(task.last_run).toLocaleString() : '从未运行'}</p>
+                                <p class="mb-1"><small>下次运行:</small> ${task.next_run ? new Date(task.next_run).toLocaleString() : '未安排'}</p>
+                                <p class="mb-1"><small>运行次数:</small> ${task.run_count}</p>
+                                <p class="mb-0"><small>状态:</small> <span class="badge bg-${task.last_status === 'success' ? 'success' : task.last_status === 'error' ? 'danger' : 'secondary'}">${task.last_status}</span></p>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                        <div class="border-top pt-3">
+                            <h6>调度器状态</h6>
+                            <p class="mb-1"><small>运行状态:</small> <span class="badge bg-${scheduler.running ? 'success' : 'danger'}">${scheduler.running ? '运行中' : '已停止'}</span></p>
+                            <p class="mb-1"><small>任务数量:</small> ${scheduler.job_count}</p>
+                            <p class="mb-0"><small>最后更新:</small> ${new Date().toLocaleTimeString()}</p>
+                        </div>
+                    `;
+                    
+                    $('#taskStatus').html(html);
+                }
+            }
+        });
+    }
+    
+    // 切换监控任务状态
+    window.toggleMonitorTask = function(taskId, isActive) {
+        $.ajax({
+            url: `/api/monitor/tasks/${taskId}/toggle`,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ is_active: isActive }),
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    showToast('success', res.message);
+                    loadTaskStatus();
+                } else {
+                    showToast('error', res.message);
+                }
+            }
+        });
+    };
+    
+    // 加载监控日志
+    function loadMonitorLogs(reset = false) {
+        if (isLoadingLogs) return;
+        
+        if (reset) {
+            currentLogPage = 1;
+            $('#monitorLogsBody').empty();
+            hasMoreLogs = true;
+        }
+        
+        if (!hasMoreLogs) return;
+        
+        isLoadingLogs = true;
+        $('#loadMoreLogsBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> 加载中...');
+        
+        $.ajax({
+            url: '/api/monitor/logs',
+            type: 'GET',
+            data: {
+                page: currentLogPage,
+                per_page: 20,
+                status_changed: showStatusChangedOnly ? 1 : 0
+            },
+            success: function(res) {
+                if (res.success) {
+                    const logs = res.data.logs;
+                    const pagination = res.data.pagination;
+                    
+                    if (logs.length === 0 && currentLogPage === 1) {
+                        $('#monitorLogsBody').html(`
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    <i class="fas fa-clipboard-list fa-2x mb-2"></i>
+                                    <p>暂无监控日志</p>
+                                </td>
+                            </tr>
+                        `);
+                        hasMoreLogs = false;
+                    } else {
+                        logs.forEach(log => {
+                            const statusChanged = log.old_status !== log.new_status;
+                            const row = `
+                                <tr class="${statusChanged ? 'table-warning' : ''}">
+                                    <td>
+                                        <small class="text-muted">${new Date(log.created_at).toLocaleString()}</small>
+                                    </td>
+                                    <td>${log.device_name}</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">${log.device_ip}</span>
+                                    </td>
+                                    <td>
+                                        ${statusChanged ? 
+                                            `<span class="badge bg-warning">
+                                                ${log.old_status || '未知'} → ${log.new_status || '未知'}
+                                            </span>` : 
+                                            `<span class="badge bg-${log.is_online ? 'success' : 'danger'}">
+                                                ${log.new_status}
+                                            </span>`
+                                        }
+                                    </td>
+                                    <td>
+                                        ${log.ping_time > 0 ? `<span class="badge bg-info">${log.ping_time}ms</span>` : '-'}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info" onclick="showLogDetail(${log.id})">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                            $('#monitorLogsBody').append(row);
+                        });
+                        
+                        hasMoreLogs = currentLogPage < pagination.pages;
+                        currentLogPage++;
+                    }
+                }
+            },
+            error: function() {
+                showToast('error', '加载日志失败');
+            },
+            complete: function() {
+                isLoadingLogs = false;
+                $('#loadMoreLogsBtn').prop('disabled', false).html('<i class="fas fa-chevron-down me-1"></i> 加载更多');
+            }
+        });
+    }
+    
+    // 显示日志详情
+    window.showLogDetail = function(logId) {
+        // 这里可以弹窗显示详细日志信息
+        alert('日志详情功能开发中...');
+    };
+    
+    // 保存监控配置
+    $('#monitorConfigForm').submit(function(e) {
+        e.preventDefault();
+        
+        const configs = [
+            { key: 'auto_monitor_enabled', value: $('#autoMonitorEnabled').is(':checked') ? 'true' : 'false' },
+            { key: 'auto_monitor_interval', value: $('#monitorInterval').val() },
+            { key: 'auto_monitor_concurrent', value: $('#concurrentWorkers').val() },
+            { key: 'auto_monitor_timeout', value: $('#pingTimeout').val() }
+        ];
+        
+        let updateCount = 0;
+        let errorCount = 0;
+        
+        configs.forEach(config => {
+            $.ajax({
+                url: `/api/system/configs/${config.key}`,
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ value: config.value }),
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                async: false, // 同步执行，确保顺序
+                success: function(res) {
+                    if (res.success) {
+                        updateCount++;
+                    } else {
+                        errorCount++;
+                    }
+                },
+                error: function() {
+                    errorCount++;
+                }
+            });
+        });
+        
+        if (errorCount === 0) {
+            showToast('success', '配置保存成功');
+            loadTaskStatus(); // 重新加载任务状态
+        } else {
+            showToast('warning', `配置保存完成，${updateCount}个成功，${errorCount}个失败`);
+        }
+    });
+    
+    // 立即执行监控
+    $('#runMonitorNowBtn').click(function() {
+        if (!confirm('确定要立即执行设备监控吗？')) return;
+        
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> 执行中...');
+        
+        $.ajax({
+            url: '/api/monitor/tasks/run-now',
+            type: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    showToast('success', '监控任务已在后台启动，请稍后查看日志');
+                    setTimeout(loadMonitorLogs, 3000); // 3秒后刷新日志
+                } else {
+                    showToast('error', res.message);
+                }
+            },
+            error: function() {
+                showToast('error', '请求失败');
+            },
+            complete: function() {
+                setTimeout(() => {
+                    $btn.prop('disabled', false).html('<i class="fas fa-play me-1"></i> 立即执行监控');
+                }, 3000);
+            }
+        });
+    });
+    
+    // 仅显示状态变化
+    $('#showStatusChangedOnly').change(function() {
+        showStatusChangedOnly = $(this).is(':checked');
+        loadMonitorLogs(true);
+    });
+    
+    // 刷新日志
+    $('#refreshLogsBtn').click(function() {
+        loadMonitorLogs(true);
+    });
+    
+    // 加载更多日志
+    $('#loadMoreLogsBtn').click(function() {
+        loadMonitorLogs();
+    });
+    
+    // 辅助函数
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    function showToast(type, message) {
+        // 使用已有的toast函数
+        if (typeof window.showToast === 'function') {
+            window.showToast(type, message);
+        } else {
+            alert(message);
+        }
+    }
+    
+    // 初始化页面
+    loadMonitorStatistics();
+    loadMonitorConfig();
+    loadTaskStatus();
+    loadMonitorLogs();
+    
+    // 自动刷新任务状态（每30秒）
+    setInterval(loadTaskStatus, 30000);
+    
+    // 自动刷新统计（每60秒）
+    setInterval(loadMonitorStatistics, 60000);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,856 @@
+<!-- templates/report/asset_inventory.html -->
+{% extends "base.html" %}
+
+{% block title %}资产清单报表 - 运维管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    .asset-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+        height: 100%;
+    }
+    
+    .asset-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        line-height: 1;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+    
+    .type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        
+        .card {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作栏 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">资产清单报表</h1>
+            <p class="text-muted">查看和管理所有IT资产信息</p>
+        </div>
+        <div class="no-print">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary" onclick="window.print()">
+                    <i class="fas fa-print"></i> 打印
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="exportToExcel()">
+                    <i class="fas fa-file-excel"></i> 导出 Excel
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="location.reload()">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计摘要 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-primary h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">资产总数</h6>
+                            <h2 class="stat-number text-primary">{{ assets|length }}</h2>
+                        </div>
+                        <div class="text-primary">
+                            <i class="fas fa-boxes fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-success h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">在用资产</h6>
+                            <h2 class="stat-number text-success">
+                                {{ assets|selectattr('status', 'equalto', 'active')|list|length }}
+                            </h2>
+                        </div>
+                        <div class="text-success">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-warning h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">总采购价值</h6>
+                            <h2 class="stat-number text-warning">
+                                ¥{{ "%.2f"|format(assets|sum(attribute='purchase_price') or 0) }}
+                            </h2>
+                        </div>
+                        <div class="text-warning">
+                            <i class="fas fa-dollar-sign fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-info h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">当前总价值</h6>
+                            <h2 class="stat-number text-info">
+                                ¥{{ "%.2f"|format(assets|sum(attribute='current_value') or 0) }}
+                            </h2>
+                        </div>
+                        <div class="text-info">
+                            <i class="fas fa-chart-line fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 资产类型统计 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">资产类型统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for stat in type_stats %}
+                        {% set percentage = (stat.count / (assets|length) * 100) if assets|length > 0 else 0 %}
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <h6 class="mb-1">{{ stat.asset_type or '未分类' }}</h6>
+                                            <h4 class="stat-number text-dark mb-0">{{ stat.count }}</h4>
+                                        </div>
+                                        <span class="badge badge-secondary type-badge">
+                                            {{ "%.1f"|format(percentage) }}%
+                                        </span>
+                                    </div>
+                                    <div class="progress mb-2" style="height: 6px;">
+                                        <div class="progress-bar bg-primary" 
+                                             role="progressbar" 
+                                             style="width: {{ percentage }}%"
+                                             aria-valuenow="{{ percentage }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted">
+                                        价值: ¥{{ "%.2f"|format(stat.total_value or 0) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="col-12 text-center py-4">
+                            <div class="text-muted">
+                                <i class="fas fa-chart-pie fa-3x mb-3"></i>
+                                <p>暂无类型统计数据</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 筛选和搜索 -->
+    <div class="row mb-4 no-print">
+        <div class="col-12">
+            <div class="card filter-section">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label small text-muted mb-1">资产类型</label>
+                        <select class="form-control form-control-sm" id="filterType">
+                            <option value="">所有类型</option>
+                            <option value="服务器">服务器</option>
+                            <option value="网络设备">网络设备</option>
+                            <option value="存储设备">存储设备</option>
+                            <option value="安全设备">安全设备</option>
+                            <option value="软件">软件</option>
+                            <option value="办公设备">办公设备</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label small text-muted mb-1">状态</label>
+                        <select class="form-control form-control-sm" id="filterStatus">
+                            <option value="">所有状态</option>
+                            <option value="active">在用</option>
+                            <option value="inactive">停用</option>
+                            <option value="maintenance">维修中</option>
+                            <option value="retired">已报废</option>
+                            <option value="lost">丢失</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label small text-muted mb-1">责任部门</label>
+                        <input type="text" class="form-control form-control-sm" 
+                               id="filterDepartment" placeholder="输入部门名称">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label small text-muted mb-1">搜索</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" 
+                                   id="searchAsset" placeholder="资产编号/名称/型号">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" onclick="applyFilters()">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 资产列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">资产清单</h5>
+            <div class="small text-muted">
+                共 <span id="assetCount">{{ assets|length }}</span> 项资产
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="assetTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>资产编号</th>
+                            <th>资产名称</th>
+                            <th>类型</th>
+                            <th>品牌/型号</th>
+                            <th>状态</th>
+                            <th>位置</th>
+                            <th>责任人</th>
+                            <th>采购日期</th>
+                            <th>采购价格</th>
+                            <th>当前价值</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in assets %}
+                        <tr class="asset-row" 
+                            data-type="{{ asset.asset_type or '' }}" 
+                            data-status="{{ asset.status or '' }}"
+                            data-department="{{ asset.owner_department or '' }}">
+                            <td>
+                                <div class="font-weight-bold">{{ asset.asset_number }}</div>
+                                <div class="small text-muted">{{ asset.serial_number or '无序列号' }}</div>
+                            </td>
+                            <td>
+                                <strong>{{ asset.asset_name }}</strong>
+                                {% if asset.asset_subtype %}
+                                <div class="small text-muted">{{ asset.asset_subtype }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-secondary type-badge">
+                                    {{ asset.asset_type or '未分类' }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if asset.brand or asset.model %}
+                                <div>{{ asset.brand or '' }}</div>
+                                <div class="small text-muted">{{ asset.model or '' }}</div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ asset.get_status_badge_class() }}">
+                                    {% if asset.status == 'active' %}在用
+                                    {% elif asset.status == 'inactive' %}停用
+                                    {% elif asset.status == 'maintenance' %}维修中
+                                    {% elif asset.status == 'retired' %}已报废
+                                    {% elif asset.status == 'lost' %}丢失
+                                    {% else %}{{ asset.status }}{% endif %}
+                                </span>
+                                {% if asset.condition and asset.condition != 'good' %}
+                                <br>
+                                <small class="badge badge-{{ asset.get_condition_badge_class() }} mt-1">
+                                    {% if asset.condition == 'excellent' %}优秀
+                                    {% elif asset.condition == 'good' %}良好
+                                    {% elif asset.condition == 'fair' %}一般
+                                    {% elif asset.condition == 'poor' %}较差
+                                    {% else %}{{ asset.condition }}{% endif %}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if asset.location %}
+                                <div class="small">
+                                    <i class="fas fa-map-marker-alt text-primary"></i>
+                                    {{ asset.location.name }}
+                                </div>
+                                {% if asset.position %}
+                                <div class="text-muted smaller">{{ asset.position|truncate(20) }}</div>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">未指定</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if asset.owner_person %}
+                                <div class="small">{{ asset.owner_person }}</div>
+                                {% if asset.owner_department %}
+                                <div class="text-muted smaller">{{ asset.owner_department }}</div>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">未指定</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if asset.purchase_date %}
+                                <div>{{ asset.purchase_date.strftime('%Y-%m-%d') }}</div>
+                                <div class="small text-muted">
+                                    {{ asset.get_age() or 0 }}年
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if asset.purchase_price %}
+                                <div class="font-weight-bold">
+                                    ¥{{ "%.2f"|format(asset.purchase_price) }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set current_value = asset.calculate_current_value() %}
+                                <div class="font-weight-bold text-info">
+                                    ¥{{ "%.2f"|format(current_value) }}
+                                </div>
+                                {% if asset.purchase_price and asset.purchase_price > 0 %}
+                                {% set depreciation = ((asset.purchase_price - current_value) / asset.purchase_price * 100) %}
+                                <div class="small text-muted">
+                                    折旧 {{ "%.1f"|format(depreciation) }}%
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-primary" 
+                                            onclick="viewAssetDetails({{ asset.id }})"
+                                            title="查看详情">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="11" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                                    <h5>暂无资产数据</h5>
+                                    <p class="mb-0">还没有添加任何资产记录</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer no-print">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="small text-muted">
+                    总采购价值: <strong>¥{{ "%.2f"|format(assets|sum(attribute='purchase_price') or 0) }}</strong> | 
+                    当前总价值: <strong class="text-info">¥{{ "%.2f"|format(assets|sum(attribute='current_value') or 0) }}</strong>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-light btn-sm" onclick="sortByValue()">
+                        <i class="fas fa-sort-amount-down"></i> 按价值排序
+                    </button>
+                    <button type="button" class="btn btn-light btn-sm" onclick="sortByAge()">
+                        <i class="fas fa-sort-numeric-down"></i> 按年龄排序
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详细信息模态框 -->
+    <div class="modal fade" id="assetDetailModal" tabindex="-1" aria-labelledby="assetDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assetDetailModalLabel">资产详情</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="assetDetailContent">
+                    <!-- 内容将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 查看资产详情
+    function viewAssetDetails(assetId) {
+        // 显示加载中
+        $('#assetDetailContent').html(`
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">加载中...</span>
+                </div>
+                <p class="mt-2">正在加载资产信息...</p>
+            </div>
+        `);
+        
+        // 获取资产详情
+        $.ajax({
+            url: '{{ url_for("report.get_asset_detail", asset_id=0) }}'.replace('0', assetId),
+            method: 'GET',
+            success: function(data) {
+                if (data.success) {
+                    renderAssetDetails(data.asset);
+                } else {
+                    $('#assetDetailContent').html(`
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle"></i>
+                            加载资产信息失败: ${data.message}
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#assetDetailContent').html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        无法连接到服务器，请检查网络连接
+                    </div>
+                `);
+            }
+        });
+        
+        $('#assetDetailModal').modal('show');
+    }
+    
+    // 渲染资产详情
+    function renderAssetDetails(asset) {
+        const warrantyStatus = asset.is_under_warranty ? 
+            `<span class="badge badge-success">在保修期内</span>` : 
+            `<span class="badge badge-secondary">已过保修期</span>`;
+            
+        const html = `
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>${asset.asset_name} <small class="text-muted">${asset.asset_number}</small></h5>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">基本信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>资产类型:</strong></td>
+                                        <td>
+                                            <span class="badge badge-secondary">${asset.asset_type}</span>
+                                        </td>
+                                    </tr>
+                                    ${asset.brand ? `
+                                    <tr>
+                                        <td><strong>品牌:</strong></td>
+                                        <td>${asset.brand}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.model ? `
+                                    <tr>
+                                        <td><strong>型号:</strong></td>
+                                        <td>${asset.model}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.serial_number ? `
+                                    <tr>
+                                        <td><strong>序列号:</strong></td>
+                                        <td>${asset.serial_number}</td>
+                                    </tr>
+                                    ` : ''}
+                                    <tr>
+                                        <td><strong>状态:</strong></td>
+                                        <td>
+                                            <span class="badge badge-${asset.status_class || 'secondary'}">
+                                                ${asset.status_display || asset.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    ${asset.condition ? `
+                                    <tr>
+                                        <td><strong>状况:</strong></td>
+                                        <td>
+                                            <span class="badge badge-${asset.condition_class || 'secondary'}">
+                                                ${asset.condition}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">财务信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    ${asset.purchase_date ? `
+                                    <tr>
+                                        <td><strong>采购日期:</strong></td>
+                                        <td>${asset.purchase_date} (${asset.age_years || 0}年)</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.purchase_price ? `
+                                    <tr>
+                                        <td><strong>采购价格:</strong></td>
+                                        <td class="font-weight-bold">¥${parseFloat(asset.purchase_price).toFixed(2)}</td>
+                                    </tr>
+                                    ` : ''}
+                                    <tr>
+                                        <td><strong>当前价值:</strong></td>
+                                        <td class="font-weight-bold text-info">
+                                            ¥${parseFloat(asset.current_value || 0).toFixed(2)}
+                                        </td>
+                                    </tr>
+                                    ${asset.warranty_expiry ? `
+                                    <tr>
+                                        <td><strong>保修到期:</strong></td>
+                                        <td>
+                                            ${asset.warranty_expiry} ${warrantyStatus}
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.depreciation_rate ? `
+                                    <tr>
+                                        <td><strong>折旧率:</strong></td>
+                                        <td>${asset.depreciation_rate}%</td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">责任信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    ${asset.owner_person ? `
+                                    <tr>
+                                        <td><strong>责任人:</strong></td>
+                                        <td>${asset.owner_person}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.owner_department ? `
+                                    <tr>
+                                        <td><strong>责任部门:</strong></td>
+                                        <td>${asset.owner_department}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.owner_contact ? `
+                                    <tr>
+                                        <td><strong>联系方式:</strong></td>
+                                        <td>${asset.owner_contact}</td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">位置信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    ${asset.location_name ? `
+                                    <tr>
+                                        <td><strong>位置:</strong></td>
+                                        <td>${asset.location_name}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${asset.position ? `
+                                    <tr>
+                                        <td><strong>具体位置:</strong></td>
+                                        <td>${asset.position}</td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    ${asset.notes ? `
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h6 class="text-muted mb-3">备注信息</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <p class="mb-0">${asset.notes}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div class="col-md-4 border-left">
+                    <h6 class="text-muted mb-3">关联信息</h6>
+                    
+                    ${asset.device_id ? `
+                    <div class="card bg-light mb-3">
+                        <div class="card-body">
+                            <h6>关联设备</h6>
+                            <p class="mb-1">设备ID: ${asset.device_id}</p>
+                            ${asset.device_name ? `<p class="mb-0">设备名称: ${asset.device_name}</p>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${asset.supplier_name ? `
+                    <div class="card bg-light mb-3">
+                        <div class="card-body">
+                            <h6>供应商信息</h6>
+                            <p class="mb-1">${asset.supplier_name}</p>
+                            ${asset.supplier_contact ? `<p class="mb-0">${asset.supplier_contact}</p>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${asset.tags ? `
+                    <h6 class="text-muted mt-4 mb-2">标签</h6>
+                    <div>
+                        ${asset.tags.split(',').map(tag => 
+                            `<span class="badge badge-info mr-1 mb-1">${tag.trim()}</span>`
+                        ).join('')}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        
+        $('#assetDetailContent').html(html);
+    }
+    
+    // 应用筛选器
+    function applyFilters() {
+        const typeFilter = $('#filterType').val();
+        const statusFilter = $('#filterStatus').val();
+        const departmentFilter = $('#filterDepartment').val().toLowerCase();
+        const searchFilter = $('#searchAsset').val().toLowerCase();
+        
+        let visibleCount = 0;
+        
+        $('.asset-row').each(function() {
+            const row = $(this);
+            const type = row.data('type');
+            const status = row.data('status');
+            const department = row.data('department').toLowerCase();
+            const text = row.text().toLowerCase();
+            
+            let show = true;
+            
+            // 类型筛选
+            if (typeFilter && type !== typeFilter) {
+                show = false;
+            }
+            
+            // 状态筛选
+            if (statusFilter && status !== statusFilter) {
+                show = false;
+            }
+            
+            // 部门筛选
+            if (departmentFilter && department.indexOf(departmentFilter) === -1) {
+                show = false;
+            }
+            
+            // 搜索筛选
+            if (searchFilter && text.indexOf(searchFilter) === -1) {
+                show = false;
+            }
+            
+            if (show) {
+                row.show();
+                visibleCount++;
+            } else {
+                row.hide();
+            }
+        });
+        
+        // 更新计数
+        $('#assetCount').text(visibleCount);
+    }
+    
+    // 按价值排序
+    function sortByValue() {
+        const rows = $('.asset-row').get();
+        
+        rows.sort(function(a, b) {
+            const valueA = parseFloat($(a).find('td:eq(9) .font-weight-bold').text().replace('¥', '')) || 0;
+            const valueB = parseFloat($(b).find('td:eq(9) .font-weight-bold').text().replace('¥', '')) || 0;
+            
+            return valueB - valueA; // 降序排列
+        });
+        
+        $.each(rows, function(index, row) {
+            $('#assetTable tbody').append(row);
+        });
+    }
+    
+    // 按年龄排序
+    function sortByAge() {
+        const rows = $('.asset-row').get();
+        
+        rows.sort(function(a, b) {
+            const ageA = parseInt($(a).find('td:eq(7) .small.text-muted').text().replace('年', '')) || 0;
+            const ageB = parseInt($(b).find('td:eq(7) .small.text-muted').text().replace('年', '')) || 0;
+            
+            return ageB - ageA; // 降序排列（年龄大的在前）
+        });
+        
+        $.each(rows, function(index, row) {
+            $('#assetTable tbody').append(row);
+        });
+    }
+    
+    // 导出到Excel
+    function exportToExcel() {
+        // 使用 SheetJS 库导出 Excel
+        if (typeof XLSX === 'undefined') {
+            alert('请先加载 SheetJS 库');
+            return;
+        }
+        
+        // 收集数据
+        const data = [];
+        const headers = [
+            '资产编号', '资产名称', '类型', '品牌', '型号', '序列号', 
+            '状态', '位置', '责任人', '部门', '采购日期', '采购价格', 
+            '当前价值', '年龄(年)', '状况'
+        ];
+        
+        data.push(headers);
+        
+        $('.asset-row:visible').each(function() {
+            const row = $(this);
+            
+            const assetNumber = row.find('td:eq(0) .font-weight-bold').text().trim();
+            const assetName = row.find('td:eq(1) strong').text().trim();
+            const assetType = row.find('td:eq(2) .badge').text().trim();
+            const brand = row.find('td:eq(3) div:first').text().trim();
+            const model = row.find('td:eq(3) .small').text().trim();
+            const serialNumber = row.find('td:eq(0) .small').text().trim();
+            const status = row.find('td:eq(4) .badge:first').text().trim();
+            const location = row.find('td:eq(5) .small').text().trim();
+            const owner = row.find('td:eq(6) .small:first').text().trim();
+            const department = row.find('td:eq(6) .smaller').text().trim();
+            const purchaseDate = row.find('td:eq(7) div:first').text().trim();
+            const purchasePrice = row.find('td:eq(8) .font-weight-bold').text().replace('¥', '').trim();
+            const currentValue = row.find('td:eq(9) .font-weight-bold').text().replace('¥', '').trim();
+            const age = row.find('td:eq(7) .small.text-muted').text().replace('年', '').trim();
+            const condition = row.find('td:eq(4) .badge.mt-1').text().trim();
+            
+            data.push([
+                assetNumber, assetName, assetType, brand, model, serialNumber,
+                status, location, owner, department, purchaseDate, purchasePrice,
+                currentValue, age, condition
+            ]);
+        });
+        
+        // 转换为Excel
+        const worksheet = XLSX.utils.aoa_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "资产清单");
+        
+        // 下载文件
+        const fileName = `资产清单报表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+    }
+    
+    // 页面加载完成后初始化
+    $(document).ready(function() {
+        // 初始化表格
+        if ($.fn.DataTable) {
+            $('#assetTable').DataTable({
+                pageLength: 25,
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh-CN.json'
+                },
+                order: [[0, 'asc']],
+                dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+                responsive: true
+            });
+        }
+        
+        // 绑定筛选器事件
+        $('#filterType, #filterStatus, #filterDepartment').on('change', applyFilters);
+        $('#searchAsset').on('keyup', function(e) {
+            if (e.key === 'Enter') {
+                applyFilters();
+            }
+        });
+    });
+</script>
+{% endblock %}

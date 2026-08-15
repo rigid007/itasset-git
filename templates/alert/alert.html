@@ -1,0 +1,946 @@
+{% extends "base.html" %}
+
+{% block title %}告警列表 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}
+告警列表
+{% endblock %}
+
+{% block page_subtitle %}
+查看和管理所有告警事件
+{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-primary" onclick="refreshAlerts()">
+    <i class="fas fa-sync-alt me-2"></i>刷新
+</button>
+<div class="btn-group ms-2">
+    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="fas fa-download me-2"></i>导出
+    </button>
+    <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" onclick="exportAlerts('csv')">CSV格式</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportAlerts('json')">JSON格式</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportAlerts('excel')">Excel格式</a></li>
+    </ul>
+</div>
+<button class="btn btn-outline-danger ms-2" onclick="showBulkActionModal()">
+    <i class="fas fa-tasks me-2"></i>批量操作
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 筛选侧边栏 -->
+    <div class="col-md-3">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">筛选条件</h6>
+            </div>
+            <div class="card-body">
+                <form id="filterForm" method="GET" action="{{ url_for('alert.alert_list') }}">
+                    <!-- 严重级别 -->
+                    <div class="mb-3">
+                        <label class="form-label">严重级别</label>
+                        <select class="form-select" name="severity">
+                            <option value="all" {% if severity == 'all' %}selected{% endif %}>全部</option>
+                            <option value="critical" {% if severity == 'critical' %}selected{% endif %}>严重</option>
+                            <option value="error" {% if severity == 'error' %}selected{% endif %}>错误</option>
+                            <option value="warning" {% if severity == 'warning' %}selected{% endif %}>警告</option>
+                            <option value="info" {% if severity == 'info' %}selected{% endif %}>信息</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 状态 -->
+                    <div class="mb-3">
+                        <label class="form-label">状态</label>
+                        <select class="form-select" name="status">
+                            <option value="all" {% if status == 'all' %}selected{% endif %}>全部</option>
+                            <option value="active" {% if status == 'active' %}selected{% endif %}>活跃</option>
+                            <option value="acknowledged" {% if status == 'acknowledged' %}selected{% endif %}>已确认</option>
+                            <option value="resolved" {% if status == 'resolved' %}selected{% endif %}>已解决</option>
+                            <option value="suppressed" {% if status == 'suppressed' %}selected{% endif %}>已抑制</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 设备 -->
+                    <div class="mb-3">
+                        <label class="form-label">设备</label>
+                        <select class="form-select" name="device_id">
+                            <option value="">全部设备</option>
+                            {% for device in devices %}
+                            <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                                {{ device.name }} ({{ device.management_ip or device.ip_address }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- 日期范围 -->
+                    <div class="mb-3">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-control" name="start_date" value="{{ start_date or '' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">结束日期</label>
+                        <input type="date" class="form-control" name="end_date" value="{{ end_date or '' }}">
+                    </div>
+                    
+                    <!-- 搜索 -->
+                    <div class="mb-3">
+                        <label class="form-label">搜索</label>
+                        <input type="text" class="form-control" name="search" value="{{ search or '' }}" 
+                               placeholder="告警标题、消息或设备">
+                    </div>
+                    
+                    <!-- 每页显示 -->
+                    <div class="mb-3">
+                        <label class="form-label">每页显示</label>
+                        <select class="form-select" name="per_page">
+                            <option value="20" {% if per_page == 20 %}selected{% endif %}>20条</option>
+                            <option value="50" {% if per_page == 50 %}selected{% endif %}>50条</option>
+                            <option value="100" {% if per_page == 100 %}selected{% endif %}>100条</option>
+                            <option value="200" {% if per_page == 200 %}selected{% endif %}>200条</option>
+                        </select>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter me-2"></i>应用筛选
+                        </button>
+                        <a href="{{ url_for('alert.alert_list') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times me-2"></i>清除筛选
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 统计信息 -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">统计信息</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td>总告警数</td>
+                                <td class="text-end">{{ stats.total }}</td>
+                            </tr>
+                            <tr>
+                                <td>活跃告警</td>
+                                <td class="text-end">{{ stats.active }}</td>
+                            </tr>
+                            <tr>
+                                <td>已确认告警</td>
+                                <td class="text-end">{{ stats.acknowledged }}</td>
+                            </tr>
+                            <tr>
+                                <td>已解决告警</td>
+                                <td class="text-end">{{ stats.resolved }}</td>
+                            </tr>
+                            <tr class="table-danger">
+                                <td>严重告警</td>
+                                <td class="text-end">{{ stats.critical }}</td>
+                            </tr>
+                            <tr class="table-warning">
+                                <td>错误告警</td>
+                                <td class="text-end">{{ stats.error }}</td>
+                            </tr>
+                            <tr class="table-info">
+                                <td>警告告警</td>
+                                <td class="text-end">{{ stats.warning }}</td>
+                            </tr>
+                            <tr>
+                                <td>信息告警</td>
+                                <td class="text-end">{{ stats.info }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 告警列表 -->
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">告警列表</h5>
+                <div class="d-flex align-items-center">
+                    <span class="me-3 text-muted">
+                        显示 {{ (pagination.page - 1) * pagination.per_page + 1 }} - 
+                        {{ (pagination.page - 1) * pagination.per_page + alerts|length }} 
+                        条，共 {{ pagination.total }} 条
+                    </span>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="changeSort('first_occurred')">
+                            时间 {% if sort_by == 'first_occurred' %}{{ '↓' if order == 'desc' else '↑' }}{% endif %}
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="changeSort('severity')">
+                            级别 {% if sort_by == 'severity' %}{{ '↓' if order == 'desc' else '↑' }}{% endif %}
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="changeSort('status')">
+                            状态 {% if sort_by == 'status' %}{{ '↓' if order == 'desc' else '↑' }}{% endif %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if alerts %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="40">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                                    </div>
+                                </th>
+                                <th width="60">级别</th>
+                                <th>告警标题</th>
+                                <th width="200">设备</th>
+                                <th width="150">发生时间</th>
+                                <th width="100">状态</th>
+                                <th width="80">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in alerts %}
+                            <tr class="alert-row" data-alert-id="{{ alert.id }}">
+                                <td>
+                                    <div class="form-check">
+                                        <input class="form-check-input alert-checkbox" type="checkbox" value="{{ alert.id }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if alert.severity == 'critical' %}
+                                    <span class="badge bg-danger">严重</span>
+                                    {% elif alert.severity == 'error' %}
+                                    <span class="badge bg-warning">错误</span>
+                                    {% elif alert.severity == 'warning' %}
+                                    <span class="badge bg-info">警告</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">信息</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <button class="btn btn-link p-0 text-start text-decoration-none" 
+                                                onclick="showAlertDetail({{ alert.id }})">
+                                            <strong>{{ alert.title }}</strong>
+                                        </button>
+                                        {% if alert.occurrence_count > 1 %}
+                                        <span class="badge bg-light text-dark ms-2">{{ alert.occurrence_count }}次</span>
+                                        {% endif %}
+                                    </div>
+                                    <small class="text-muted d-block">{{ alert.message|truncate(80) }}</small>
+                                </td>
+                                <td>
+                                    {% if alert.device %}
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-server me-2 text-muted"></i>
+                                        <div>
+                                            <div>{{ alert.device.name }}</div>
+                                            <small class="text-muted">{{ alert.device_ip or '' }}</small>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">设备已删除</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div>{{ alert.first_occurred.strftime('%Y-%m-%d') }}</div>
+                                    <small class="text-muted">{{ alert.first_occurred.strftime('%H:%M:%S') }}</small>
+                                </td>
+                                <td>
+                                    {% if alert.status == 'active' %}
+                                    <span class="badge bg-danger">活跃</span>
+                                    {% elif alert.status == 'acknowledged' %}
+                                    <span class="badge bg-warning">已确认</span>
+                                    {% elif alert.status == 'resolved' %}
+                                    <span class="badge bg-success">已解决</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ alert.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="showAlertDetail({{ alert.id }})">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        {% if alert.status == 'active' %}
+                                        <button class="btn btn-outline-warning" onclick="acknowledgeAlert({{ alert.id }})">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <button class="btn btn-outline-success" onclick="resolveAlert({{ alert.id }})">
+                                            <i class="fas fa-check-double"></i>
+                                        </button>
+                                        {% elif alert.status == 'acknowledged' %}
+                                        <button class="btn btn-outline-success" onclick="resolveAlert({{ alert.id }})">
+                                            <i class="fas fa-check-double"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info" onclick="reopenAlert({{ alert.id }})">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        {% elif alert.status == 'resolved' %}
+                                        <button class="btn btn-outline-info" onclick="reopenAlert({{ alert.id }})">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">没有找到符合条件的告警</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- 分页 -->
+            {% if pagination.pages > 1 %}
+            <div class="card-footer">
+                <nav aria-label="告警分页">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('alert.alert_list', page=pagination.prev_num, **request.args) }}">
+                                上一页
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page_num %}
+                                {% if page_num == pagination.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('alert.alert_list', page=page_num, **request.args) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('alert.alert_list', page=pagination.next_num, **request.args) }}">
+                                下一页
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 告警详情模态框 -->
+<div class="modal fade" id="alertDetailModal" tabindex="-1" aria-labelledby="alertDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="alertDetailModalLabel">告警详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="alertDetailBody">
+                <!-- 详情内容将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="acknowledgeBtn" style="display: none;" onclick="acknowledgeCurrentAlert()">
+                    <i class="fas fa-check me-2"></i>确认告警
+                </button>
+                <button type="button" class="btn btn-success" id="resolveBtn" style="display: none;" onclick="resolveCurrentAlert()">
+                    <i class="fas fa-check-double me-2"></i>解决告警
+                </button>
+                <button type="button" class="btn btn-info" id="reopenBtn" style="display: none;" onclick="reopenCurrentAlert()">
+                    <i class="fas fa-redo me-2"></i>重新打开
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作模态框 -->
+<div class="modal fade" id="bulkActionModal" tabindex="-1" aria-labelledby="bulkActionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkActionModalLabel">批量操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>已选择 <span id="selectedCount">0</span> 个告警</p>
+                <div class="mb-3">
+                    <label class="form-label">选择操作</label>
+                    <select class="form-select" id="bulkActionSelect">
+                        <option value="">请选择操作</option>
+                        <option value="acknowledge">确认为已处理</option>
+                        <option value="resolve">标记为已解决</option>
+                        <option value="reopen">重新打开</option>
+                        <option value="delete">删除告警</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="resolveNoteDiv" style="display: none;">
+                    <label class="form-label">解决说明</label>
+                    <textarea class="form-control" id="resolveNote" rows="3" placeholder="请输入解决说明..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="executeBulkAction()">执行操作</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 全局变量
+let currentAlertId = null;
+
+// 刷新告警列表
+function refreshAlerts() {
+    location.reload();
+}
+
+// 更改排序
+function changeSort(field) {
+    const url = new URL(window.location.href);
+    const currentSort = url.searchParams.get('sort_by');
+    const currentOrder = url.searchParams.get('order');
+    
+    if (currentSort === field) {
+        // 切换排序方向
+        url.searchParams.set('order', currentOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+        // 设置新的排序字段
+        url.searchParams.set('sort_by', field);
+        url.searchParams.set('order', 'desc');
+    }
+    
+    window.location.href = url.toString();
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.alert-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateSelectedCount();
+}
+
+// 更新选中数量
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.alert-checkbox:checked');
+    document.getElementById('selectedCount').textContent = checkboxes.length;
+}
+
+// 获取选中的告警ID
+function getSelectedAlertIds() {
+    const checkboxes = document.querySelectorAll('.alert-checkbox:checked');
+    const ids = [];
+    
+    checkboxes.forEach(checkbox => {
+        ids.push(parseInt(checkbox.value));
+    });
+    
+    return ids;
+}
+
+// 显示告警详情
+function showAlertDetail(alertId) {
+    currentAlertId = alertId;
+    
+    fetch(`/api/alert/${alertId}`)
+        .then(response => response.json())
+        .then(alert => {
+            const modalBody = document.getElementById('alertDetailBody');
+            
+            // 构建详情HTML
+            let html = `
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="alert ${getAlertSeverityClass(alert.severity)}">
+                            <h5 class="alert-heading">${alert.title}</h5>
+                            <p class="mb-0">${alert.message}</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">基本信息</h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-5">严重级别</dt>
+                                    <dd class="col-sm-7">
+                                        <span class="badge ${getSeverityBadgeClass(alert.severity)}">
+                                            ${getSeverityText(alert.severity)}
+                                        </span>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-5">当前状态</dt>
+                                    <dd class="col-sm-7">
+                                        <span class="badge ${getStatusBadgeClass(alert.status)}">
+                                            ${getStatusText(alert.status)}
+                                        </span>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-5">首次发生</dt>
+                                    <dd class="col-sm-7">${formatDateTime(alert.first_occurred)}</dd>
+                                    
+                                    <dt class="col-sm-5">最后发生</dt>
+                                    <dd class="col-sm-7">${formatDateTime(alert.last_occurred)}</dd>
+                                    
+                                    <dt class="col-sm-5">发生次数</dt>
+                                    <dd class="col-sm-7">${alert.occurrence_count}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">设备信息</h6>
+                            </div>
+                            <div class="card-body">
+            `;
+            
+            if (alert.device_details) {
+                html += `
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">设备名称</dt>
+                        <dd class="col-sm-8">${alert.device_details.name}</dd>
+                        
+                        <dt class="col-sm-4">IP地址</dt>
+                        <dd class="col-sm-8">${alert.device_details.ip || 'N/A'}</dd>
+                        
+                        <dt class="col-sm-4">设备类型</dt>
+                        <dd class="col-sm-8">${alert.device_details.type}</dd>
+                        
+                        <dt class="col-sm-4">设备状态</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge ${getDeviceStatusBadgeClass(alert.device_details.status)}">
+                                ${alert.device_details.status}
+                            </span>
+                        </dd>
+                        
+                        <dt class="col-sm-4">位置</dt>
+                        <dd class="col-sm-8">${alert.device_details.location || '未分配'}</dd>
+                    </dl>
+                `;
+            } else {
+                html += `<p class="text-muted mb-0">设备信息不可用</p>`;
+            }
+            
+            html += `
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">处理信息</h6>
+                            </div>
+                            <div class="card-body">
+            `;
+            
+            if (alert.acknowledged_at) {
+                html += `
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">确认时间</dt>
+                        <dd class="col-sm-8">${formatDateTime(alert.acknowledged_at)}</dd>
+                        
+                        <dt class="col-sm-4">确认人员</dt>
+                        <dd class="col-sm-8">${alert.acknowledged_by || 'N/A'}</dd>
+                    </dl>
+                `;
+            }
+            
+            if (alert.resolved_at) {
+                html += `
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">解决时间</dt>
+                        <dd class="col-sm-8">${formatDateTime(alert.resolved_at)}</dd>
+                        
+                        <dt class="col-sm-4">解决人员</dt>
+                        <dd class="col-sm-8">${alert.resolved_by || 'N/A'}</dd>
+                        
+                        <dt class="col-sm-4">解决说明</dt>
+                        <dd class="col-sm-8">${alert.resolved_note || '无'}</dd>
+                    </dl>
+                `;
+            }
+            
+            if (!alert.acknowledged_at && !alert.resolved_at) {
+                html += `<p class="text-muted mb-0">尚未处理</p>`;
+            }
+            
+            html += `
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">相关告警</h6>
+                            </div>
+                            <div class="card-body">
+            `;
+            
+            if (alert.related_alerts && alert.related_alerts.length > 0) {
+                html += `<div class="table-responsive"><table class="table table-sm"><tbody>`;
+                
+                alert.related_alerts.forEach(relatedAlert => {
+                    html += `
+                        <tr>
+                            <td width="80">
+                                <span class="badge ${getSeverityBadgeClass(relatedAlert.severity)}">
+                                    ${getSeverityText(relatedAlert.severity)}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="#" onclick="showAlertDetail(${relatedAlert.id}); return false;">
+                                    ${relatedAlert.title}
+                                </a>
+                            </td>
+                            <td width="150">${formatDateTime(relatedAlert.first_occurred)}</td>
+                            <td width="80">
+                                <span class="badge ${getStatusBadgeClass(relatedAlert.status)}">
+                                    ${getStatusText(relatedAlert.status)}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `</tbody></table></div>`;
+            } else {
+                html += `<p class="text-muted mb-0">没有相关告警</p>`;
+            }
+            
+            html += `
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modalBody.innerHTML = html;
+            
+            // 显示操作按钮
+            document.getElementById('acknowledgeBtn').style.display = alert.status === 'active' ? 'inline-block' : 'none';
+            document.getElementById('resolveBtn').style.display = alert.status === 'active' || alert.status === 'acknowledged' ? 'inline-block' : 'none';
+            document.getElementById('reopenBtn').style.display = alert.status === 'acknowledged' || alert.status === 'resolved' ? 'inline-block' : 'none';
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('alertDetailModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('获取告警详情失败:', error);
+            alert('获取告警详情失败');
+        });
+}
+
+// 确认告警
+function acknowledgeAlert(alertId) {
+    if (confirm('确定要确认这个告警吗？')) {
+        fetch(`/api/alert/${alertId}/acknowledge`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('告警已确认');
+                refreshAlerts();
+            } else {
+                alert('确认失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('确认告警失败:', error);
+            alert('确认告警失败');
+        });
+    }
+}
+
+// 解决告警
+function resolveAlert(alertId) {
+    const note = prompt('请输入解决说明（可选）:');
+    
+    if (note !== null) {
+        fetch(`/api/alert/${alertId}/resolve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ resolved_note: note })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('告警已解决');
+                refreshAlerts();
+            } else {
+                alert('解决失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('解决告警失败:', error);
+            alert('解决告警失败');
+        });
+    }
+}
+
+// 重新打开告警
+function reopenAlert(alertId) {
+    if (confirm('确定要重新打开这个告警吗？')) {
+        fetch(`/api/alert/${alertId}/reopen`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('告警已重新打开');
+                refreshAlerts();
+            } else {
+                alert('重新打开失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('重新打开告警失败:', error);
+            alert('重新打开告警失败');
+        });
+    }
+}
+
+// 确认当前告警（从模态框）
+function acknowledgeCurrentAlert() {
+    acknowledgeAlert(currentAlertId);
+    bootstrap.Modal.getInstance(document.getElementById('alertDetailModal')).hide();
+}
+
+// 解决当前告警（从模态框）
+function resolveCurrentAlert() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('alertDetailModal'));
+    modal.hide();
+    
+    setTimeout(() => {
+        resolveAlert(currentAlertId);
+    }, 300);
+}
+
+// 重新打开当前告警（从模态框）
+function reopenCurrentAlert() {
+    reopenAlert(currentAlertId);
+    bootstrap.Modal.getInstance(document.getElementById('alertDetailModal')).hide();
+}
+
+// 显示批量操作模态框
+function showBulkActionModal() {
+    const selectedIds = getSelectedAlertIds();
+    
+    if (selectedIds.length === 0) {
+        alert('请先选择要操作的告警');
+        return;
+    }
+    
+    updateSelectedCount();
+    document.getElementById('resolveNoteDiv').style.display = 'none';
+    document.getElementById('bulkActionSelect').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('bulkActionModal'));
+    modal.show();
+}
+
+// 执行批量操作
+function executeBulkAction() {
+    const action = document.getElementById('bulkActionSelect').value;
+    const selectedIds = getSelectedAlertIds();
+    
+    if (!action) {
+        alert('请选择操作');
+        return;
+    }
+    
+    if (selectedIds.length === 0) {
+        alert('没有选中的告警');
+        return;
+    }
+    
+    let requestData = { alert_ids: selectedIds, action: action };
+    
+    if (action === 'resolve') {
+        const note = document.getElementById('resolveNote').value;
+        requestData.resolved_note = note;
+    }
+    
+    fetch('/api/alerts/bulk_update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`已成功处理 ${data.updated_count} 个告警`);
+            bootstrap.Modal.getInstance(document.getElementById('bulkActionModal')).hide();
+            refreshAlerts();
+        } else {
+            alert('批量操作失败: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('批量操作失败:', error);
+        alert('批量操作失败');
+    });
+}
+
+// 导出告警
+function exportAlerts(format) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('export', format);
+    
+    window.location.href = url.toString();
+}
+
+// 辅助函数
+function getAlertSeverityClass(severity) {
+    switch(severity) {
+        case 'critical': return 'alert-danger';
+        case 'error': return 'alert-warning';
+        case 'warning': return 'alert-info';
+        default: return 'alert-secondary';
+    }
+}
+
+function getSeverityBadgeClass(severity) {
+    switch(severity) {
+        case 'critical': return 'bg-danger';
+        case 'error': return 'bg-warning';
+        case 'warning': return 'bg-info';
+        default: return 'bg-secondary';
+    }
+}
+
+function getSeverityText(severity) {
+    switch(severity) {
+        case 'critical': return '严重';
+        case 'error': return '错误';
+        case 'warning': return '警告';
+        default: return '信息';
+    }
+}
+
+function getStatusBadgeClass(status) {
+    switch(status) {
+        case 'active': return 'bg-danger';
+        case 'acknowledged': return 'bg-warning';
+        case 'resolved': return 'bg-success';
+        default: return 'bg-secondary';
+    }
+}
+
+function getStatusText(status) {
+    switch(status) {
+        case 'active': return '活跃';
+        case 'acknowledged': return '已确认';
+        case 'resolved': return '已解决';
+        case 'suppressed': return '已抑制';
+        default: return status;
+    }
+}
+
+function getDeviceStatusBadgeClass(status) {
+    switch(status) {
+        case 'online': return 'bg-success';
+        case 'offline': return 'bg-danger';
+        case 'warning': return 'bg-warning';
+        default: return 'bg-secondary';
+    }
+}
+
+function formatDateTime(dateTimeStr) {
+    if (!dateTimeStr) return 'N/A';
+    
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('zh-CN');
+}
+
+// 监听复选框变化
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.alert-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCount);
+    });
+    
+    // 监听批量操作选择变化
+    document.getElementById('bulkActionSelect').addEventListener('change', function() {
+        const resolveNoteDiv = document.getElementById('resolveNoteDiv');
+        resolveNoteDiv.style.display = this.value === 'resolve' ? 'block' : 'none';
+    });
+    
+    // 监听筛选表单提交
+    document.getElementById('filterForm').addEventListener('submit', function(e) {
+        // 移除空值的参数
+        const formData = new FormData(this);
+        const params = new URLSearchParams();
+        
+        for (const [key, value] of formData.entries()) {
+            if (value) {
+                params.append(key, value);
+            }
+        }
+        
+        // 重定向到筛选后的URL
+        window.location.href = `${this.action}?${params.toString()}`;
+        e.preventDefault();
+    });
+});
+</script>
+{% endblock %}

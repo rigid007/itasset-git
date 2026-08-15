@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}合同管理{% endblock %}
+{% block page_title %}合同管理{% endblock %}
+{% block page_subtitle %}管理采购、维护、租赁合同与SLA协议{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('asset_extra.contract_add') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> 添加合同
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title text-primary">{{ total }}</h5>
+                <small class="text-muted">合同总数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title text-success">{{ active_count }}</h5>
+                <small class="text-muted">生效中</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title text-warning">{{ expiring_soon }}</h5>
+                <small class="text-muted">即将到期</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h5 class="card-title text-info">{{ contracts.total }}</h5>
+                <small class="text-muted">当前页</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 搜索过滤 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" placeholder="搜索合同名称/编号..." value="{{ search }}">
+            </div>
+            <div class="col-md-2">
+                <select name="type" class="form-select">
+                    <option value="">全部类型</option>
+                    <option value="purchase" {% if type_filter=='purchase' %}selected{% endif %}>采购合同</option>
+                    <option value="maintenance" {% if type_filter=='maintenance' %}selected{% endif %}>维护合同</option>
+                    <option value="lease" {% if type_filter=='lease' %}selected{% endif %}>租赁合同</option>
+                    <option value="sla" {% if type_filter=='sla' %}selected{% endif %}>SLA协议</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select">
+                    <option value="">全部状态</option>
+                    <option value="active" {% if status_filter=='active' %}selected{% endif %}>生效中</option>
+                    <option value="expired" {% if status_filter=='expired' %}selected{% endif %}>已过期</option>
+                    <option value="terminated" {% if status_filter=='terminated' %}selected{% endif %}>已终止</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> 搜索</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('asset_extra.contract_list') }}" class="btn btn-secondary w-100">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 合同列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>合同编号</th>
+                        <th>合同名称</th>
+                        <th>类型</th>
+                        <th>供应商</th>
+                        <th>金额</th>
+                        <th>开始日期</th>
+                        <th>结束日期</th>
+                        <th>剩余天数</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contract in contracts.items %}
+                    <tr>
+                        <td><code>{{ contract.contract_no }}</code></td>
+                        <td><a href="{{ url_for('asset_extra.contract_detail', id=contract.id) }}">{{ contract.name }}</a></td>
+                        <td>
+                            {% if contract.contract_type == 'purchase' %}<span class="badge bg-info">采购</span>
+                            {% elif contract.contract_type == 'maintenance' %}<span class="badge bg-warning">维护</span>
+                            {% elif contract.contract_type == 'lease' %}<span class="badge bg-secondary">租赁</span>
+                            {% elif contract.contract_type == 'sla' %}<span class="badge bg-primary">SLA</span>
+                            {% else %}{{ contract.contract_type }}{% endif %}
+                        </td>
+                        <td>{{ contract.supplier.name if contract.supplier else '-' }}</td>
+                        <td>¥{{ "%.2f"|format(contract.total_value or 0) }}</td>
+                        <td>{{ contract.start_date }}</td>
+                        <td>{{ contract.end_date }}</td>
+                        <td>
+                            {% set dr = contract.days_remaining() %}
+                            {% if dr is none %}-{% elif dr < 0 %}<span class="text-danger">已过期{{ -dr }}天</span>
+                            {% elif dr <= contract.notification_days %}<span class="text-warning">{{ dr }}天</span>
+                            {% else %}{{ dr }}天{% endif %}
+                        </td>
+                        <td>
+                            {% if contract.status == 'active' %}<span class="badge bg-success">生效中</span>
+                            {% elif contract.status == 'expired' %}<span class="badge bg-danger">已过期</span>
+                            {% elif contract.status == 'terminated' %}<span class="badge bg-secondary">已终止</span>
+                            {% else %}{{ contract.status }}{% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('asset_extra.contract_detail', id=contract.id) }}" class="btn btn-sm btn-outline-info" title="查看"><i class="fas fa-eye"></i></a>
+                            <a href="{{ url_for('asset_extra.contract_edit', id=contract.id) }}" class="btn btn-sm btn-outline-primary" title="编辑"><i class="fas fa-edit"></i></a>
+                            <form method="POST" action="{{ url_for('asset_extra.contract_delete', id=contract.id) }}" style="display:inline" onsubmit="return confirm('确认删除合同「{{ contract.name }}」？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="删除"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="10" class="text-center text-muted py-4">暂无合同数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 分页 -->
+{% if contracts.pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination justify-content-center">
+        {% for p in range(1, contracts.pages + 1) %}
+        <li class="page-item {% if p == contracts.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('asset_extra.contract_list', page=p, search=search, status=status_filter, type=type_filter) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

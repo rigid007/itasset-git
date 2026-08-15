@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}持续改进与度量仪表盘{% endblock %}
+{% block page_title %}持续改进(CSI) 与度量仪表盘{% endblock %}
+{% block page_subtitle %}MTTR / 可用率 / SLA达标率 与持续改进闭环{% endblock %}
+{% block header_actions %}
+{% if has_permission(current_user, 'csi:edit') %}
+<a href="{{ url_for('itsm_adv.csi_register') }}" class="btn btn-primary"><i class="fas fa-plus"></i> 登记改进项</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- 周期切换 -->
+<div class="d-flex justify-content-end mb-2">
+  <div class="btn-group btn-group-sm" role="group">
+    {% for d in [7, 30, 90, 180] %}
+    <a href="{{ url_for('itsm_adv.csi_dashboard', days=d) }}"
+       class="btn btn-outline-secondary {% if days == d %}active{% endif %}">{{ d }}天</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- 关键度量 -->
+<div class="row mb-4">
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-primary mb-1">{{ metrics.mttr_avg or '-' }}</h4><small>MTTR(解决) 小时</small></div></div></div>
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-info mb-1">{{ metrics.mttr_median or '-' }}</h4><small>MTTR中位数 小时</small></div></div></div>
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-success mb-1">{{ metrics.sla_resolution_compliance or '-' }}%</h4><small>SLA解决达标率</small></div></div></div>
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-warning mb-1">{{ metrics.sla_response_compliance or '-' }}%</h4><small>SLA响应达标率</small></div></div></div>
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-danger mb-1">{{ metrics.availability }}%</h4>
+    <small>服务可用率
+      {% if metrics.availability_source == 'real' %}<span class="badge bg-success">真实采集</span>
+      {% else %}<span class="badge bg-secondary" title="基于工单解决时长的代理算法">代理</span>{% endif %}
+    </small></div></div></div>
+  <div class="col-md-2"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-secondary mb-1">{{ metrics.total }}</h4><small>工单总量</small></div></div></div>
+</div>
+
+<!-- 可用率来源 与 CSAT 快捷入口 -->
+<div class="row mb-4">
+  <div class="col-md-4"><div class="card h-100"><div class="card-body">
+    <h6 class="mb-2"><i class="fas fa-heart text-danger"></i> 服务满意度(CSAT)</h6>
+    {% if metrics.csat_avg is not none %}
+      <h4 class="mb-1">{{ metrics.csat_avg }} <small class="text-muted">/ 5</small></h4>
+      <span class="badge bg-light text-dark">{{ metrics.csat_count }} 份评价</span>
+    {% else %}
+      <p class="text-muted mb-0">暂无评价数据</p>
+    {% endif %}
+    <div class="mt-2"><a href="{{ url_for('itsm_adv.csat_dashboard') }}" class="btn btn-sm btn-outline-danger">查看CSAT仪表盘</a></div>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body">
+    <h6 class="mb-2"><i class="fas fa-network-wired text-primary"></i> 真实可用率采集</h6>
+    <p class="text-muted mb-2">对接监控/设备在线状态(DeviceMonitorLog)，替代基于工单时长的代理算法。</p>
+    <div class="mt-2"><a href="{{ url_for('itsm_adv.availability_report') }}" class="btn btn-sm btn-outline-primary">查看可用率报表</a></div>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body">
+    <h6 class="mb-2"><i class="fas fa-rocket text-success"></i> 变更影响模拟</h6>
+    <p class="text-muted mb-2">提交变更前先测算直接/级联影响设备、受影响服务与用户数。</p>
+    <div class="mt-2"><a href="{{ url_for('maintenance.change_requests') }}" class="btn btn-sm btn-outline-success">前往变更管理</a></div>
+  </div></div></div>
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-6"><div class="card h-100"><div class="card-header"><h6 class="mb-0">按分类工单量</h6></div>
+    <div class="card-body"><canvas id="catChart" height="180"></canvas></div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-header"><h6 class="mb-0">按优先级工单量</h6></div>
+    <div class="card-body"><canvas id="priChart" height="180"></canvas></div></div></div>
+</div>
+
+<!-- CSI 登记册 -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">持续改进登记册 (CSI)</h5>
+    <div>
+      {% for s, c in status_counts.items() %}
+      <span class="badge bg-secondary me-1">{{ s }}: {{ c }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light"><tr>
+        <th>编号</th><th>标题</th><th>来源</th><th>目标指标</th><th>基线→目标</th><th>实际</th><th>状态</th><th>操作</th>
+      </tr></thead>
+      <tbody>
+      {% for ci in csis %}
+        <tr>
+          <td><code>{{ ci.code }}</code></td>
+          <td><strong>{{ ci.title }}</strong><br><small class="text-muted">{{ ci.description[:50] if ci.description else '' }}</small></td>
+          <td>{{ ci.source_type }}{% if ci.source_id %}#{{ ci.source_id }}{% endif %}</td>
+          <td>{{ ci.target_metric or '-' }}</td>
+          <td>{{ ci.baseline_value if ci.baseline_value is not none else '-' }} → {{ ci.target_value if ci.target_value is not none else '-' }}</td>
+          <td>{{ ci.actual_value if ci.actual_value is not none else '-' }}</td>
+          <td>
+            {% if ci.status == 'proposed' %}<span class="badge bg-secondary">提议</span>
+            {% elif ci.status == 'approved' %}<span class="badge bg-info">已批准</span>
+            {% elif ci.status == 'in_progress' %}<span class="badge bg-warning">进行中</span>
+            {% elif ci.status == 'completed' %}<span class="badge bg-success">已完成</span>
+            {% else %}<span class="badge bg-danger">已拒绝</span>{% endif %}
+          </td>
+          <td>
+            {% if has_permission(current_user, 'csi:edit') %}
+            <a href="{{ url_for('itsm_adv.csi_edit', ci_id=ci.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
+            <div class="btn-group btn-group-sm">
+              <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">推进</button>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="advance({{ ci.id }},'approved')">批准</a></li>
+                <li><a class="dropdown-item" href="#" onclick="advance({{ ci.id }},'in_progress')">开始</a></li>
+                <li><a class="dropdown-item" href="#" onclick="advance({{ ci.id }},'completed')">完成</a></li>
+                <li><a class="dropdown-item" href="#" onclick="advance({{ ci.id }},'rejected')">拒绝</a></li>
+              </ul>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">暂无持续改进项</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<form id="advForm" method="POST" style="display:none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="status" id="advStatus">
+</form>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+function advance(id, status){
+  document.getElementById('advForm').action = "{{ url_for('itsm_adv.csi_update_status', ci_id=0) }}".replace('/0','/'+id);
+  document.getElementById('advStatus').value = status;
+  document.getElementById('advForm').submit();
+}
+new Chart(document.getElementById('catChart'), {
+  type:'bar',
+  data:{ labels:{{ metrics.by_category.keys()|list|tojson }},
+    datasets:[{ label:'工单量', data:{{ metrics.by_category.values()|list|tojson }}, backgroundColor:'#0d6efd' }]},
+  options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
+});
+new Chart(document.getElementById('priChart'), {
+  type:'bar',
+  data:{ labels:{{ metrics.by_priority.keys()|list|tojson }},
+    datasets:[{ label:'工单量', data:{{ metrics.by_priority.values()|list|tojson }}, backgroundColor:'#198754' }]},
+  options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
+});
+</script>
+{% endblock %}

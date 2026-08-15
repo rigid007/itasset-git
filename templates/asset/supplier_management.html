@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}供应商管理 - 资产管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>供应商管理</h2>
+        </div>
+        <div class="col text-right">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#supplierModal" onclick="clearForm()">
+                <i class="fas fa-plus"></i> 新增供应商
+            </button>
+        </div>
+    </div>
+
+    <!-- 供应商列表卡片 -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>供应商名称</th>
+                            <th>联系人</th>
+                            <th>邮箱</th>
+                            <th>电话</th>
+                            <th>评分</th>
+                            <th>交货周期(天)</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplierTableBody">
+                        {% for supplier in suppliers %}
+                        <tr id="supplier-{{ supplier.id }}">
+                            <td>{{ supplier.id }}</td>
+                            <td>{{ supplier.name }}</td>
+                            <td>{{ supplier.contact_person or '—' }}</td>
+                            <td>{{ supplier.email or '—' }}</td>
+                            <td>{{ supplier.phone or '—' }}</td>
+                            <td>
+                                {% if supplier.rating %}
+                                    {% for i in range(supplier.rating) %}⭐{% endfor %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>{{ supplier.lead_time or '—' }}</td>
+                            <td>
+                                {% if supplier.is_active %}
+                                    <span class="badge bg-success">启用</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">禁用</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" onclick="editSupplier({{ supplier.id }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteSupplier({{ supplier.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center">暂无供应商数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑供应商模态框 -->
+<div class="modal fade" id="supplierModal" tabindex="-1" aria-labelledby="supplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="supplierModalLabel">新增供应商</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="supplierForm">
+                    <input type="hidden" id="supplierId" name="id">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">供应商名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="contact_person" class="form-label">联系人</label>
+                            <input type="text" class="form-control" id="contact_person" name="contact_person">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">邮箱</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="phone" class="form-label">电话</label>
+                            <input type="text" class="form-control" id="phone" name="phone">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="rating" class="form-label">评分 (1-5)</label>
+                            <input type="number" class="form-control" id="rating" name="rating" min="1" max="5">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lead_time" class="form-label">交货周期 (天)</label>
+                            <input type="number" class="form-control" id="lead_time" name="lead_time" min="0">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="payment_terms" class="form-label">付款条款</label>
+                            <input type="text" class="form-control" id="payment_terms" name="payment_terms">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="website" class="form-label">网站</label>
+                            <input type="url" class="form-control" id="website" name="website">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="address" class="form-label">地址</label>
+                        <textarea class="form-control" id="address" name="address" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">备注</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="is_active" name="is_active" checked>
+                        <label class="form-check-label" for="is_active">启用</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveSupplier()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+    // 清空表单（用于新增）
+    function clearForm() {
+        document.getElementById('supplierForm').reset();
+        document.getElementById('supplierId').value = '';
+        document.getElementById('supplierModalLabel').innerText = '新增供应商';
+        // 默认启用勾选
+        document.getElementById('is_active').checked = true;
+    }
+
+    // 编辑供应商：通过 AJAX 获取数据并填充表单
+    function editSupplier(id) {
+        // 此处假设有一个 API 可以获取供应商详情，例如 /supplier/get/<id>
+        fetch(`/asset/supplier/get/${id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const supplier = data.supplier;
+                    document.getElementById('supplierId').value = supplier.id;
+                    document.getElementById('name').value = supplier.name;
+                    document.getElementById('contact_person').value = supplier.contact_person || '';
+                    document.getElementById('email').value = supplier.email || '';
+                    document.getElementById('phone').value = supplier.phone || '';
+                    document.getElementById('rating').value = supplier.rating || '';
+                    document.getElementById('lead_time').value = supplier.lead_time || '';
+                    document.getElementById('payment_terms').value = supplier.payment_terms || '';
+                    document.getElementById('website').value = supplier.website || '';
+                    document.getElementById('address').value = supplier.address || '';
+                    document.getElementById('notes').value = supplier.notes || '';
+                    document.getElementById('is_active').checked = supplier.is_active;
+                    document.getElementById('supplierModalLabel').innerText = '编辑供应商';
+                    // 显示模态框
+                    new bootstrap.Modal(document.getElementById('supplierModal')).show();
+                } else {
+                    alert('获取供应商信息失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('请求失败');
+            });
+    }
+
+// 获取 CSRF token 的函数
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+// 保存供应商
+function saveSupplier() {
+    const csrfToken = getCsrfToken();
+    const form = document.getElementById('supplierForm');
+    const formData = new FormData(form);
+    const id = formData.get('id');
+    const url = id ? `/asset/supplier/edit/${id}` : '/asset/supplier/add';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {
+            'X-CSRFToken': csrfToken
+        },
+        body: formData
+    })
+    .then(response => {
+        // 检查响应内容类型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            return response.text().then(text => {
+                console.error('非 JSON 响应:', text);
+                throw new Error('服务器返回了错误页面，请检查后端日志或 CSRF token 是否正确。');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('supplierModal')).hide();
+            location.reload();  // 简单刷新页面
+        } else {
+            alert('保存失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('请求出错:', error);
+        alert('操作失败：' + error.message);
+    });
+}
+
+// 删除供应商
+function deleteSupplier(id) {
+    if (!confirm('确定删除该供应商吗？')) return;
+    const csrfToken = getCsrfToken();
+    fetch(`/asset/supplier/delete/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            return response.text().then(text => {
+                console.error('非 JSON 响应:', text);
+                throw new Error('服务器返回错误页面');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`supplier-${id}`).remove();
+        } else {
+            alert('删除失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('删除出错:', error);
+        alert('操作失败：' + error.message);
+    });
+}
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    .btn-sm {
+        margin: 0 2px;
+    }
+    .badge {
+        font-size: 0.9em;
+    }
+</style>
+{% endblock %}

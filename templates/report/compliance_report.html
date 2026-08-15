@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}合规报告{% endblock %}
+{% block page_title %}合规报告{% endblock %}
+{% block page_subtitle %}合规审计报告与合规率追踪{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    {% for s in summary %}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0">{{ s.framework.name }}</h6>
+                <span class="badge bg-secondary">v{{ s.framework.version or '-' }}</span>
+            </div>
+            <div class="card-body text-center">
+                <div class="display-3 {% if s.compliance_pct >= 90 %}text-success{% elif s.compliance_pct >= 70 %}text-warning{% else %}text-danger{% endif %}">
+                    {{ s.compliance_pct }}%
+                </div>
+                <small class="text-muted">合规率</small>
+                <hr>
+                <div class="row">
+                    <div class="col-4"><small class="text-muted">总计</small><br><strong>{{ s.total }}</strong></div>
+                    <div class="col-4"><small class="text-success">通过</small><br><strong>{{ s.passed }}</strong></div>
+                    <div class="col-4"><small class="text-danger">未通过</small><br><strong>{{ s.failed }}</strong></div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <div class="progress" style="height:8px">
+                    <div class="progress-bar {% if s.compliance_pct >= 90 %}bg-success{% elif s.compliance_pct >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                         style="width:{{ s.compliance_pct }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card"><div class="card-body text-center text-muted py-5">
+            <i class="fas fa-shield-alt fa-4x mb-3"></i>
+            <p>暂无合规数据，请先添加合规框架和证据</p>
+            <a href="{{ url_for('report_extra.compliance_frameworks') }}" class="btn btn-primary">管理合规框架</a>
+        </div></div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if summary %}
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">合规详情</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>框架</th><th>总控制项</th><th>通过</th><th>未通过</th><th>合规率</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for s in summary %}
+                <tr>
+                    <td><strong>{{ s.framework.name }}</strong></td>
+                    <td>{{ s.total }}</td>
+                    <td class="text-success">{{ s.passed }}</td>
+                    <td class="text-danger">{{ s.failed }}</td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height:15px;width:100px">
+                                <div class="progress-bar {% if s.compliance_pct >= 90 %}bg-success{% elif s.compliance_pct >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width:{{ s.compliance_pct }}%"></div>
+                            </div>
+                            <span class="ms-2">{{ s.compliance_pct }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.compliance_pct >= 90 %}<span class="badge bg-success">达标</span>
+                        {% elif s.compliance_pct >= 70 %}<span class="badge bg-warning">需改进</span>
+                        {% else %}<span class="badge bg-danger">不达标</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

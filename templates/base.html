@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() if csrf_token else '' }}">
+    <title>{% block title %} IT 资产与运维管理平台{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- 页面通用样式 -->
+    <style>
+        /* 页面标题区域 */
+        .page-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            padding: 1.5rem 0;
+            margin-bottom: 1.5rem;
+        }
+        
+        .page-title-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: #343a40;
+            margin: 0;
+        }
+        
+        .page-subtitle {
+            color: #6c757d;
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        /* 监控状态指示灯 */
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-up { background-color: #28a745; }
+        .status-down { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+        .status-unknown { background-color: #6c757d; }
+        
+        /* 拓扑图容器 */
+        .topology-container {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            height: 600px;
+            background-color: #f8f9fa;
+            overflow: hidden;
+        }
+        
+        /* 监控卡片样式 */
+        .monitoring-card {
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+        
+        .monitoring-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        /* 告警列表样式 */
+        .alert-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .alert-item {
+            border-left: 4px solid #dc3545;
+            margin-bottom: 0.5rem;
+            padding: 0.75rem;
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+        }
+        
+        .alert-item.warning {
+            border-left-color: #ffc107;
+        }
+        
+        .alert-item.info {
+            border-left-color: #17a2b8;
+        }
+        
+        /* 实时数据刷新指示器 */
+        .real-time-indicator {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .page-title-container {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            
+            .topology-container {
+                height: 400px;
+            }
+        }
+        
+        /* 拓扑图工具栏 */
+        .topology-toolbar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        /* 连接线样式预览 */
+        .link-preview {
+            display: inline-block;
+            width: 30px;
+            height: 3px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        
+        .link-active { background-color: #28a745; }
+        .link-down { background-color: #dc3545; }
+        .link-degraded { background-color: #ffc107; }
+        
+        /* 下拉菜单样式增强 */
+        .dropdown-menu {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .dropdown-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6c757d;
+            text-transform: uppercase;
+            padding: 0.5rem 1rem;
+        }
+        
+        /* 徽章样式 */
+        .badge-pill {
+            padding: 0.25em 0.6em;
+            font-size: 0.75em;
+        }
+        
+        /* 卡片样式增强 */
+        .card {
+            border: 1px solid rgba(0,0,0,.125);
+            border-radius: 0.5rem;
+        }
+        
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid rgba(0,0,0,.125);
+            padding: 0.75rem 1.25rem;
+        }
+
+        /* Toast容器 */
+        #toast-container {
+            z-index: 1060;
+        }
+    </style>
+    
+    {% block head %}{% endblock %}
+</head>
+<body class="d-flex flex-column min-vh-100">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="fas fa-network-wired me-2"></i>
+                <strong> IT资产与运维管理平台</strong>
+                <small class="badge bg-info ms-2">监控版 v2.1</small>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表盘
+                        </a>
+                    </li>
+                    
+                    <!-- 位置管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'location:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint is not none and 'location' in request.endpoint %}active{% endif %}" href="#" id="locationDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-map-marker-alt"></i> 位置管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="locationDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('location.location_list') }}"><i class="fas fa-list"></i> 位置列表</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('location.location_add') }}"><i class="fas fa-plus"></i> 添加位置</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('location.location_import') }}"><i class="fas fa-file-import"></i> 导入位置</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('location.location_export') }}"><i class="fas fa-file-export"></i> 导出位置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cabinet.cabinet_list') }}"><i class="fas fa-server"></i> 机柜列表</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cabinet.cabinet_add') }}"><i class="fas fa-plus"></i> 添加机柜</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cabinet.cabinet_import') }}"><i class="fas fa-file-import"></i> 导入机柜</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cabinet.cabinet_export') }}"><i class="fas fa-file-export"></i> 导出机柜</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cabinet.cabinet_rack_view') }}"><i class="fas fa-archive"></i> 机柜可视化</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('location.location_viz') }}"><i class="fas fa-network-wired"></i> 机房可视化(2D)</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('dc_view.dc_babylon') }}"><i class="fas fa-cube text-success"></i> 机房3D可视化</a></li>
+
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- 设备管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'device:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint is not none and ('device' in request.endpoint or 'device_group' in request.endpoint) %}active{% endif %}" href="#" id="deviceDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-server"></i> 设备管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="deviceDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('device.device_list') }}"><i class="fas fa-list"></i> 设备列表</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('device.device_add') }}"><i class="fas fa-plus"></i> 添加设备</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('device.device_discovery') }}"><i class="fas fa-search"></i> 设备发现</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#quickImportModal"><i class="fas fa-file-import"></i> 导入设备</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('device.device_export') }}"><i class="fas fa-file-export"></i> 导出设备</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('device_group.list_view') }}"><i class="fas fa-folder-tree"></i> 设备分组</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('device.decommissioned_list') }}"><i class="fas fa-box-open"></i> 已下架设备</a></li>
+
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- 拓扑管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'topology:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and 'topology' in request.endpoint %}active{% endif %}" href="#" id="topologyDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-project-diagram"></i> 拓扑管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="topologyDropdown">
+
+                            <li><a class="dropdown-item" href="{{ url_for('topology.discovery') }}"><i class="fas fa-search"></i> 拓扑发现</a></li>
+
+                            <li><a class="dropdown-item" href="{{ url_for('topology.connection_relations') }}"><i class="fas fa-link"></i> 连接关系</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('topology.physical_topology') }}"><i class="fas fa-network-wired"></i> 物理拓扑</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('topology.interface_view') }}"><i class="fas fa-plug"></i> 接口视图</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('topology.topology_settings') }}"><i class="fas fa-cog"></i> 拓扑设置</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('cmdb.dependencies') }}"><i class="fas fa-project-diagram"></i> CMDB依赖与影响</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('dc_view.dc_babylon') }}"><i class="fas fa-cube text-success"></i> 机房3D可视化</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- 资产管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'asset:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and 'asset' in request.endpoint %}active{% endif %}" href="#" id="assetDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-building"></i> 资产管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="assetDropdown">
+                            <li class="dropdown-header">资产核心</li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.asset_dashboard') }}"><i class="fas fa-tachometer-alt"></i> 资产驾驶舱</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.asset_inventory') }}"><i class="fas fa-clipboard-list"></i> 资产清单</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.asset_ledger') }}"><i class="fas fa-book"></i> 资产台账</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.depreciation_calculation') }}"><i class="fas fa-calculator"></i> 折旧计算</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.asset_reports') }}"><i class="fas fa-chart-bar"></i> 资产报表</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">合同与许可</li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.contract_list') }}"><i class="fas fa-file-contract"></i> 合同管理</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.license_list') }}"><i class="fas fa-key"></i> 软件许可</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">盘点与供应商</li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.audit_list') }}"><i class="fas fa-clipboard-check"></i> 资产盘点</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.supplier_management') }}"><i class="fas fa-truck"></i> 供应商管理</a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">备件管理</li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_inventory') }}"><i class="fas fa-boxes"></i> 备件库存</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_requests') }}"><i class="fas fa-clipboard-list"></i> 备件申请</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_usage') }}"><i class="fas fa-chart-line"></i> 备件使用统计</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- 监控菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'monitor:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and 'monitoring' in request.endpoint %}active{% endif %}" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-desktop"></i> 监控
+                            <span class="real-time-indicator">
+                                <i class="fas fa-circle text-success" style="font-size: 8px;"></i>
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.real_time_monitor') }}"><i class="fas fa-chart-line"></i> 实时监控</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.device_status') }}"><i class="fas fa-heartbeat"></i> 设备状态</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.performance_charts') }}"><i class="fas fa-chart-bar"></i> 性能图表</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.interface_monitor') }}"><i class="fas fa-plug"></i> 接口监控</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.history_data') }}"><i class="fas fa-history"></i> 历史数据</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring.monitor_settings') }}"><i class="fas fa-cog"></i> 监控设置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">智能分析</li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.health_scores') }}"><i class="fas fa-heartbeat"></i> 健康评分</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.sla_report') }}"><i class="fas fa-chart-line"></i> SLA在线率</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.predictive_analysis') }}"><i class="fas fa-chart-bar"></i> 趋势预测</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">运维协同</li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.maintenance_windows') }}"><i class="fas fa-clock"></i> 维护窗口</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.escalation_policies') }}"><i class="fas fa-level-up-alt"></i> 告警升级</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.anomaly_detection') }}"><i class="fas fa-exclamation-triangle"></i> 异常检测</a></li>
+                            {% if has_permission(current_user, 'event:rules') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.event_rules') }}"><i class="fas fa-project-diagram"></i> 事件关联规则</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- 运维管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'maintenance:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and 'maintenance' in request.endpoint %}active{% endif %}" href="#" id="maintenanceDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-tools"></i> 运维管理
+                            {% if pending_tasks and pending_tasks > 0 %}
+                            <span class="badge bg-danger rounded-pill">{{ pending_tasks }}</span>
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="maintenanceDropdown">
+                            <!-- 巡检管理 -->
+                            <li class="dropdown-header">巡检管理</li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.inspection_tasks') }}">
+                                <i class="fas fa-clipboard-check"></i> 巡检任务
+                                {% if pending_inspections and pending_inspections > 0 %}
+                                <span class="badge bg-warning float-end">{{ pending_inspections }}</span>
+                                {% endif %}
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.create_template') }}">
+                                <i class="fas fa-file-alt"></i> 巡检模板
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.inspection_schedule') }}">
+                                <i class="fas fa-calendar-alt"></i> 巡检计划
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.inspection_results') }}">
+                                <i class="fas fa-chart-bar"></i> 巡检结果
+                            </a></li>
+                            
+                            <!-- 工单管理 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">工单管理</li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.work_order_list') }}">
+                                <i class="fas fa-file-alt"></i> 工单列表
+                                {% if open_work_orders and open_work_orders > 0 %}
+                                <span class="badge bg-danger float-end">{{ open_work_orders }}</span>
+                                {% endif %}
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.create_work_order') }}">
+                                <i class="fas fa-plus-circle"></i> 创建工单
+                            </a></li>
+                            <!--
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.work_order_templates') }}">
+                                <i class="fas fa-clipboard"></i> 工单模板
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.work_order_categories') }}">
+                                <i class="fas fa-folder"></i> 工单分类
+                            </a></li>
+                            -->
+                            <!-- 变更管理 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">变更管理</li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.change_requests') }}">
+                                <i class="fas fa-exchange-alt"></i> 变更请求
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.change_calendar') }}">
+                                <i class="fas fa-calendar"></i> 变更日历
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.change_approval') }}">
+                                <i class="fas fa-check-circle"></i> 变更审批
+                            </a></li>
+                            {% if has_permission(current_user, 'maintenance:edit') %}
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance.cab_config') }}">
+                                <i class="fas fa-users-cog"></i> CAB审批配置
+                            </a></li>
+                            {% endif %}
+
+                            <!-- 问题与知识 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">问题与知识</li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.problem_list') }}">
+                                <i class="fas fa-exclamation-triangle"></i> 问题管理
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.known_errors') }}">
+                                <i class="fas fa-bug"></i> 已知错误
+                            </a></li>
+                            {% if has_permission(current_user, 'csi:view') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.csi_dashboard') }}">
+                                <i class="fas fa-lightbulb"></i> 持续改进(CSI)
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.availability_report') }}">
+                                <i class="fas fa-network-wired"></i> 真实可用率
+                            </a></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.knowledge_base') }}">
+                                <i class="fas fa-book"></i> 知识库
+                            </a></li>
+                            {% if has_permission(current_user, 'maintenance:edit') %}
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.kb_manage') }}">
+                                <i class="fas fa-cog"></i> 知识库管理
+                            </a></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.service_catalog') }}">
+                                <i class="fas fa-list"></i> 服务目录
+                            </a></li>
+                            {% if has_permission(current_user, 'maintenance:view') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.sla_policies') }}">
+                                <i class="fas fa-stopwatch"></i> SLA策略管理
+                            </a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- 综合报表菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'report:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and 'report' in request.endpoint %}active{% endif %}" href="#" id="reportDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-chart-bar"></i> 综合报表
+                            {% if unread_reports and unread_reports > 0 %}
+                            <span class="badge bg-warning rounded-pill">{{ unread_reports }}</span>
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="reportDropdown">
+                            <li class="dropdown-header">管理驾驶舱</li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.executive_dashboard') }}">
+                                <i class="fas fa-tachometer-alt"></i> 管理驾驶舱
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.dashboard_list') }}">
+                                <i class="fas fa-columns"></i> 仪表板管理
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">标准报表</li>
+                            <li><a class="dropdown-item" href="{{ url_for('report.comprehensive_report') }}">
+                                <i class="fas fa-file-alt"></i> 综合报表
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report.statistical_charts') }}">
+                                <i class="fas fa-chart-pie"></i> 统计图表
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report.report_export') }}">
+                                <i class="fas fa-file-export"></i> 报表导出
+                            </a></li>
+                            {% if has_permission(current_user, 'report:sla') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.sla_report') }}">
+                                <i class="fas fa-chart-line"></i> 服务SLA报表
+                            </a></li>
+                            {% endif %}
+                            {% if has_permission(current_user, 'csat:view') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itsm_adv.csat_dashboard') }}">
+                                <i class="fas fa-heart"></i> 服务满意度(CSAT)
+                            </a></li>
+                            {% endif %}
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">合规与分发</li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_frameworks') }}">
+                                <i class="fas fa-shield-alt"></i> 合规框架
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_evidence') }}">
+                                <i class="fas fa-check-double"></i> 合规证据
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_report') }}">
+                                <i class="fas fa-file-contract"></i> 合规报告
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.distribution_list') }}">
+                                <i class="fas fa-share-alt"></i> 报表分发
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('report_extra.trend_forecast') }}">
+                                <i class="fas fa-chart-line"></i> 趋势预测
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+
+
+                    <!-- 配置管理菜单 -->
+                    {% if current_user.is_authenticated and has_permission(current_user, 'config:view') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="configDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cogs"></i> 配置管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="configDropdown">
+                            <!-- 系统配置 -->
+                            <li class="dropdown-header">系统配置</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.system_settings') }}">
+                                <i class="fas fa-sliders-h"></i> 系统设置
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.global_settings') }}">
+                                <i class="fas fa-globe"></i> 全局参数
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.backup_restore') }}">
+                                <i class="fas fa-database"></i> 备份与恢复
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.backup_verify') }}">
+                                <i class="fas fa-check-circle"></i> 备份验证
+                            </a></li>
+
+                            <!-- 合规管理 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">合规管理</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_policies') }}">
+                                <i class="fas fa-shield-alt"></i> 合规策略
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_check') }}">
+                                <i class="fas fa-play"></i> 执行检查
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_report') }}">
+                                <i class="fas fa-file-alt"></i> 合规报告
+                            </a></li>
+
+                            <!-- 配置演进 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">配置演进</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.config_baseline') }}">
+                                <i class="fas fa-camera"></i> 配置基线
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.config_baseline_drifts') }}">
+                                <i class="fas fa-exclamation-triangle"></i> 漂移监控
+                            </a></li>
+
+                            <!-- 告警配置 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">告警配置</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.alert_templates') }}">
+                                <i class="fas fa-file-alt"></i> 告警模板
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.alert_settings') }}">
+                                <i class="fas fa-cog"></i> 通知设置
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.notification_templates') }}">
+                                <i class="fas fa-envelope"></i> 通知模板
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.escalation_policies') }}">
+                                <i class="fas fa-level-up-alt"></i> 升级策略
+                            </a></li>
+
+                            <!-- 网络配置 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">网络配置</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.snmp_settings') }}">
+                                <i class="fas fa-exchange-alt"></i> SNMP配置
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.credential_management') }}">
+                                <i class="fas fa-key"></i> 凭据管理
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.network_discovery') }}">
+                                <i class="fas fa-search"></i> 发现配置
+                            </a></li>
+
+                            <!-- 用户与权限 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">用户与权限</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.user_management') }}">
+                                <i class="fas fa-users"></i> 用户管理
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.role_management') }}">
+                                <i class="fas fa-user-tag"></i> 角色管理
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.permission_settings') }}">
+                                <i class="fas fa-user-shield"></i> 权限设置
+                            </a></li>
+
+                            <!-- 日志与审计 -->
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">日志与审计</li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.system_logs') }}">
+                                <i class="fas fa-clipboard-list"></i> 系统日志
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.audit_logs') }}">
+                                <i class="fas fa-eye"></i> 审计日志
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('config.log_settings') }}">
+                                <i class="fas fa-cog"></i> 日志设置
+                            </a></li>
+
+                            <!-- 运行维护 -->
+                            {% if has_permission(current_user, 'system:jobs') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">运行维护</li>
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('sysjobs.') %}active{% endif %}" href="{{ url_for('sysjobs.job_list') }}">
+                                <i class="fas fa-clock"></i> 系统定时任务
+                            </a></li>
+                            {% endif %}
+
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- 关于菜单 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="aboutDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-info-circle"></i> 关于
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="aboutDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('about.user_manual') }}">
+                                <i class="fas fa-book"></i> 使用手册
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('about.system_about') }}">
+                                <i class="fas fa-info-circle"></i> 关于系统
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <!-- 全局监控状态指示器 -->
+                <div class="navbar-text me-3 d-none d-lg-block">
+                    <div class="d-flex align-items-center">
+                        <span class="status-indicator status-up"></span>
+                        <small class="text-white">在线: {{ stats.online_count if stats else 0 }}</small>
+                        <span class="status-indicator status-down ms-2"></span>
+                        <small class="text-white">离线: {{ stats.offline_count if stats else 0 }}</small>
+                        <span class="status-indicator status-warning ms-2"></span>
+                        <small class="text-white">告警: {{ stats.alert_count if stats else 0 }}</small>
+                    </div>
+                </div>
+                
+                <ul class="navbar-nav">
+                    {% if current_user.is_authenticated and my_assigned_orders and my_assigned_orders > 0 %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('maintenance.work_order_list') }}" title="我的待办工单">
+                            <i class="fas fa-bell text-warning"></i>
+                            <span class="badge bg-danger rounded-pill" style="font-size:0.65rem;">{{ my_assigned_orders }}</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle me-1"></i>
+                            {{ current_user.username if current_user.is_authenticated else '未登录' }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            {% if current_user.is_authenticated %}
+                            <li><a class="dropdown-item" href="{{ url_for('profile.profile') }}">
+                                <i class="fas fa-user"></i> 个人资料
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('settings.change_password') }}">
+                                <i class="fas fa-key"></i> 修改密码
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> 退出登录</a></li>
+                            {% else %}
+                            <li><a class="dropdown-item" href="{{ url_for('auth.login') }}"><i class="fas fa-sign-in-alt"></i> 登录</a></li>
+                            <!-- <li><a class="dropdown-item" href="{{ url_for('auth.register') }}"><i class="fas fa-user-plus"></i> 注册</a></li> -->
+                            {% endif %}
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 快速导入设备模态框（用于导航菜单） -->
+    <div class="modal fade" id="quickImportModal" tabindex="-1" aria-labelledby="quickImportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="quickImportModalLabel">
+                        <i class="fas fa-file-import text-primary me-2"></i>导入设备
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 方式选择 -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary shadow-sm">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-3">
+                                        <i class="fas fa-file-excel fa-3x text-success"></i>
+                                    </div>
+                                    <h5 class="card-title">文件导入</h5>
+                                    <p class="card-text text-muted small">
+                                        通过Excel或CSV文件批量导入设备信息
+                                    </p>
+                                    <form id="quickImportForm" method="post" enctype="multipart/form-data">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="mb-3">
+                                            <input class="form-control form-control-sm" type="file" id="quickImportFile" name="file" accept=".csv,.xlsx,.xls" required>
+                                            <div class="form-text small">支持 CSV、Excel (.xlsx, .xls) 格式，文件大小不超过10MB</div>
+                                        </div>
+                                        <button type="button" class="btn btn-success w-100" id="quickSubmitImportBtn">
+                                            <i class="fas fa-upload me-1"></i> 开始导入
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+<!--                         <div class="col-md-6">
+                            <div class="card h-100 border-info shadow-sm">
+                                <div class="card-body text-center p-4">
+                                    <div class="mb-3">
+                                        <i class="fas fa-network-wired fa-3x text-info"></i>
+                                    </div>
+                                    <h5 class="card-title">网络扫描</h5>
+                                    <p class="card-text text-muted small">
+                                        通过IP段扫描自动发现网络设备
+                                    </p>
+                                    <button type="button" class="btn btn-info w-100" onclick="window.location.href='{{ url_for('device.device_list') }}?action=scan'">
+                                        <i class="fas fa-search me-1"></i> 开始扫描
+                                    </button>
+                                </div>
+                            </div>
+                        </div> -->
+                    </div>
+                    
+                    <!-- 模板下载 -->
+                    <div class="alert alert-info d-flex align-items-center">
+                        <i class="fas fa-info-circle fa-lg me-3"></i>
+                        <div>
+                            <strong>提示：</strong>
+                            导入前请先下载模板文件，按照模板格式填写设备信息。
+                            <br>
+                            <small class="text-muted">支持 .xlsx, .xls, .csv 格式，文件大小不超过10MB</small>
+                        </div>
+                    </div>
+                    
+                    <!-- 快速下载模板 -->
+                    <div class="text-center">
+                        <a href="{{ url_for('device.download_device_template') }}" class="btn btn-primary" target="_blank">
+                            <i class="fas fa-download me-2"></i> 下载导入模板
+                        </a>
+                        <button type="button" class="btn btn-secondary ms-2" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-2"></i> 关闭
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要内容区域 -->
+    <main class="flex-grow-1">
+        <!-- 消息提示区域 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="container mt-3">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- 页面标题和操作区域 -->
+        <div class="page-header">
+            <div class="container">
+                <div class="page-title-container">
+                    <div>
+                        <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+                        {% block page_subtitle %}{% endblock %}
+                    </div>
+                    <div class="header-actions">
+                        {% block header_actions %}{% endblock %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 我的待办工单提示 -->
+        {% if current_user.is_authenticated and my_assigned_orders and my_assigned_orders > 0 %}
+        <div class="container mt-2">
+            <div class="alert alert-info alert-dismissible fade show mb-2 py-2" role="alert">
+                <i class="fas fa-clipboard-list me-2"></i>
+                您有 <strong>{{ my_assigned_orders }}</strong> 个待处理的工单，
+                <a href="{{ url_for('maintenance.work_order_list') }}" class="alert-link">点击查看</a>
+                <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 页面具体内容 -->
+        <div class="container mb-4">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-3 mt-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-0">
+                        <i class="fas fa-network-wired me-2"></i>
+                        <strong>网络资产管理系统</strong> &copy; 2023
+                    </p>
+                    <small class="text-muted">版本: 2.1.0 | 最后更新: 2023-12-15</small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <div class="mb-1">
+                        <span class="badge bg-success">监控: <span id="monitoring-status">运行中</span></span>
+                        <span class="badge bg-info ms-2">拓扑: <span id="topology-status">已启用</span></span>
+                        <span class="badge bg-warning ms-2">告警: <span id="alert-status">监控中</span></span>
+                    </div>
+                    <p class="mb-0">
+                        <i class="fas fa-shield-alt me-1"></i>
+                        @北京泰成数通 | 
+                        <i class="fas fa-headset ms-3 me-1"></i>
+                        技术支持: taichengshutong@163.com
+                    </p>
+                    <small class="text-muted">
+                        当前用户: {{ current_user.username if current_user.is_authenticated else '未登录' }} | 
+                        最后登录: {{ session.get('last_login', '从未登录') }}
+                    </small>
+                    <div id="current-time" class="text-muted small"></div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+<!-- 只保留 Bootstrap 5 的 JS Bundle（已包含 Popper.js，无需额外引入） -->
+<!-- 头部引入 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Custom JS -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+
+
+    
+<!-- 基础全局函数（不含冲突的监控函数） -->
+<script>
+// 基础配置
+const AppConfig = {
+    baseUrl: "{{ url_for('main.index', _external=True) if url_for else '/' }}",
+    csrfToken: "{{ csrf_token() if csrf_token else '' }}",
+    currentUser: {
+        isAuthenticated: {{ current_user.is_authenticated|tojson|safe }},
+        isAdmin: {{ (current_user.is_authenticated and current_user.is_admin)|tojson|safe }},
+        username: {{ (current_user.username if current_user.is_authenticated else '')|tojson }}
+    }
+};
+
+// 简化工具函数，避免复杂逻辑
+$(document).ready(function() {
+    console.log('页面加载完成');
+    
+    // 简化alert处理
+    $('.alert').each(function() {
+        var $alert = $(this);
+        setTimeout(function() {
+            $alert.fadeOut('slow');
+        }, 5000);
+    });
+
+});
+
+// 页面加载完成后执行的函数
+document.addEventListener('DOMContentLoaded', function() {
+    // 更新时间显示
+    function updateCurrentTime() {
+        const now = new Date();
+        const timeElement = document.getElementById('current-time');
+        if (timeElement) {
+            timeElement.textContent = '当前时间: ' + now.toLocaleString('zh-CN');
+        }
+    }
+    
+    // 每10秒更新时间
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 10000);
+    
+    // 处理导航菜单激活状态
+    const currentPath = window.location.pathname;
+    document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
+        if (link.getAttribute('href') && link.getAttribute('href') !== '#') {
+            const linkPath = new URL(link.href, window.location.origin).pathname;
+            if (currentPath === linkPath || currentPath.startsWith(linkPath + '/')) {
+                link.classList.add('active');
+            }
+        }
+    });
+    
+    // 处理模态框跳转
+    window.redirectToDeviceListWithImport = function() {
+        window.location.href = "{{ url_for('device.device_list') }}?action=import";
+    };
+    
+    window.redirectToDeviceListWithScan = function() {
+        window.location.href = "{{ url_for('device.device_list') }}?action=scan";
+    };
+});
+
+// 通用工具函数
+function showToast(type, message) {
+    // 创建Toast元素
+    const toastHtml = `
+        <div class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    // 添加到页面
+    const container = document.getElementById('toast-container') || (() => {
+        const div = document.createElement('div');
+        div.id = 'toast-container';
+        div.className = 'toast-container position-fixed top-0 end-0 p-3';
+        div.style.zIndex = '1060';
+        document.body.appendChild(div);
+        return div;
+    })();
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = toastHtml;
+    const toastElement = tempDiv.firstElementChild;
+    container.appendChild(toastElement);
+    
+    // 显示Toast
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Toast显示后移除
+    toastElement.addEventListener('hidden.bs.toast', function () {
+        toastElement.remove();
+    });
+}
+
+// 通用确认对话框
+function confirmAction(message, callback) {
+    const modalHtml = `
+        <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">确认操作</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <i class="fas fa-question-circle text-warning fa-2x float-start me-3"></i>
+                        <p class="mb-0">${message}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" id="confirmBtn">确定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalHtml;
+    const modalElement = tempDiv.firstElementChild;
+    document.body.appendChild(modalElement);
+    
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+    
+    document.getElementById('confirmBtn').onclick = function() {
+        modal.hide();
+        if (callback) callback();
+        modalElement.remove();
+    };
+    
+    modalElement.addEventListener('hidden.bs.modal', function () {
+        modalElement.remove();
+    });
+}
+
+// AJAX请求封装
+function makeAjaxRequest(url, method = 'GET', data = null) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        
+        // 添加CSRF令牌
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken) {
+            xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+        }
+        
+        xhr.onload = function() {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    resolve(JSON.parse(xhr.responseText));
+                } catch (e) {
+                    resolve(xhr.responseText);
+                }
+            } else {
+                reject(new Error(`请求失败: ${xhr.status}`));
+            }
+        };
+        
+        xhr.onerror = function() {
+            reject(new Error('网络错误'));
+        };
+        
+        xhr.send(data ? JSON.stringify(data) : null);
+    });
+}
+
+// 格式化字节大小
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+// 格式化时间
+function formatTime(seconds) {
+    if (!seconds) return '--';
+    
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}天`);
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分钟`);
+    if (remainingSeconds > 0 && days === 0) parts.push(`${remainingSeconds}秒`);
+    
+    return parts.length > 0 ? parts.join(' ') : '0秒';
+}
+
+// 辅助函数：格式化运行时间
+function formatUptime(seconds) {
+    if (!seconds) return '未知';
+    
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}天`);
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分钟`);
+    
+    return parts.length > 0 ? parts.join(' ') : `${Math.floor(seconds)}秒`;
+}
+
+// 显示错误提示
+function showErrorAlert(message) {
+    const alertHtml = `
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>错误：</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = alertHtml;
+    const alertElement = tempDiv.firstElementChild;
+    
+    // 插入到页面顶部
+    const container = document.querySelector('.container.mt-3') || (() => {
+        const div = document.createElement('div');
+        div.className = 'container mt-3';
+        document.querySelector('main').insertBefore(div, document.querySelector('main').firstChild);
+        return div;
+    })();
+    
+    container.appendChild(alertElement);
+    
+    // 5秒后自动消失
+    setTimeout(() => {
+        alertElement.remove();
+    }, 5000);
+}
+
+// 显示加载指示器
+function showLoading(message = '加载中...') {
+    // 移除现有的加载指示器
+    hideLoading();
+    
+    const loadingHtml = `
+        <div class="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">${message}</span>
+                </div>
+                <p class="mt-2">${message}</p>
+            </div>
+        </div>
+    `;
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = loadingHtml;
+    const loadingElement = tempDiv.firstElementChild;
+    
+    // 添加样式
+    const style = document.createElement('style');
+    style.textContent = `
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-content {
+            text-align: center;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(loadingElement);
+    
+    return loadingElement;
+}
+
+// 隐藏加载指示器
+function hideLoading() {
+    const loadingOverlay = document.querySelector('.loading-overlay');
+    if (loadingOverlay) {
+        loadingOverlay.remove();
+    }
+}
+
+// 格式化日期时间
+function formatDateTime(date, format = 'yyyy-MM-dd HH:mm:ss') {
+    if (!date) return '';
+    
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hour = String(d.getHours()).padStart(2, '0');
+    const minute = String(d.getMinutes()).padStart(2, '0');
+    const second = String(d.getSeconds()).padStart(2, '0');
+    
+    return format
+        .replace('yyyy', year)
+        .replace('MM', month)
+        .replace('dd', day)
+        .replace('HH', hour)
+        .replace('mm', minute)
+        .replace('ss', second);
+}
+
+// 深度拷贝对象
+function deepClone(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    
+    if (obj instanceof Date) {
+        return new Date(obj.getTime());
+    }
+    
+    if (obj instanceof Array) {
+        return obj.map(item => deepClone(item));
+    }
+    
+    if (typeof obj === 'object') {
+        const clonedObj = {};
+        for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                clonedObj[key] = deepClone(obj[key]);
+            }
+        }
+        return clonedObj;
+    }
+}
+
+// 防抖函数
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 节流函数
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// 验证IP地址
+function isValidIP(ip) {
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipPattern.test(ip)) return false;
+    
+    const parts = ip.split('.');
+    for (let part of parts) {
+        const num = parseInt(part, 10);
+        if (num < 0 || num > 255) return false;
+    }
+    
+    return true;
+}
+
+// 验证MAC地址
+function isValidMAC(mac) {
+    const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+    return macPattern.test(mac);
+}
+
+// 获取URL参数
+function getUrlParam(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+}
+
+// 设置URL参数
+function setUrlParam(name, value) {
+    const url = new URL(window.location);
+    url.searchParams.set(name, value);
+    window.history.pushState({}, '', url);
+}
+
+// 移除URL参数
+function removeUrlParam(name) {
+    const url = new URL(window.location);
+    url.searchParams.delete(name);
+    window.history.pushState({}, '', url);
+}
+
+// 复制到剪贴板
+function copyToClipboard(text) {
+    return new Promise((resolve, reject) => {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text)
+                .then(() => resolve(true))
+                .catch(err => reject(err));
+        } else {
+            // 降级方案
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                resolve(true);
+            } catch (err) {
+                reject(err);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+    });
+}
+
+// 下载文件
+function downloadFile(content, filename, mimeType = 'application/octet-stream') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// 生成UUID
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+// 计算百分比
+function calculatePercentage(part, total) {
+    if (total === 0) return 0;
+    return Math.round((part / total) * 100);
+}
+
+// 获取设备状态颜色
+function getStatusColor(status) {
+    switch (status) {
+        case 'online':
+            return 'success';
+        case 'offline':
+            return 'danger';
+        case 'warning':
+            return 'warning';
+        default:
+            return 'secondary';
+    }
+}
+
+// 获取设备状态文本
+function getStatusText(status) {
+    switch (status) {
+        case 'online':
+            return '在线';
+        case 'offline':
+            return '离线';
+        case 'warning':
+            return '警告';
+        default:
+            return '未知';
+    }
+}
+
+// 获取设备状态图标
+function getStatusIcon(status) {
+    switch (status) {
+        case 'online':
+            return 'fa-check-circle';
+        case 'offline':
+            return 'fa-times-circle';
+        case 'warning':
+            return 'fa-exclamation-circle';
+        default:
+            return 'fa-question-circle';
+    }
+}
+
+// 初始化工具提示
+function initTooltips() {
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+}
+
+// 初始化弹出框
+function initPopovers() {
+    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+    const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
+}
+
+// 导出所有函数
+window.AppUtils = {
+    showToast,
+    confirmAction,
+    makeAjaxRequest,
+    formatBytes,
+    formatTime,
+    formatUptime,
+    showErrorAlert,
+    showLoading,
+    hideLoading,
+    formatDateTime,
+    deepClone,
+    debounce,
+    throttle,
+    isValidIP,
+    isValidMAC,
+    getUrlParam,
+    setUrlParam,
+    removeUrlParam,
+    copyToClipboard,
+    downloadFile,
+    generateUUID,
+    calculatePercentage,
+    getStatusColor,
+    getStatusText,
+    getStatusIcon,
+    initTooltips,
+    initPopovers
+};
+
+// 页面加载完成后初始化工具提示和弹出框
+document.addEventListener('DOMContentLoaded', function() {
+    initTooltips();
+    initPopovers();
+});
+
+/*<script>*/
+// 快速导入功能 - 与 device_list.html 保持一致
+document.addEventListener('DOMContentLoaded', function() {
+    // 快速导入按钮
+    const quickImportBtn = document.getElementById('quickSubmitImportBtn');
+    if (quickImportBtn) {
+        quickImportBtn.addEventListener('click', function() {
+            const fileInput = document.getElementById('quickImportFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showToast('warning', '请选择要导入的文件');
+                return;
+            }
+            
+            // 检查文件大小
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('error', '文件大小超过10MB限制');
+                return;
+            }
+            
+            // 检查文件扩展名
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+                showToast('error', '不支持的文件格式，请上传 Excel 或 CSV 文件');
+                return;
+            }
+            
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>导入中...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('csrf_token', document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '');
+            
+            // 使用 fetch API 或 jQuery AJAX
+            $.ajax({
+                url: '{{ url_for("device.device_import") }}',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                timeout: 60000,
+                success: function(res) {
+                    $btn.prop('disabled', false).html('<i class="fas fa-upload me-1"></i> 开始导入');
+                    
+                    if (res.success) {
+                        // 关闭模态框
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('quickImportModal'));
+                        if (modal) modal.hide();
+                        
+                        // 显示成功信息
+                        let message = res.message || '导入成功';
+                        if (res.errors && res.errors.length > 0) {
+                            message += `<br><small class="text-muted">有 ${res.errors.length} 条错误记录</small>`;
+                        }
+                        showToast('success', message);
+                        
+                        // 重置文件输入
+                        fileInput.value = '';
+                        
+                        // 刷新页面
+                        setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                        let errorMsg = res.message || '导入失败';
+                        if (res.errors && res.errors.length > 0) {
+                            errorMsg += `<br><small>${escapeHtml(res.errors.slice(0, 3).join('; '))}</small>`;
+                        }
+                        showToast('error', errorMsg);
+                    }
+                },
+                error: function(xhr) {
+                    $btn.prop('disabled', false).html('<i class="fas fa-upload me-1"></i> 开始导入');
+                    
+                    let msg = '导入请求失败，请重试';
+                    try {
+                        const res = JSON.parse(xhr.responseText);
+                        if (res.message) msg = res.message;
+                    } catch (e) {}
+                    showToast('error', msg);
+                }
+            });
+        });
+    }
+    
+    // 快速导入模态框关闭时重置状态
+    const quickModal = document.getElementById('quickImportModal');
+    if (quickModal) {
+        quickModal.addEventListener('hidden.bs.modal', function() {
+            const fileInput = document.getElementById('quickImportFile');
+            if (fileInput) fileInput.value = '';
+            const btn = document.getElementById('quickSubmitImportBtn');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload me-1"></i> 开始导入';
+            }
+        });
+    }
+});
+
+// 确保 escapeHtml 函数可用（如果 base.html 中已定义则跳过）
+if (typeof escapeHtml === 'undefined') {
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            if (m === '"') return '&quot;';
+            return m;
+        });
+    }
+}
+
+// 确保 showToast 函数在全局可用（base.html 中已有定义）
+<!-- </script> -->
+
+
+</script>
+
+   
+{% block scripts %}{% endblock %}
+</body>
+</html>

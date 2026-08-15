@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}备件使用统计 - 设备维护管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">备件使用统计</h1>
+        <div class="d-flex">
+            <div class="mr-2">
+                <select id="timeRange" class="form-control form-control-sm">
+                    <option value="30">最近30天</option>
+                    <option value="90" selected>最近90天</option>
+                    <option value="180">最近180天</option>
+                    <option value="365">最近一年</option>
+                </select>
+            </div>
+            <button id="exportBtn" class="btn btn-sm btn-success">
+                <i class="fas fa-file-export"></i> 导出数据
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                统计备件种类
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalPartsCount">
+                                {{ usage_stats|length if usage_stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                总使用数量
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalUsageCount">
+                                {{ usage_stats|sum(attribute='total_used') if usage_stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-tools fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                总申请次数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalRequestCount">
+                                {{ usage_stats|sum(attribute='request_count') if usage_stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                平均每次使用
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="avgUsage">
+                                {% if usage_stats and usage_stats|sum(attribute='request_count') > 0 %}
+                                    {{ "%.2f"|format(usage_stats|sum(attribute='total_used') / usage_stats|sum(attribute='request_count')) }}
+                                {% else %}
+                                    0.00
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calculator fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="row mb-4">
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">备件使用量排行</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-bar">
+                        <canvas id="usageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">备件使用分布</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-pie pt-4">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center small">
+                        <span class="mr-2">
+                            <i class="fas fa-circle text-primary"></i> 高使用率
+                        </span>
+                        <span class="mr-2">
+                            <i class="fas fa-circle text-success"></i> 中高使用率
+                        </span>
+                        <span class="mr-2">
+                            <i class="fas fa-circle text-info"></i> 中等使用率
+                        </span>
+                        <span>
+                            <i class="fas fa-circle text-warning"></i> 低使用率
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 数据表格 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">备件使用详情</h6>
+            <div class="d-flex">
+                <div class="input-group input-group-sm mr-2" style="width: 200px;">
+                    <input type="text" id="searchInput" class="form-control" placeholder="搜索备件名称...">
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" type="button" id="searchBtn">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <button id="refreshBtn" class="btn btn-sm btn-primary">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>备件名称</th>
+                            <th>使用数量</th>
+                            <th>申请次数</th>
+                            <th>平均每次使用</th>
+                            <th>使用频率</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if usage_stats %}
+                            {% for stat in usage_stats %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ stat.name }}</td>
+                                <td>{{ stat.total_used }}</td>
+                                <td>{{ stat.request_count }}</td>
+                                <td>
+                                    {% if stat.request_count > 0 %}
+                                        {{ "%.2f"|format(stat.total_used / stat.request_count) }}
+                                    {% else %}
+                                        0.00
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if stat.request_count >= 10 %}
+                                        <span class="badge badge-danger">高频</span>
+                                    {% elif stat.request_count >= 5 %}
+                                        <span class="badge badge-warning">中频</span>
+                                    {% else %}
+                                        <span class="badge badge-success">低频</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-info btn-detail" data-part-name="{{ stat.name }}">
+                                        <i class="fas fa-info-circle"></i> 详情
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center">最近90天内没有备件使用记录</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- 图表库 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 准备图表数据
+        const usageStats = {{ usage_stats|tojson|safe if usage_stats else '[]' }};
+        
+        // 如果存在数据，初始化图表
+        if (usageStats.length > 0) {
+            // 准备条形图数据（前10个使用最多的备件）
+            const topParts = usageStats
+                .sort((a, b) => b.total_used - a.total_used)
+                .slice(0, 10);
+            
+            const barLabels = topParts.map(part => part.name);
+            const barData = topParts.map(part => part.total_used);
+            
+            // 条形图配置
+            const barCtx = document.getElementById('usageChart').getContext('2d');
+            const usageChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: barLabels,
+                    datasets: [{
+                        label: '使用数量',
+                        data: barData,
+                        backgroundColor: 'rgba(78, 115, 223, 0.8)',
+                        borderColor: 'rgba(78, 115, 223, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `使用数量: ${context.raw.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 准备饼图数据（按使用量分组）
+            const usageGroups = {
+                high: usageStats.filter(part => part.total_used >= 50).length,
+                mediumHigh: usageStats.filter(part => part.total_used >= 20 && part.total_used < 50).length,
+                medium: usageStats.filter(part => part.total_used >= 10 && part.total_used < 20).length,
+                low: usageStats.filter(part => part.total_used < 10).length
+            };
+            
+            const pieCtx = document.getElementById('distributionChart').getContext('2d');
+            const distributionChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['高使用率(≥50)', '中高使用率(20-49)', '中等使用率(10-19)', '低使用率(<10)'],
+                    datasets: [{
+                        data: [usageGroups.high, usageGroups.mediumHigh, usageGroups.medium, usageGroups.low],
+                        backgroundColor: [
+                            'rgba(78, 115, 223, 0.8)',
+                            'rgba(28, 200, 138, 0.8)',
+                            'rgba(54, 185, 204, 0.8)',
+                            'rgba(246, 194, 62, 0.8)'
+                        ],
+                        hoverBackgroundColor: [
+                            'rgba(78, 115, 223, 1)',
+                            'rgba(28, 200, 138, 1)',
+                            'rgba(54, 185, 204, 1)',
+                            'rgba(246, 194, 62, 1)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 搜索功能
+        document.getElementById('searchBtn').addEventListener('click', function() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            
+            rows.forEach(row => {
+                const partName = row.cells[1].textContent.toLowerCase();
+                if (partName.includes(searchTerm) || searchTerm === '') {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+        
+        // 搜索输入框回车触发搜索
+        document.getElementById('searchInput').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                document.getElementById('searchBtn').click();
+            }
+        });
+        
+        // 刷新按钮
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 时间范围选择
+        document.getElementById('timeRange').addEventListener('change', function() {
+            const days = this.value;
+            // 在实际应用中，这里应该向服务器发送请求，获取对应时间范围的数据
+            // 为了示例，我们只是重新加载页面并传递参数
+            window.location.href = `{{ url_for('maintenance.spare_parts_usage') }}?days=${days}`;
+        });
+        
+        // 导出按钮
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            // 在实际应用中，这里应该向服务器发送导出请求
+            // 为了示例，我们生成一个简单的CSV文件
+            if (usageStats.length === 0) {
+                alert('没有数据可导出');
+                return;
+            }
+            
+            let csvContent = "备件名称,使用数量,申请次数,平均每次使用\n";
+            
+            usageStats.forEach(stat => {
+                const avgUsage = stat.request_count > 0 ? (stat.total_used / stat.request_count).toFixed(2) : '0.00';
+                csvContent += `${stat.name},${stat.total_used},${stat.request_count},${avgUsage}\n`;
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `备件使用统计_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+        
+        // 详情按钮
+        document.querySelectorAll('.btn-detail').forEach(button => {
+            button.addEventListener('click', function() {
+                const partName = this.getAttribute('data-part-name');
+                // 在实际应用中，这里可以打开一个模态框显示该备件的详细使用记录
+                // 为了示例，我们只显示一个提示
+                alert(`将显示备件 "${partName}" 的详细使用记录\n\n在实际应用中，这里会向服务器请求该备件的详细使用记录并显示在模态框中。`);
+            });
+        });
+    });
+</script>
+
+<style>
+    .chart-bar, .chart-pie {
+        position: relative;
+        height: 300px;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .table th {
+        font-weight: 600;
+    }
+    
+    .card {
+        border-radius: 0.35rem;
+    }
+    
+    .input-group-sm {
+        max-width: 250px;
+    }
+</style>
+{% endblock %}

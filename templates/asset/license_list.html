@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}软件许可管理{% endblock %}
+{% block page_title %}软件许可管理{% endblock %}
+{% block page_subtitle %}软件许可证管理与合规追踪{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('asset_extra.license_add') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> 添加许可
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title text-primary">{{ licenses.total }}</h5>
+                <small class="text-muted">许可总数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title text-success">{{ compliant }}</h5>
+                <small class="text-muted">合规</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h5 class="card-title text-danger">{{ non_compliant }}</h5>
+                <small class="text-muted">不合规</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title text-warning">{{ expiring }}</h5>
+                <small class="text-muted">即将过期</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 搜索 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row">
+            <div class="col-md-8">
+                <input type="text" name="search" class="form-control" placeholder="搜索软件名称..." value="{{ search }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> 搜索</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('asset_extra.license_list') }}" class="btn btn-secondary w-100">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>软件名称</th>
+                        <th>版本</th>
+                        <th>许可类型</th>
+                        <th>数量(已分配/总数)</th>
+                        <th>厂商</th>
+                        <th>到期日</th>
+                        <th>合规状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lic in licenses.items %}
+                    <tr>
+                        <td><a href="{{ url_for('asset_extra.license_detail', id=lic.id) }}">{{ lic.software_name }}</a></td>
+                        <td>{{ lic.version or '-' }}</td>
+                        <td>
+                            {% if lic.license_type == 'per_user' %}<span class="badge bg-info">按用户</span>
+                            {% elif lic.license_type == 'per_device' %}<span class="badge bg-success">按设备</span>
+                            {% elif lic.license_type == 'enterprise' %}<span class="badge bg-primary">企业版</span>
+                            {% elif lic.license_type == 'subscription' %}<span class="badge bg-warning">订阅</span>
+                            {% else %}{{ lic.license_type }}{% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <span>{{ lic.allocated_quantity }}/{{ lic.total_quantity }}</span>
+                                {% if lic.total_quantity > 0 %}
+                                <div class="progress ms-2 flex-grow-1" style="height:6px;width:80px">
+                                    {% set pct = (lic.allocated_quantity / lic.total_quantity * 100)|round %}
+                                    <div class="progress-bar {% if pct > 90 %}bg-danger{% elif pct > 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                         style="width:{{ pct }}%"></div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>{{ lic.vendor or '-' }}</td>
+                        <td>
+                            {% if lic.expiry_date %}
+                                {% set de = (lic.expiry_date - datetime.utcnow().date()).days %}
+                                {% if de < 0 %}<span class="text-danger">已过期{{ -de }}天</span>
+                                {% elif de <= 30 %}<span class="text-warning">{{ de }}天</span>
+                                {% else %}{{ lic.expiry_date }}{% endif %}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>
+                            {% if lic.compliance_status == 'compliant' %}<span class="badge bg-success">合规</span>
+                            {% elif lic.compliance_status == 'non-compliant' %}<span class="badge bg-danger">不合规</span>
+                            {% else %}<span class="badge bg-warning">待审查</span>{% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('asset_extra.license_detail', id=lic.id) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></a>
+                            <a href="{{ url_for('asset_extra.license_edit', id=lic.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
+                            <button class="btn btn-sm btn-outline-danger delete-license-btn"
+                                    data-license-id="{{ lic.id }}"
+                                    data-license-name="{{ lic.software_name }}"
+                                    title="删除"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">暂无许可数据</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if licenses.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in range(1, licenses.pages + 1) %}
+    <li class="page-item {% if p == licenses.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('asset_extra.license_list', page=p, search=search) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteLicenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除许可</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除软件许可 <strong id="deleteLicenseName"></strong> 吗？</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>此操作不可恢复，将同时清除该许可的设备关联记录。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteLicenseBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentDeleteId = null;
+
+    document.querySelectorAll('.delete-license-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            currentDeleteId = this.dataset.licenseId;
+            document.getElementById('deleteLicenseName').textContent = this.dataset.licenseName;
+            new bootstrap.Modal(document.getElementById('deleteLicenseModal')).show();
+        });
+    });
+
+    document.getElementById('confirmDeleteLicenseBtn').addEventListener('click', function() {
+        if (!currentDeleteId) return;
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 删除中...';
+
+        fetch('/asset/license/' + currentDeleteId + '/delete', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('删除失败: ' + (data.message || '未知错误'));
+            }
+        })
+        .catch(function() { alert('请求失败'); })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = '确认删除';
+            bootstrap.Modal.getInstance(document.getElementById('deleteLicenseModal')).hide();
+        });
+    });
+});
+</script>
+{% endblock %}

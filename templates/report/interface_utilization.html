@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}接口利用率报表 - 数据中心管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    .interface-card {
+        transition: transform 0.3s;
+    }
+    .interface-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .status-up { color: #28a745; }
+    .status-down { color: #dc3545; }
+    .status-unknown { color: #6c757d; }
+    .utilization-bar {
+        height: 10px;
+        background-color: #e9ecef;
+        border-radius: 5px;
+        margin: 5px 0;
+        overflow: hidden;
+    }
+    .utilization-fill {
+        height: 100%;
+        border-radius: 5px;
+        transition: width 0.5s ease;
+    }
+    .utilization-in { background-color: #007bff; }
+    .utilization-out { background-color: #28a745; }
+    .utilization-high { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">接口利用率报表</h1>
+            <p class="text-muted">统计网络接口状态和利用率情况</p>
+        </div>
+    </div>
+
+    <!-- 状态概览 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                接口总数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_interfaces }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-network-wired fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                运行中接口
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set up_count = interface_stats|selectattr('oper_status', 'equalto', 'up')|map(attribute='count')|first|default(0) %}
+                                {{ up_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-wifi fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                高利用率接口
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ high_utilization_interfaces|length }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                宕机接口
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set down_count = interface_stats|selectattr('oper_status', 'equalto', 'down')|map(attribute='count')|first|default(0) %}
+                                {{ down_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-plug fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 接口状态分布 -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">接口状态分布</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>状态</th>
+                                    <th>数量</th>
+                                    <th>占比</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in interface_stats %}
+                                <tr>
+                                    <td>
+                                        <span class="font-weight-bold status-{{ stat.oper_status|default('unknown') }}">
+                                            {{ stat.oper_status|default('unknown')|upper }}
+                                        </span>
+                                    </td>
+                                    <td>{{ stat.count }}</td>
+                                    <td>
+                                        <div class="progress">
+                                            {% set percentage = (stat.count / total_interfaces * 100) if total_interfaces > 0 else 0 %}
+                                            <div class="progress-bar" 
+                                                 role="progressbar" 
+                                                 style="width: {{ percentage }}%; 
+                                                        background-color: {% if stat.oper_status == 'up' %}#28a745{% elif stat.oper_status == 'down' %}#dc3545{% else %}#6c757d{% endif %};">
+                                                {{ "%.1f"|format(percentage) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设备接口统计 -->
+        <div class="col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">设备接口数量Top 10</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>设备名称</th>
+                                    <th>接口总数</th>
+                                    <th>运行中接口</th>
+                                    <th>运行率</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in device_interface_stats %}
+                                <tr>
+                                    <td>{{ stat.device_name }}</td>
+                                    <td>{{ stat.interface_count }}</td>
+                                    <td>{{ stat.up_interfaces }}</td>
+                                    <td>
+                                        <div class="progress">
+                                            {% set up_rate = (stat.up_interfaces / stat.interface_count * 100) if stat.interface_count > 0 else 0 %}
+                                            <div class="progress-bar bg-success" 
+                                                 role="progressbar" 
+                                                 style="width: {{ up_rate }}%">
+                                                {{ "%.1f"|format(up_rate) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">暂无设备接口数据</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 高利用率接口 -->
+    {% if high_utilization_interfaces %}
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 bg-warning">
+                    <h6 class="m-0 font-weight-bold text-dark">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>高利用率接口（使用率 > 70%）
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>设备名称</th>
+                                    <th>接口名称</th>
+                                    <th>平均入口利用率</th>
+                                    <th>最高入口利用率</th>
+                                    <th>平均出口利用率</th>
+                                    <th>最高出口利用率</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for interface in high_utilization_interfaces %}
+                                <tr>
+                                    <td>{{ interface.device_name }}</td>
+                                    <td>{{ interface.interface_name }}</td>
+                                    <td>
+                                        {{ "%.1f"|format(interface.avg_in_util) if interface.avg_in_util else 0 }}%
+                                        <div class="utilization-bar">
+                                            <div class="utilization-fill {% if interface.avg_in_util and interface.avg_in_util >= 80 %}utilization-high{% else %}utilization-in{% endif %}" 
+                                                 style="width: {{ interface.avg_in_util if interface.avg_in_util and interface.avg_in_util <= 100 else 100 }}%"></div>
+                                        </div>
+                                    </td>
+                                    <td>{{ "%.1f"|format(interface.max_in_util) if interface.max_in_util else 0 }}%</td>
+                                    <td>
+                                        {{ "%.1f"|format(interface.avg_out_util) if interface.avg_out_util else 0 }}%
+                                        <div class="utilization-bar">
+                                            <div class="utilization-fill {% if interface.avg_out_util and interface.avg_out_util >= 80 %}utilization-high{% else %}utilization-out{% endif %}" 
+                                                 style="width: {{ interface.avg_out_util if interface.avg_out_util and interface.avg_out_util <= 100 else 100 }}%"></div>
+                                        </div>
+                                    </td>
+                                    <td>{{ "%.1f"|format(interface.max_out_util) if interface.max_out_util else 0 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

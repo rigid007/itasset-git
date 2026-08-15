@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}SLA在线率报表{% endblock %}
+{% block page_title %}SLA在线率报表{% endblock %}
+{% block page_subtitle %}设备在线率统计与SLA合规追踪{% endblock %}
+
+{% block content %}
+<!-- 统计 -->
+<div class="row mb-4">
+    <div class="col-md-3"><div class="card border-primary text-center"><div class="card-body"><h3 class="text-primary">{{ total_devices }}</h3><small>设备数</small></div></div></div>
+    <div class="col-md-3"><div class="card border-success text-center"><div class="card-body"><h3 class="text-success">{{ avg_uptime }}%</h3><small>平均在线率</small></div></div></div>
+    <div class="col-md-3"><div class="card border-warning text-center"><div class="card-body"><h3 class="text-warning">{{ below_sla }}</h3><small>低于99.9%</small></div></div></div>
+    <div class="col-md-3"><div class="card border-danger text-center"><div class="card-body"><h3 class="text-danger">{{ total_downtime }}</h3><small>总宕机(分钟)</small></div></div></div>
+</div>
+
+<!-- 周期切换 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-2 align-items-center">
+            <div class="col-auto"><label class="form-label fw-bold">统计周期:</label></div>
+            <div class="col-auto">
+                <select name="period" class="form-select" onchange="this.form.submit()">
+                    <option value="monthly" {% if period == 'monthly' %}selected{% endif %}>月度</option>
+                    <option value="quarterly" {% if period == 'quarterly' %}selected{% endif %}>季度</option>
+                    <option value="yearly" {% if period == 'yearly' %}selected{% endif %}>年度</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- SLA列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>设备</th><th>IP</th><th>在线率</th><th>总运行(分钟)</th><th>宕机(分钟)</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for sd in sla_data %}
+                <tr>
+                    <td>{{ sd.device.name }}</td>
+                    <td><code>{{ sd.device.ip_address or '-' }}</code></td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height:15px;width:100px">
+                                <div class="progress-bar {% if sd.uptime >= 99.99 %}bg-success{% elif sd.uptime >= 99.9 %}bg-info{% elif sd.uptime >= 99 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width:{{ sd.uptime|round(1) }}%"></div>
+                            </div>
+                            <span class="ms-2">{{ sd.uptime|round(3) }}%</span>
+                        </div>
+                    </td>
+                    <td>{{ sd.total }}</td>
+                    <td>{{ sd.downtime }}</td>
+                    <td>
+                        {% if sd.uptime >= 99.99 %}<span class="badge bg-success">优秀</span>
+                        {% elif sd.uptime >= 99.9 %}<span class="badge bg-info">达标</span>
+                        {% elif sd.uptime >= 99 %}<span class="badge bg-warning">警告</span>
+                        {% else %}<span class="badge bg-danger">不达标</span>{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

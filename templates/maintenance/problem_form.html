@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑问题' if problem else '创建问题' }}{% endblock %}
+{% block page_title %}{{ '编辑问题' if problem else '创建问题' }}{% endblock %}
+{% block page_subtitle %}记录问题并关联相关工单{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('maintenance_extra.problem_list') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <label class="form-label">标题 <span class="text-danger">*</span></label>
+                    <input type="text" name="title" class="form-control" value="{{ problem.title if problem else '' }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">严重度</label>
+                    <select name="severity" class="form-select">
+                        <option value="low" {% if problem and problem.severity == 'low' %}selected{% endif %}>低</option>
+                        <option value="medium" {% if problem and problem.severity == 'medium' %}selected{% endif %}>中</option>
+                        <option value="high" {% if problem and problem.severity == 'high' %}selected{% endif %}>高</option>
+                        <option value="critical" {% if problem and problem.severity == 'critical' %}selected{% endif %}>严重</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">优先级</label>
+                    <select name="priority" class="form-select">
+                        <option value="low" {% if problem and problem.priority == 'low' %}selected{% endif %}>低</option>
+                        <option value="medium" {% if problem and problem.priority == 'medium' %}selected{% endif %}>中</option>
+                        <option value="high" {% if problem and problem.priority == 'high' %}selected{% endif %}>高</option>
+                        <option value="critical" {% if problem and problem.priority == 'critical' %}selected{% endif %}>严重</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">关联设备(CI)</label>
+                    <select name="device_id" class="form-select">
+                        <option value="">不关联</option>
+                        {% for d in devices %}
+                        <option value="{{ d.id }}" {% if problem and problem.device_id == d.id %}selected{% endif %}>{{ d.name }} ({{ d.ip_address or d.management_ip or '-' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">关联资产</label>
+                    <select name="asset_id" class="form-select">
+                        <option value="">不关联</option>
+                        {% for a in assets %}
+                        <option value="{{ a.id }}" {% if problem and problem.asset_id == a.id %}selected{% endif %}>{{ a.asset_name }} ({{ a.asset_number }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">分类</label>
+                    <select name="category" class="form-select">
+                        <option value="">请选择</option>
+                        <option value="network" {% if problem and problem.category == 'network' %}selected{% endif %}>网络</option>
+                        <option value="server" {% if problem and problem.category == 'server' %}selected{% endif %}>服务器</option>
+                        <option value="security" {% if problem and problem.category == 'security' %}selected{% endif %}>安全</option>
+                        <option value="application" {% if problem and problem.category == 'application' %}selected{% endif %}>应用</option>
+                        <option value="storage" {% if problem and problem.category == 'storage' %}selected{% endif %}>存储</option>
+                        <option value="other" {% if problem and problem.category == 'other' %}selected{% endif %}>其他</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">处理人</label>
+                    <select name="assigned_to" class="form-select">
+                        <option value="">请选择</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if problem and problem.assigned_to == u.id %}selected{% endif %}>{{ u.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">状态</label>
+                    <select name="status" class="form-select">
+                        <option value="identified" {% if problem and problem.status == 'identified' %}selected{% endif %}>已识别</option>
+                        <option value="investigating" {% if problem and problem.status == 'investigating' %}selected{% endif %}>调查中</option>
+                        <option value="resolved" {% if problem and problem.status == 'resolved' %}selected{% endif %}>已解决</option>
+                        <option value="closed" {% if problem and problem.status == 'closed' %}selected{% endif %}>已关闭</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">描述</label>
+                <textarea name="description" class="form-control" rows="4">{{ problem.description if problem else '' }}</textarea>
+            </div>
+
+            {% if problem %}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">根因分析</label>
+                    <textarea name="root_cause" class="form-control" rows="3">{{ problem.root_cause or '' }}</textarea>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">解决方案</label>
+                    <textarea name="resolution" class="form-control" rows="3">{{ problem.resolution or '' }}</textarea>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label class="form-label">关联工单</label>
+                <select name="work_order_ids" class="form-select" multiple style="height:120px">
+                    {% for wo in work_orders %}
+                    <option value="{{ wo.id }}"
+                        {% if linked_ids is defined and wo.id in linked_ids %}selected{% endif %}
+                        {% if not linked_ids is defined and problem and problem.related_work_order_ids and wo.id|string in problem.related_work_order_ids %}selected{% endif %}>
+                        [{{ wo.work_order_number or wo.id }}] {{ wo.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">按住Ctrl可多选，关联后可在问题详情中直接跳转到工单</div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ '保存修改' if problem else '创建' }}</button>
+                <a href="{{ url_for('maintenance_extra.problem_list') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

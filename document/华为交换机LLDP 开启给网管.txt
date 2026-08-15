@@ -1,0 +1,135 @@
+
+
+
+system-view
+# 创建 LLDP 视图
+snmp-agent mib-view included LLDPView 1.0.8802
+
+# 绑定 community（替换 your_community 为实际值，如 public00）
+snmp-agent community read public00 mib-view LLDPView
+
+# 保存配置
+save
+
+
+
+
+✅ 你的华为 S5700 设备：
+
+    已成功启用 LLDP（lldp enable）
+    CLI 能看到邻居：GE0/0/2 ↔ 5130-A (GE1/0/23)
+    但 SNMP 查询 1.0.8802.1.1.2.1.4.1.1 返回 No Such Object
+
+这说明：华为设备默认不加载 LLDP-MIB 的 SNMP 视图！
+🔑 根本原因：华为 VRP 默认未授权 LLDP OID
+华为设备出于安全考虑，即使启用了 LLDP，也不会自动在 SNMP 中暴露 LLDP-MIB（1.0.8802...），除非显式配置。
+你需要 手动将 LLDP-MIB OID 加入 SNMP 社区的访问视图。
+✅ 解决方案：配置 SNMP 访问 LLDP-MIB
+步骤 1：创建一个包含 LLDP OID 的 MIB 视图
+bash
+
+system-view
+snmp-agent mib-view included LLDPView 1.0.8802
+
+    这行命令创建名为 LLDPView 的视图，包含整个 1.0.8802（即 LLDP-MIB）子树。
+
+步骤 2：将你的 SNMP community 绑定到该视图
+假设你的 community 是 public00（读权限）：
+bash
+
+snmp-agent community read public00 mib-view LLDPView
+
+    如果已有 community 配置，需先删除或修改。可先查看：
+    bash
+
+    display snmp-agent community
+
+
+#=====================================
+
+D:\net-snmp\usr\bin>snmpwalk -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.1.5.0
+SNMPv2-MIB::sysName.0 = No more variables left in this MIB View (It is past the end of the MIB tree)
+
+D:\net-snmp\usr\bin>snmpwalk -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.1.1.0
+SNMPv2-MIB::sysDescr.0 = No more variables left in this MIB View (It is past the end of the MIB tree)
+
+D:\net-snmp\usr\bin>snmpwalk -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.17.7.1.2.2.1.2
+SNMPv2-SMI::mib-2.17.7.1.2.2.1.2 = No more variables left in this MIB View (It is past the end of the MIB tree)
+
+D:\net-snmp\usr\bin>snmpget -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.1.5.0
+SNMPv2-MIB::sysName.0 = No Such Object available on this agent at this OID
+
+D:\net-snmp\usr\bin>snmpget -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.1.1.0
+SNMPv2-MIB::sysDescr.0 = No Such Object available on this agent at this OID
+
+D:\net-snmp\usr\bin>snmpget -v 2c -c public00 192.168.1.5 1.3.6.1.2.1.1.1.0
+SNMPv2-MIB::sysDescr.0 = No Such Object available on this agent at this OID
+
+
+
+
+display snmp-agent community
+
+
+应看到类似：
+
+
+
+Community name: public00
+Group name: %$%$xxxx%$%$
+Storage-type: nonVolatile
+Access-list: -
+View name: ViewDefault   ← 关键！如果看不到任何，说明设备没有任何,OID；如何是"ViewDefault"说明华为默认OID 通常只包含有限 OID（如 sysUpTime），不包含 sysName、sysDescr、FDB、ARP 等！
+
+需要 自定义一个 view 并授权给 community：
+
+
+# 创建包含完整 internet 节点的视图（1.3.6.1.2.1）
+snmp-agent mib-view included iso iso
+
+# 或更安全地包含常用节点：
+snmp-agent mib-view included AllView 1.3.6.1.2.1
+
+# 将 community 绑定到该视图
+snmp-agent community read public00 mib-view AllView iso-view
+
+
+
+
+snmp-agent
+snmp-agent local-engineid 800007DB03688F840480B2
+snmp-agent community read cipher public00 mib-view iso-view
+snmp-agent sys-info version all
+snmp-agent mib-view included iso iso
+snmp-agent mib-view included LLDPView iso8802
+snmp-agent mib-view included iso-view iso
+#
+
+
+💡 注意：iso 是 1 的别名，代表整个 MIB 树。生产环境建议按需开放。
+
+
+最后再确认是否有ACL 限制。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

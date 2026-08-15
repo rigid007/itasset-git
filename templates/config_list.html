@@ -1,0 +1,658 @@
+{% extends "base.html" %}
+
+{% block title %}系统配置管理 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    /* 自定义样式 */
+    .config-key {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+    
+    .config-value {
+        font-family: 'Courier New', monospace;
+        background-color: #f8f9fa;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        font-weight: 600;
+    }
+    
+    /* 批量操作栏 */
+    .bulk-actions-bar {
+        background-color: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        display: none;
+    }
+    
+    /* 搜索和筛选区域 */
+    .filter-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* 表格样式 */
+    .table th {
+        font-weight: 600;
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    /* 空状态提示 */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        color: #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+系统配置管理
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('config.config_list') }}" class="btn btn-secondary btn-sm ms-2" id="refreshBtn">
+        <i class="fas fa-sync-alt"></i> 刷新
+    </a>
+    <button type="button" class="btn btn-primary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#addConfigModal">
+        <i class="fas fa-plus"></i> 新增配置
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- 操作结果提示框 -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- 搜索和筛选区域 -->
+<div class="filter-card">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label for="search" class="form-label">搜索配置键</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="search" 
+                       placeholder="输入配置键名称搜索...">
+                <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <label for="visibility_filter" class="form-label">可见性筛选</label>
+            <select class="form-select" id="visibility_filter">
+                <option value="all">全部</option>
+                <option value="public">公开配置</option>
+                <option value="private">私有配置</option>
+            </select>
+        </div>
+        
+        <div class="col-md-3 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-secondary w-100" id="clearFiltersBtn">
+                <i class="fas fa-times"></i> 清除筛选
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作栏 -->
+<div class="bulk-actions-bar" id="bulkActionsBar">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span id="selectedCount">0</span> 个配置被选中
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary btn-sm me-2" id="bulkSelectAll">
+                全选
+            </button>
+            <button class="btn btn-outline-secondary btn-sm me-2" id="bulkSelectNone">
+                取消全选
+            </button>
+            <button class="btn btn-danger btn-sm" id="bulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+                <i class="fas fa-trash"></i> 批量删除
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 系统配置卡片容器 -->
+<div class="card shadow-sm mb-4">
+    <!-- 卡片头部：标题 + 统计信息 -->
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-dark">系统参数配置</h5>
+        <span class="badge bg-secondary">{{ configs|length }} 项配置</span>
+    </div>
+
+    <!-- 配置列表表格 -->
+    <div class="card-body p-0">
+        {% if configs %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="configTable">
+                <thead>
+                    <tr>
+                        <th width="40">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                            </div>
+                        </th>
+                        <th width="5%">ID</th>
+                        <th width="20%">配置键</th>
+                        <th width="30%">配置值</th>
+                        <th width="15%">可见性</th>
+                        <th width="20%">描述信息</th>
+                        <th width="10%" class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for config in configs %}
+                    <tr data-config-id="{{ config.id }}">
+                        <td>
+                            <div class="form-check">
+                                <input class="form-check-input config-checkbox" type="checkbox" value="{{ config.id }}">
+                            </div>
+                        </td>
+                        <td>{{ config.id }}</td>
+                        <td>
+                            <span class="config-key">{{ config.key }}</span>
+                        </td>
+                        <td>
+                            {% if config.value %}
+                            <div class="config-value" title="{{ config.value }}">
+                                {% if config.value|length > 50 %}
+                                    {{ config.value[:50] }}...
+                                {% else %}
+                                    {{ config.value }}
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">空值</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if config.is_public %}
+                            <span class="badge bg-success">公开</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">私有</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if config.description %}
+                            <div title="{{ config.description }}">
+                                {% if config.description|length > 40 %}
+                                    {{ config.description[:40] }}...
+                                {% else %}
+                                    {{ config.description }}
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">无描述</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary edit-config-btn" 
+                                        data-config-id="{{ config.id }}"
+                                        data-key="{{ config.key }}"
+                                        data-value="{{ config.value or '' }}"
+                                        data-is-public="{{ '1' if config.is_public else '0' }}"
+                                        data-description="{{ config.description or '' }}"
+                                        title="编辑配置">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger delete-config-btn" 
+                                        data-config-id="{{ config.id }}"
+                                        data-key="{{ config.key }}"
+                                        title="删除配置">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <!-- 无配置数据提示 -->
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-cogs"></i>
+            </div>
+            <h5>暂无系统配置数据</h5>
+            <p class="mb-4">当前没有找到任何系统配置记录，您可以添加新的配置项</p>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addConfigModal">
+                <i class="fas fa-plus"></i> 添加配置
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 卡片底部：统计信息 -->
+    <div class="card-footer bg-light">
+        <small class="text-muted">
+            共 {{ configs|length }} 项配置 | 
+            公开配置 {{ configs|selectattr('is_public', 'equalto', true)|list|length }} 项 | 
+            私有配置 {{ configs|selectattr('is_public', 'equalto', false)|list|length }} 项
+        </small>
+    </div>
+</div>
+
+<!-- 新增配置模态框 -->
+<div class="modal fade" id="addConfigModal" tabindex="-1" aria-labelledby="addConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addConfigModalLabel">新增系统配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('config.config_add') }}" method="POST" id="addConfigForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="add-key" class="form-label">配置键 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="add-key" name="key" 
+                                   placeholder="如: SNMP_COMMUNITY" required>
+                            <div class="form-text">配置键必须唯一，通常使用大写字母和下划线</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="add-value" class="form-label">配置值</label>
+                            <input type="text" class="form-control" id="add-value" name="value" 
+                                   placeholder="配置的具体值">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="add-description" class="form-label">描述</label>
+                            <textarea class="form-control" id="add-description" name="description" 
+                                      rows="3" placeholder="配置的详细描述"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">可见性</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="is_public" id="add-public" value="1" checked>
+                                <label class="form-check-label" for="add-public">
+                                    公开 - 所有用户可见（适用于通用配置）
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="is_public" id="add-private" value="0">
+                                <label class="form-check-label" for="add-private">
+                                    私有 - 仅管理员可见（适用于敏感配置）
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建配置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑配置模态框 -->
+<div class="modal fade" id="editConfigModal" tabindex="-1" aria-labelledby="editConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editConfigModalLabel">编辑系统配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('config.config_edit') }}" method="POST" id="editConfigForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" id="edit-config-id" name="config_id">
+                
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-key" class="form-label">配置键 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit-key" name="key" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-value" class="form-label">配置值</label>
+                            <input type="text" class="form-control" id="edit-value" name="value">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="edit-description" class="form-label">描述</label>
+                            <textarea class="form-control" id="edit-description" name="description" rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">可见性</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="is_public" id="edit-public" value="1">
+                                <label class="form-check-label" for="edit-public">
+                                    公开 - 所有用户可见
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="is_public" id="edit-private" value="0">
+                                <label class="form-check-label" for="edit-private">
+                                    私有 - 仅管理员可见
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除配置确认模态框 -->
+<div class="modal fade" id="deleteConfigModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除配置 "<span id="deleteConfigKey"></span>" 吗？</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 警告：删除操作不可恢复，可能会影响系统功能！
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form id="deleteConfigForm" method="POST" action="{{ url_for('config.config_delete') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="config_id" id="delete-config-id">
+                    <button type="submit" class="btn btn-danger">确认删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量删除确认模态框 -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">批量删除确认</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除选中的 <span id="bulkDeleteCount">0</span> 个配置吗？</p>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 警告：删除操作不可恢复，可能会影响系统功能！
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form id="bulkDeleteForm" method="POST" action="{{ url_for('config.config_bulk_delete') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="config_ids" id="bulkDeleteIds">
+                    <button type="submit" class="btn btn-danger">确认删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // 刷新按钮
+        $('#refreshBtn').click(function() {
+            window.location.reload();
+        });
+        
+        // 搜索功能
+        $('#searchBtn').click(function() {
+            filterTable();
+        });
+        
+        $('#search').on('keyup', function(e) {
+            if (e.key === 'Enter') {
+                filterTable();
+            }
+        });
+        
+        // 可见性筛选
+        $('#visibility_filter').change(function() {
+            filterTable();
+        });
+        
+        // 清除筛选
+        $('#clearFiltersBtn').click(function() {
+            $('#search').val('');
+            $('#visibility_filter').val('all');
+            filterTable();
+        });
+        
+        // 表格筛选函数
+        function filterTable() {
+            var searchText = $('#search').val().toLowerCase();
+            var visibilityFilter = $('#visibility_filter').val();
+            
+            $('#configTable tbody tr').each(function() {
+                var key = $(this).find('td:nth-child(3)').text().toLowerCase();
+                var visibility = $(this).find('td:nth-child(5) .badge').text().trim();
+                
+                var showRow = true;
+                
+                // 搜索筛选
+                if (searchText && key.indexOf(searchText) === -1) {
+                    showRow = false;
+                }
+                
+                // 可见性筛选
+                if (visibilityFilter === 'public' && visibility !== '公开') {
+                    showRow = false;
+                } else if (visibilityFilter === 'private' && visibility !== '私有') {
+                    showRow = false;
+                }
+                
+                if (showRow) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        }
+        
+        // 编辑配置按钮
+        $('.edit-config-btn').click(function() {
+            var configId = $(this).data('config-id');
+            var key = $(this).data('key');
+            var value = $(this).data('value');
+            var isPublic = $(this).data('is-public');
+            var description = $(this).data('description');
+            
+            $('#edit-config-id').val(configId);
+            $('#edit-key').val(key);
+            $('#edit-value').val(value);
+            $('#edit-description').val(description);
+            
+            // 设置可见性单选框
+            if (isPublic === '1') {
+                $('#edit-public').prop('checked', true);
+                $('#edit-private').prop('checked', false);
+            } else {
+                $('#edit-public').prop('checked', false);
+                $('#edit-private').prop('checked', true);
+            }
+            
+            var editModal = new bootstrap.Modal(document.getElementById('editConfigModal'));
+            editModal.show();
+        });
+        
+        // 删除配置按钮
+        $('.delete-config-btn').click(function() {
+            var configId = $(this).data('config-id');
+            var key = $(this).data('key');
+            
+            $('#deleteConfigKey').text(key);
+            $('#delete-config-id').val(configId);
+            
+            var deleteModal = new bootstrap.Modal(document.getElementById('deleteConfigModal'));
+            deleteModal.show();
+        });
+        
+        // 批量选择功能
+        $('#selectAll').change(function() {
+            var isChecked = $(this).prop('checked');
+            $('.config-checkbox').prop('checked', isChecked);
+            updateBulkActionsBar();
+        });
+        
+        $('.config-checkbox').change(function() {
+            updateBulkActionsBar();
+        });
+        
+        $('#bulkSelectAll').click(function() {
+            $('.config-checkbox').prop('checked', true);
+            $('#selectAll').prop('checked', true);
+            updateBulkActionsBar();
+        });
+        
+        $('#bulkSelectNone').click(function() {
+            $('.config-checkbox').prop('checked', false);
+            $('#selectAll').prop('checked', false);
+            updateBulkActionsBar();
+        });
+        
+        // 更新批量操作栏
+        function updateBulkActionsBar() {
+            var selectedCount = $('.config-checkbox:checked').length;
+            $('#selectedCount').text(selectedCount);
+            
+            if (selectedCount > 0) {
+                $('#bulkActionsBar').show();
+            } else {
+                $('#bulkActionsBar').hide();
+            }
+            
+            // 更新批量删除模态框中的计数
+            $('#bulkDeleteCount').text(selectedCount);
+        }
+        
+        // 批量删除按钮点击事件
+        $('#bulkDeleteBtn').click(function() {
+            var selectedIds = [];
+            $('.config-checkbox:checked').each(function() {
+                selectedIds.push($(this).val());
+            });
+            
+            $('#bulkDeleteIds').val(selectedIds.join(','));
+        });
+        
+        // 表单验证
+        $('#addConfigForm').submit(function(e) {
+            var key = $('#add-key').val().trim();
+            if (!key) {
+                e.preventDefault();
+                alert('配置键不能为空！');
+                $('#add-key').focus();
+                return false;
+            }
+            
+            // 配置键格式验证（只允许字母、数字、下划线）
+            if (!/^[A-Z0-9_]+$/i.test(key)) {
+                e.preventDefault();
+                alert('配置键只能包含字母、数字和下划线！');
+                $('#add-key').focus();
+                return false;
+            }
+            
+            return true;
+        });
+        
+        $('#editConfigForm').submit(function(e) {
+            var key = $('#edit-key').val().trim();
+            if (!key) {
+                e.preventDefault();
+                alert('配置键不能为空！');
+                $('#edit-key').focus();
+                return false;
+            }
+            
+            // 配置键格式验证
+            if (!/^[A-Z0-9_]+$/i.test(key)) {
+                e.preventDefault();
+                alert('配置键只能包含字母、数字和下划线！');
+                $('#edit-key').focus();
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // 行点击选中（除了操作按钮区域）
+        $('#configTable tbody tr').click(function(e) {
+            // 如果点击的是复选框、链接或按钮，不触发行选中
+            if ($(e.target).is('input[type="checkbox"], a, button, .btn, .btn-group, .btn-group *')) {
+                return;
+            }
+            
+            var checkbox = $(this).find('.config-checkbox');
+            checkbox.prop('checked', !checkbox.prop('checked'));
+            checkbox.trigger('change');
+        });
+        
+        // 自动填充示例数据（仅用于演示）
+        function fillDemoData() {
+            if ($('#add-key').length && !$('#add-key').val()) {
+                $('#add-key').val('SNMP_COMMUNITY');
+                $('#add-value').val('public');
+                $('#add-description').val('SNMP只读团体名');
+                $('#add-private').prop('checked', true);
+            }
+        }
+        
+        // 填充演示数据（仅当URL包含demo参数时）
+        if (window.location.href.includes('demo=true')) {
+            fillDemoData();
+        }
+    });
+</script>
+{% endblock %}

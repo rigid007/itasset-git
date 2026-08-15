@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}执行任务 - {{ task.title }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header">
+            <h4>执行巡检任务 #{{ task.task_number }}</h4>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <!-- 根据实际巡检项设计表单，例如： -->
+                <div class="mb-3">
+                    <label for="result" class="form-label">巡检结果</label>
+                    <textarea class="form-control" id="result" name="result" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="completion" class="form-label">完成进度 (%)</label>
+                    <input type="number" class="form-control" id="completion" name="completion_percentage" min="0" max="100" value="{{ task.completion_percentage }}">
+                </div>
+                <button type="submit" class="btn btn-primary">提交结果</button>
+                <a href="{{ url_for('maintenance.inspection_task_detail', task_id=task.id) }}" class="btn btn-secondary">取消</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

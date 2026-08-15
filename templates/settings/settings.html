@@ -1,0 +1,459 @@
+<!-- templates/settings/settings.html -->
+{% extends "base.html" %}
+
+{% block title %}系统设置{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="bi bi-gear me-2"></i>系统设置
+            </h1>
+            <p class="text-muted mb-0">管理系统配置和个人设置</p>
+        </div>
+    </div>
+
+    <!-- 消息提示 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show mb-4" role="alert">
+                    {% if category == 'success' %}
+                        <i class="bi bi-check-circle me-2"></i>
+                    {% elif category == 'warning' %}
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                    {% elif category == 'error' or category == 'danger' %}
+                        <i class="bi bi-exclamation-circle me-2"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle me-2"></i>
+                    {% endif %}
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <!-- 左侧导航 -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        <a href="#personal" class="list-group-item list-group-item-action active" data-bs-toggle="tab">
+                            <i class="bi bi-person me-2"></i>个人设置
+                        </a>
+                        <a href="#password" class="list-group-item list-group-item-action" data-bs-toggle="tab">
+                            <i class="bi bi-lock me-2"></i>修改密码
+                        </a>
+                        {% if current_user.is_admin %}
+                        <a href="#system" class="list-group-item list-group-item-action" data-bs-toggle="tab">
+                            <i class="bi bi-gear-wide me-2"></i>系统配置
+                        </a>
+                        <a href="#logs" class="list-group-item list-group-item-action" data-bs-toggle="tab">
+                            <i class="bi bi-clock-history me-2"></i>操作日志
+                        </a>
+                        <a href="#backup" class="list-group-item list-group-item-action" data-bs-toggle="tab">
+                            <i class="bi bi-database me-2"></i>数据备份
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧内容 -->
+        <div class="col-md-9">
+            <div class="tab-content">
+                <!-- 个人设置标签页 -->
+                <div class="tab-pane fade show active" id="personal">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-person me-2"></i>个人设置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('settings.update_profile') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">用户名</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" value="{{ current_user.username }}" disabled>
+                                        <div class="form-text">用户名创建后不可修改</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">邮箱地址</label>
+                                    <div class="col-sm-9">
+                                        <input type="email" class="form-control" name="email" 
+                                               value="{{ current_user.email or '' }}" required>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">姓名</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" name="full_name" 
+                                               value="{{ current_user.full_name or '' }}">
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">联系电话</label>
+                                    <div class="col-sm-9">
+                                        <input type="tel" class="form-control" name="phone" 
+                                               value="{{ current_user.phone or '' }}">
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">部门</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" name="department" 
+                                               value="{{ current_user.department or '' }}">
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-sm-9 offset-sm-3">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-save me-1"></i>保存更改
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 修改密码标签页 -->
+                <div class="tab-pane fade" id="password">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-lock me-2"></i>修改密码
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('settings.change_password') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">当前密码</label>
+                                    <div class="col-sm-9">
+                                        <input type="password" class="form-control" name="current_password" required>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">新密码</label>
+                                    <div class="col-sm-9">
+                                        <input type="password" class="form-control" name="new_password" required minlength="6">
+                                        <div class="form-text">密码长度至少6位</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">确认新密码</label>
+                                    <div class="col-sm-9">
+                                        <input type="password" class="form-control" name="confirm_password" required minlength="6">
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-sm-9 offset-sm-3">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-key me-1"></i>修改密码
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统配置标签页（仅管理员） -->
+                {% if current_user.is_admin %}
+                <div class="tab-pane fade" id="system">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-gear-wide me-2"></i>系统配置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('settings.update_config') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">网站名称</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" name="site_name" 
+                                               value="{{ configs.get('site_name', '数据中心管理系统') }}">
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">网站描述</label>
+                                    <div class="col-sm-9">
+                                        <textarea class="form-control" name="site_description" rows="2">{{ configs.get('site_description', '') }}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <label class="col-sm-3 col-form-label">每页显示数量</label>
+                                    <div class="col-sm-9">
+                                        <input type="number" class="form-control" name="items_per_page" 
+                                               value="{{ configs.get('items_per_page', '20') }}" min="10" max="100">
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-sm-9 offset-sm-3">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="enable_registration" 
+                                                   id="enable_registration" {{ 'checked' if configs.get('enable_registration') == '1' else '' }}>
+                                            <label class="form-check-label" for="enable_registration">
+                                                允许用户注册
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="maintenance_mode" 
+                                                   id="maintenance_mode" {{ 'checked' if configs.get('maintenance_mode') == '1' else '' }}>
+                                            <label class="form-check-label" for="maintenance_mode">
+                                                维护模式
+                                            </label>
+                                            <div class="form-text">启用后普通用户无法访问系统</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-sm-9 offset-sm-3">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-save me-1"></i>保存配置
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作日志标签页 -->
+                <div class="tab-pane fade" id="logs">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-clock-history me-2"></i>操作日志
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>时间</th>
+                                            <th>用户</th>
+                                            <th>操作</th>
+                                            <th>详情</th>
+                                            <th>IP地址</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set logs_list = settings.operation_logs().items if settings.operation_logs else [] %}
+                                        {% for log in logs_list[:10] %}
+                                        <tr>
+                                            <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '' }}</td>
+                                            <td>{{ log.username }}</td>
+                                            <td>
+                                                <span class="badge bg-info">{{ log.action }}</span>
+                                            </td>
+                                            <td>{{ log.details|truncate(30) }}</td>
+                                            <td><small class="text-muted">{{ log.ip_address }}</small></td>
+                                        </tr>
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4">
+                                                暂无操作日志
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <a href="{{ url_for('settings.operation_logs') }}" class="btn btn-outline-primary">
+                                    查看全部日志
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据备份标签页 -->
+                <div class="tab-pane fade" id="backup">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-database me-2"></i>数据备份
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                定期备份可以防止数据丢失，建议每周备份一次。
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h6 class="mb-3">备份选项</h6>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="backup_type" id="full_backup" value="full" checked>
+                                    <label class="form-check-label" for="full_backup">
+                                        完整备份（包含所有数据）
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="backup_type" id="incremental_backup" value="incremental">
+                                    <label class="form-check-label" for="incremental_backup">
+                                        增量备份（仅备份上次备份后的变化）
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h6 class="mb-3">备份文件格式</h6>
+                                <select class="form-select" style="max-width: 200px;">
+                                    <option value="sql">SQL文件 (.sql)</option>
+                                    <option value="json">JSON文件 (.json)</option>
+                                    <option value="excel">Excel文件 (.xlsx)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="d-grid gap-2 d-md-block">
+                                <button type="button" class="btn btn-primary" id="backupBtn">
+                                    <i class="bi bi-download me-1"></i>立即备份
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" disabled>
+                                    <i class="bi bi-clock me-1"></i>计划备份
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 备份成功模态框 -->
+<div class="modal fade" id="backupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">备份结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="backupResult">
+                <!-- 备份结果将在这里显示 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 备份按钮点击事件
+    const backupBtn = document.getElementById('backupBtn');
+    if (backupBtn) {
+        backupBtn.addEventListener('click', function() {
+            const backupType = document.querySelector('input[name="backup_type"]:checked').value;
+            
+            // 显示加载状态
+            backupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>备份中...';
+            backupBtn.disabled = true;
+            
+            // 发送备份请求
+            fetch('{{ url_for("settings.perform_backup") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'backup_type=' + backupType
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 恢复按钮状态
+                backupBtn.innerHTML = '<i class="bi bi-download me-1"></i>立即备份';
+                backupBtn.disabled = false;
+                
+                // 显示结果
+                const modal = new bootstrap.Modal(document.getElementById('backupModal'));
+                const resultDiv = document.getElementById('backupResult');
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            ${data.message}
+                        </div>
+                        <p class="mb-0">备份任务已开始执行，请稍后在备份目录查看备份文件。</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-circle me-2"></i>
+                            ${data.message}
+                        </div>
+                    `;
+                }
+                
+                modal.show();
+            })
+            .catch(error => {
+                console.error('备份请求失败:', error);
+                backupBtn.innerHTML = '<i class="bi bi-download me-1"></i>立即备份';
+                backupBtn.disabled = false;
+                
+                const modal = new bootstrap.Modal(document.getElementById('backupModal'));
+                document.getElementById('backupResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-circle me-2"></i>
+                        备份请求失败: ${error.message}
+                    </div>
+                `;
+                modal.show();
+            });
+        });
+    }
+    
+    // 标签页切换时更新URL hash
+    const tabLinks = document.querySelectorAll('[data-bs-toggle="tab"]');
+    tabLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            const target = this.getAttribute('href');
+            window.location.hash = target;
+        });
+    });
+    
+    // 页面加载时根据hash激活对应的标签页
+    if (window.location.hash) {
+        const hash = window.location.hash.substring(1);
+        const tabLink = document.querySelector(`[href="#${hash}"]`);
+        if (tabLink) {
+            const tab = new bootstrap.Tab(tabLink);
+            tab.show();
+        }
+    }
+});
+</script>
+{% endblock %}

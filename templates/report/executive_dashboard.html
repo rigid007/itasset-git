@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}管理驾驶舱{% endblock %}
+{% block page_title %}管理驾驶舱{% endblock %}
+{% block page_subtitle %}全局IT资产运维概览{% endblock %}
+
+{% block content %}
+<!-- 核心指标 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary text-white bg-primary h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-server fa-3x mb-2"></i>
+                <h2>{{ total_devices }}</h2>
+                <small>设备总数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success text-white bg-success h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-check-circle fa-3x mb-2"></i>
+                <h2>{{ online_devices }}</h2>
+                <small>在线设备</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger text-white bg-danger h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-times-circle fa-3x mb-2"></i>
+                <h2>{{ offline_devices }}</h2>
+                <small>离线设备</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning text-white bg-warning h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-exclamation-triangle fa-3x mb-2"></i>
+                <h2>{{ critical_alerts }}</h2>
+                <small>严重告警</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 最近告警 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-bell"></i> 最近告警</h5>
+                <a href="{{ url_for('alert.alert_list') }}" class="btn btn-sm btn-outline-primary">查看全部</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>设备</th><th>级别</th><th>消息</th><th>时间</th></tr></thead>
+                    <tbody>
+                        {% for alert in recent_alerts %}
+                        <tr>
+                            <td>{{ alert.device.name if alert.device else '-' }}</td>
+                            <td>
+                                {% if alert.severity == 'critical' %}<span class="badge bg-danger">严重</span>
+                                {% elif alert.severity == 'warning' %}<span class="badge bg-warning">警告</span>
+                                {% else %}<span class="badge bg-info">信息</span>{% endif %}
+                            </td>
+                            <td><small>{{ alert.message[:40] if alert.message else '-' }}</small></td>
+                            <td><small>{{ alert.created_at.strftime('%m-%d %H:%M') if alert.created_at else '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">暂无告警</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 仪表板列表 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-tachometer-alt"></i> 仪表板</h5>
+                <a href="{{ url_for('report_extra.dashboard_create') }}" class="btn btn-sm btn-primary"><i class="fas fa-plus"></i> 新建</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>名称</th><th>类型</th><th>共享</th></tr></thead>
+                    <tbody>
+                        {% for d in dashboards %}
+                        <tr>
+                            <td><a href="{{ url_for('report_extra.dashboard_view', id=d.id) }}">{{ d.name }}</a></td>
+                            <td><span class="badge bg-info">{{ d.dashboard_type }}</span></td>
+                            <td>{% if d.is_shared %}<span class="badge bg-success">共享</span>{% else %}<span class="badge bg-secondary">私有</span>{% endif %}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center text-muted py-3">暂无自定义仪表板</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 快速入口 -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-rocket"></i> 快速入口</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <a href="{{ url_for('report_extra.compliance_frameworks') }}" class="btn btn-outline-primary w-100 py-3">
+                            <i class="fas fa-shield-alt fa-2x d-block mb-1"></i>合规框架
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('report_extra.compliance_report') }}" class="btn btn-outline-success w-100 py-3">
+                            <i class="fas fa-file-alt fa-2x d-block mb-1"></i>合规报告
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('report_extra.distribution_list') }}" class="btn btn-outline-info w-100 py-3">
+                            <i class="fas fa-share-alt fa-2x d-block mb-1"></i>报表分发
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('report_extra.trend_forecast') }}" class="btn btn-outline-warning w-100 py-3">
+                            <i class="fas fa-chart-line fa-2x d-block mb-1"></i>趋势预测
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

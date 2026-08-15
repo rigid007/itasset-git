@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}创建仪表板{% endblock %}
+{% block page_title %}创建仪表板{% endblock %}
+{% block page_subtitle %}配置自定义报表仪表板{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label class="form-label">名称 <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control" value="{{ dashboard.name if dashboard else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">描述</label>
+                <textarea name="description" class="form-control" rows="2">{{ dashboard.description if dashboard else '' }}</textarea>
+            </div>
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label">类型</label>
+                    <select name="dashboard_type" class="form-select">
+                        <option value="executive" {% if dashboard and dashboard.dashboard_type == 'executive' %}selected{% endif %}>管理驾驶舱</option>
+                        <option value="operational" {% if dashboard and dashboard.dashboard_type == 'operational' %}selected{% endif %} selected>运营报表</option>
+                        <option value="compliance" {% if dashboard and dashboard.dashboard_type == 'compliance' %}selected{% endif %}>合规报表</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">角色访问</label>
+                    <select name="role_access" class="form-select">
+                        <option value="all">全部</option>
+                        <option value="admin">管理员</option>
+                        <option value="viewer">观察者</option>
+                        <option value="operator">操作员</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" name="is_default" class="form-check-input" id="is_default">
+                <label class="form-check-label" for="is_default">设为默认仪表板</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" name="is_shared" class="form-check-input" id="is_shared">
+                <label class="form-check-label" for="is_shared">共享给其他用户</label>
+            </div>
+            <input type="hidden" name="layout_config" value='{"columns": 2}'>
+            <input type="hidden" name="widgets" value='[]'>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                <a href="{{ url_for('report_extra.dashboard_list') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

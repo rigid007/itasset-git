@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}{{ audit.name }} - 盘点详情{% endblock %}
+{% block page_title %}{{ audit.name }}{% endblock %}
+{% block page_subtitle %}编号: {{ audit.audit_no }}{% endblock %}
+{% block header_actions %}
+{% if audit.status == 'draft' %}
+<form method="POST" action="{{ url_for('asset_extra.audit_start', id=audit.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-success" onclick="return confirm('确认开始盘点？')">
+        <i class="fas fa-play"></i> 开始盘点
+    </button>
+</form>
+{% elif audit.status == 'in_progress' %}
+<form method="POST" action="{{ url_for('asset_extra.audit_complete', id=audit.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-success" onclick="return confirm('确认完成盘点？未扫描项将计入缺失。')">
+        <i class="fas fa-check"></i> 完成盘点
+    </button>
+</form>
+{% endif %}
+{% if audit.status == 'completed' %}
+<a href="{{ url_for('asset_extra.audit_report', id=audit.id) }}" class="btn btn-info">
+    <i class="fas fa-file-alt"></i> 查看报告
+</a>
+{% endif %}
+<a href="{{ url_for('asset_extra.audit_list') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回</a>
+{% endblock %}
+
+{% block content %}
+<!-- 进度概览 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary text-center">
+            <div class="card-body">
+                <h3 class="text-primary">{{ audit.total_assets }}</h3>
+                <small>应盘总数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info text-center">
+            <div class="card-body">
+                <h3 class="text-info">{{ audit.scanned_assets }}</h3>
+                <small>已盘数量</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success text-center">
+            <div class="card-body">
+                <h3 class="text-success">{{ audit.matched_count }}</h3>
+                <small>一致</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning text-center">
+            <div class="card-body">
+                <h3 class="text-warning">{{ audit.discrepancy_count + audit.missing_count }}</h3>
+                <small>差异+缺失</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 进度条 -->
+<div class="progress mb-4" style="height:25px">
+    {% if audit.total_assets > 0 %}
+        {% set pct = audit.progress_percent() %}
+        {% set matched_pct = (audit.matched_count / audit.total_assets * 100)|round %}
+        {% set discrep_pct = (audit.discrepancy_count / audit.total_assets * 100)|round %}
+        {% set missing_pct = (audit.missing_count / audit.total_assets * 100)|round %}
+        <div class="progress-bar bg-success" style="width:{{ matched_pct }}%">一致{{ matched_pct }}%</div>
+        <div class="progress-bar bg-warning" style="width:{{ discrep_pct }}%">差异{{ discrep_pct }}%</div>
+        <div class="progress-bar bg-danger" style="width:{{ missing_pct }}%">缺失{{ missing_pct }}%</div>
+    {% endif %}
+</div>
+
+<!-- 状态过滤 -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form method="GET" class="row align-items-center">
+            <div class="col-auto">筛选:</div>
+            <div class="col-auto">
+                <a href="{{ url_for('asset_extra.audit_detail', id=audit.id) }}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}">全部</a>
+                <a href="{{ url_for('asset_extra.audit_detail', id=audit.id, status='pending') }}" class="btn btn-sm {% if status_filter == 'pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">待盘点</a>
+                <a href="{{ url_for('asset_extra.audit_detail', id=audit.id, status='matched') }}" class="btn btn-sm {% if status_filter == 'matched' %}btn-primary{% else %}btn-outline-secondary{% endif %}">一致</a>
+                <a href="{{ url_for('asset_extra.audit_detail', id=audit.id, status='mismatched') }}" class="btn btn-sm {% if status_filter == 'mismatched' %}btn-primary{% else %}btn-outline-secondary{% endif %}">差异</a>
+                <a href="{{ url_for('asset_extra.audit_detail', id=audit.id, status='missing') }}" class="btn btn-sm {% if status_filter == 'missing' %}btn-primary{% else %}btn-outline-secondary{% endif %}">缺失</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 盘点明细列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:50px">#</th>
+                    <th>资产编号</th>
+                    <th>资产名称</th>
+                    <th>预期位置</th>
+                    <th>预期状态</th>
+                    <th>盘点结果</th>
+                    <th>实际位置</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items.items %}
+                <tr class="{% if item.status == 'mismatched' %}table-warning{% elif item.status == 'missing' %}table-danger{% elif item.status == 'matched' %}table-success{% endif %}">
+                    <td>{{ item.id }}</td>
+                    <td><code>{{ item.asset_number or '' }}</code></td>
+                    <td>{{ item.asset_name }}</td>
+                    <td>{{ item.expected_location or '-' }}</td>
+                    <td>{{ item.expected_status or '-' }}</td>
+                    <td>
+                        {% if item.status == 'pending' %}<span class="badge bg-secondary">待盘点</span>
+                        {% elif item.status == 'matched' %}<span class="badge bg-success">一致</span>
+                        {% elif item.status == 'mismatched' %}<span class="badge bg-warning">差异</span>
+                        {% elif item.status == 'missing' %}<span class="badge bg-danger">缺失</span>
+                        {% elif item.status == 'damaged' %}<span class="badge bg-danger">损坏</span>
+                        {% else %}<span class="badge bg-info">{{ item.status }}</span>{% endif %}
+                    </td>
+                    <td>{{ item.actual_location or '-' }}</td>
+                    <td>
+                        {% if audit.status == 'in_progress' and item.status == 'pending' %}
+                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal"
+                                data-bs-target="#scanModal{{ item.id }}">
+                            <i class="fas fa-check"></i> 盘点
+                        </button>
+
+                        <!-- 扫描模态框 -->
+                        <div class="modal fade" id="scanModal{{ item.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('asset_extra.audit_scan', id=audit.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">盘点 - {{ item.asset_name }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <input type="hidden" name="item_id" value="{{ item.id }}">
+                                            <div class="mb-3">
+                                                <label class="form-label">盘点结果</label>
+                                                <select name="status" class="form-select" required>
+                                                    <option value="matched">一致 (位置相符)</option>
+                                                    <option value="mismatched">差异 (位置不符)</option>
+                                                    <option value="missing">缺失 (未找到)</option>
+                                                    <option value="damaged">损坏</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">实际位置</label>
+                                                <input type="text" name="actual_location" class="form-control" value="{{ item.expected_location }}">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">备注</label>
+                                                <textarea name="notes" class="form-control" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-primary">确认盘点</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-muted">{{ item.scanned_at.strftime('%Y-%m-%d %H:%M') if item.scanned_at else '-' }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">暂无盘点明细</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if items.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in range(1, items.pages + 1) %}
+    <li class="page-item {% if p == items.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('asset_extra.audit_detail', id=audit.id, page=p, status=status_filter) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}

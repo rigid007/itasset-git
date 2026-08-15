@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{% if rule %}编辑规则{% else %}新建规则{% endif %}{% endblock %}
+{% block page_title %}{% if rule %}编辑事件关联规则{% else %}新建事件关联规则{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-md-8">
+  <div class="card">
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('itsm_adv.event_rule_new') if not rule else url_for('itsm_adv.event_rule_edit', rule_id=rule.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label">规则名称 <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" required value="{{ rule.name if rule else '' }}">
+        </div>
+        <div class="mb-3"><label class="form-label">说明</label><textarea name="description" class="form-control" rows="2">{{ rule.description if rule else '' }}</textarea></div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">执行顺序(小优先)</label>
+            <input type="number" name="priority_order" class="form-control" value="{{ rule.priority_order if rule else 100 }}">
+          </div>
+          <div class="col">
+            <label class="form-label">启用</label>
+            <select name="enabled" class="form-select">
+              <option value="on" {% if not rule or rule.enabled %}selected{% endif %}>启用</option>
+              <option value="off" {% if rule and not rule.enabled %}selected{% endif %}>停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">匹配字段</label>
+            <select name="match_scope" class="form-select">
+              {% for s in ['title','message','severity','source'] %}
+              <option value="{{ s }}" {% if rule and rule.match_scope==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label">匹配方式</label>
+            <select name="match_operator" class="form-select">
+              {% for o in ['contains','equals','not_contains','regex'] %}
+              <option value="{{ o }}" {% if rule and rule.match_operator==o %}selected{% endif %}>{{ o }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">匹配值 (regex 时为正则表达式)</label>
+          <input type="text" name="match_value" class="form-control" value="{{ rule.match_value if rule else '' }}" placeholder="如: CPU|磁盘|timeout">
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">动作</label>
+            <select name="action" class="form-select" id="actionSel" onchange="syncAction()">
+              {% for a in ['suppress','group','raise_severity','set_priority'] %}
+              <option value="{{ a }}" {% if rule and rule.action==a %}selected{% endif %}>{{ a }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label">分组依据</label>
+            <select name="group_by" class="form-select">
+              <option value="none" {% if not rule or rule.group_by=='none' %}selected{% endif %}>不分组</option>
+              <option value="device_id" {% if rule and rule.group_by=='device_id' %}selected{% endif %}>按设备</option>
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label">抑制窗口(分钟)</label>
+            <input type="number" name="suppression_window_min" class="form-control" value="{{ rule.suppression_window_min if rule else 60 }}">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col"><label class="form-label">升级到级别</label>
+            <select name="new_severity" class="form-select">
+              <option value="">-</option>
+              {% for s in ['low','medium','high','critical'] %}
+              <option value="{{ s }}" {% if rule and rule.new_severity==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select></div>
+          <div class="col"><label class="form-label">设为优先级</label>
+            <select name="new_priority" class="form-select">
+              <option value="">-</option>
+              {% for s in ['low','medium','high','critical'] %}
+              <option value="{{ s }}" {% if rule and rule.new_priority==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">归一化标题模板</label>
+          <input type="text" name="normalize_template" class="form-control" value="{{ rule.normalize_template if rule else '' }}" placeholder="如: {host} 接口异常">
+          <small class="text-muted">支持占位符 {host} {ip}</small>
+        </div>
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" role="switch" name="auto_ticket" id="autoTicket"
+                 {% if rule and rule.auto_ticket %}checked{% endif %}>
+          <label class="form-check-label" for="autoTicket">
+            自动生成单一事件工单（按组归并）
+          </label>
+          <small class="form-text text-muted d-block">对 suppress/group 动作生效：同一 correlation_group 仅生成一张事件工单，同组后续告警自动归并到该工单。</small>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+          <a href="{{ url_for('itsm_adv.event_rules') }}" class="btn btn-secondary">取消</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}

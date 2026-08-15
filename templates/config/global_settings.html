@@ -1,0 +1,1343 @@
+{% extends "base.html" %}
+
+{% block title %}全局参数设置 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<!-- CSRF Token 元标签 -->
+<meta name="csrf-token" content="{{ csrf_token() if csrf_token else '' }}">
+
+<!-- Toastr CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+
+<style>
+    :root {
+        --primary-color: #4361ee;
+        --success-color: #06d6a0;
+        --warning-color: #ffd166;
+        --danger-color: #ef476f;
+        --light-color: #f8f9fa;
+        --dark-color: #212529;
+    }
+
+    .settings-container {
+        background-color: #f8f9fa;
+        min-height: calc(100vh - 200px);
+    }
+
+    .card {
+        border-radius: 10px;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-header {
+        background-color: #fff;
+        border-bottom: 1px solid #eaeaea;
+        font-weight: 600;
+        font-size: 1.1rem;
+        padding: 15px 20px;
+        border-radius: 10px 10px 0 0 !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .param-item {
+        border-bottom: 1px solid #f0f0f0;
+        padding: 20px;
+        transition: background-color 0.2s;
+    }
+
+    .param-item:hover {
+        background-color: #f9f9f9;
+    }
+
+    .param-item:last-child {
+        border-bottom: none;
+    }
+
+    .param-name {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .param-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 15px;
+    }
+
+    .param-meta {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+
+    .param-meta .badge {
+        font-size: 0.75rem;
+        font-weight: normal;
+    }
+
+    .badge-type {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+
+    .badge-string {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .badge-integer {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .badge-boolean {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .badge-float {
+        background-color: #cce5ff;
+        color: #004085;
+    }
+
+    .badge-text {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .badge-select {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .badge-disabled {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .badge-enabled {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+    }
+
+    .save-btn {
+        background-color: var(--primary-color);
+        border: none;
+        padding: 8px 20px;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+
+    .save-btn:hover {
+        background-color: #3a56d4;
+    }
+
+    .save-all-btn {
+        background-color: var(--success-color);
+        border: none;
+        padding: 10px 25px;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+
+    .save-all-btn:hover {
+        background-color: #05c290;
+    }
+
+    .category-tabs {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    .nav-link {
+        color: #6c757d;
+        font-weight: 500;
+        border-radius: 6px;
+        margin-right: 5px;
+        padding: 8px 15px;
+        transition: all 0.3s;
+    }
+
+    .nav-link.active {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    .nav-link:hover:not(.active) {
+        background-color: #f0f2f5;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #dee2e6;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        display: none;
+    }
+
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .category-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+    }
+
+    .category-icon.general {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+
+    .category-icon.email {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+
+    .category-icon.security {
+        background-color: #ffebee;
+        color: #d32f2f;
+    }
+
+    .category-icon.performance {
+        background-color: #e8f5e9;
+        color: #388e3c;
+    }
+
+    .category-icon.network {
+        background-color: #fff3e0;
+        color: #f57c00;
+    }
+
+    .category-icon.system {
+        background-color: #e8f5e9;
+        color: #388e3c;
+    }
+
+    .category-icon.ui {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+
+    .category-icon.database {
+        background-color: #fce4ec;
+        color: #c2185b;
+    }
+
+    .category-icon.other {
+        background-color: #f5f5f5;
+        color: #616161;
+    }
+
+    .input-group-text {
+        background-color: #f8f9fa;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .range-hint {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+
+    .default-hint {
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 26px;
+        margin-right: 10px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+        background-color: var(--primary-color);
+    }
+
+    input:checked + .toggle-slider:before {
+        transform: translateX(24px);
+    }
+
+    .reset-btn {
+        color: #6c757d;
+        background: transparent;
+        border: none;
+        padding: 5px 10px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .reset-btn:hover {
+        color: var(--primary-color);
+    }
+
+    .search-container {
+        position: relative;
+        margin-bottom: 20px;
+    }
+
+    .search-input {
+        padding-left: 40px;
+        border-radius: 25px;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+        z-index: 10;
+    }
+
+    .stats-card {
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    .stats-card.primary {
+        background-color: rgba(67, 97, 238, 0.1);
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .stats-card.success {
+        background-color: rgba(6, 214, 160, 0.1);
+        border-left: 4px solid var(--success-color);
+    }
+
+    .stats-card.warning {
+        background-color: rgba(255, 209, 102, 0.1);
+        border-left: 4px solid var(--warning-color);
+    }
+
+    .stats-card.danger {
+        background-color: rgba(239, 71, 111, 0.1);
+        border-left: 4px solid var(--danger-color);
+    }
+
+    .stats-number {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .stats-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+<i class="fas fa-cogs me-2"></i>全局参数设置
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <button class="btn btn-primary me-2" id="exportSettingsBtn">
+        <i class="fas fa-download me-2"></i>导出配置
+    </button>
+    <button class="btn btn-outline-primary me-2" id="importSettingsBtn">
+        <i class="fas fa-upload me-2"></i>导入配置
+    </button>
+    <button class="btn save-all-btn" id="saveAllBtn">
+        <i class="fas fa-save me-2"></i>保存所有更改
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+</div>
+
+<!-- 搜索框 -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="search-container">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" class="form-control search-input" id="paramSearch" placeholder="搜索参数名称或描述...">
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="d-flex justify-content-end">
+            <div class="form-check form-switch me-3">
+                <input class="form-check-input" type="checkbox" id="showDisabledParams" checked>
+                <label class="form-check-label" for="showDisabledParams">显示禁用参数</label>
+            </div>
+            <button class="btn btn-outline-secondary" id="resetFiltersBtn">
+                <i class="fas fa-redo me-1"></i>重置筛选
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 统计信息 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="stats-card primary">
+            <div class="stats-number" id="totalParams">0</div>
+            <div class="stats-label">总参数数量</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card success">
+            <div class="stats-number" id="enabledParams">0</div>
+            <div class="stats-label">启用参数</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card warning">
+            <div class="stats-number">{{ categories|length }}</div>
+            <div class="stats-label">分类数量</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card danger">
+            <div class="stats-number" id="modifiedParams">0</div>
+            <div class="stats-label">已修改参数</div>
+        </div>
+    </div>
+</div>
+
+{% if categories %}
+<div class="category-tabs">
+    <ul class="nav nav-pills" id="categoryTabs" role="tablist">
+        {% for category in categories %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if loop.index == 1 %}active{% endif %}"
+                    id="tab-{{ category }}"
+                    data-bs-toggle="pill"
+                    data-bs-target="#{{ category }}"
+                    type="button"
+                    role="tab">
+                <div class="d-flex align-items-center">
+                    <div class="category-icon {{ category }}">
+                        {% if category == 'general' %}
+                        <i class="fas fa-cog"></i>
+                        {% elif category == 'email' %}
+                        <i class="fas fa-envelope"></i>
+                        {% elif category == 'security' %}
+                        <i class="fas fa-shield-alt"></i>
+                        {% elif category == 'performance' %}
+                        <i class="fas fa-tachometer-alt"></i>
+                        {% elif category == 'network' %}
+                        <i class="fas fa-network-wired"></i>
+                        {% elif category == 'system' %}
+                        <i class="fas fa-server"></i>
+                        {% elif category == 'ui' %}
+                        <i class="fas fa-palette"></i>
+                        {% elif category == 'database' %}
+                        <i class="fas fa-database"></i>
+                        {% else %}
+                        <i class="fas fa-sliders-h"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {{ category|replace('_', ' ')|title }}
+                        <span class="badge bg-secondary ms-1" id="category-{{ category }}-count">
+                            {{ params_by_category[category]|length }}
+                        </span>
+                    </div>
+                </div>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<div class="tab-content" id="categoryTabContent">
+    {% for category in categories %}
+    <div class="tab-pane fade {% if loop.index == 1 %}show active{% endif %}"
+         id="{{ category }}"
+         role="tabpanel"
+         aria-labelledby="tab-{{ category }}">
+        <div class="card">
+            <div class="card-header">
+                <span>{{ category|replace('_', ' ')|title }} 参数</span>
+                <button class="btn btn-sm save-btn save-category-btn" data-category="{{ category }}">
+                    <i class="fas fa-save me-1"></i>保存 {{ category|replace('_', ' ')|title }}
+                </button>
+            </div>
+            <div class="card-body p-0">
+                {% if params_by_category[category] %}
+                    {% for param in params_by_category[category] %}
+                    <div class="param-item {% if not param.enabled %}param-disabled{% endif %}"
+                         data-name="{{ param.name }}"
+                         data-description="{{ param.description|default('') }}">
+                        <div class="row">
+                            <div class="col-md-5">
+                                <div class="param-name">{{ param.name }}</div>
+                                <div class="param-description">{{ param.description }}</div>
+                                <div class="param-meta d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="badge badge-type badge-{{ param.data_type }}">
+                                        {{ param.data_type }}
+                                    </span>
+                                    {% if param.unit %}
+                                    <span class="badge bg-secondary">
+                                        {{ param.unit }}
+                                    </span>
+                                    {% endif %}
+                                    {% if param.enabled %}
+                                    <span class="badge badge-enabled">
+                                        <i class="fas fa-check-circle me-1"></i>启用
+                                    </span>
+                                    {% else %}
+                                    <span class="badge badge-disabled">
+                                        <i class="fas fa-times-circle me-1"></i>禁用
+                                    </span>
+                                    {% endif %}
+                                    {% if param.default_value %}
+                                    <span class="default-hint">
+                                        默认: {{ param.default_value }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="param-control">
+                                    {% if param.data_type == 'string' %}
+                                        <div class="input-group">
+                                            <input type="text"
+                                                   class="form-control param-input"
+                                                   data-id="{{ param.id }}"
+                                                   data-type="{{ param.data_type }}"
+                                                   data-default="{{ param.default_value|default('') }}"
+                                                   value="{{ param.value }}"
+                                                   placeholder="请输入字符串值">
+                                            {% if param.unit %}
+                                            <span class="input-group-text">{{ param.unit }}</span>
+                                            {% endif %}
+                                        </div>
+
+                                    {% elif param.data_type == 'integer' %}
+                                        <div class="input-group">
+                                            <input type="number"
+                                                   class="form-control param-input"
+                                                   data-id="{{ param.id }}"
+                                                   data-type="{{ param.data_type }}"
+                                                   data-default="{{ param.default_value|default('') }}"
+                                                   {% if param.min_value %}min="{{ param.min_value }}"{% endif %}
+                                                   {% if param.max_value %}max="{{ param.max_value }}"{% endif %}
+                                                   value="{{ param.value }}"
+                                                   placeholder="请输入整数值">
+                                            {% if param.unit %}
+                                            <span class="input-group-text">{{ param.unit }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if param.min_value or param.max_value %}
+                                        <div class="range-hint">
+                                            {% if param.min_value %}最小值: {{ param.min_value }}{% endif %}
+                                            {% if param.max_value %}{% if param.min_value %}，{% endif %}最大值: {{ param.max_value }}{% endif %}
+                                        </div>
+                                        {% endif %}
+
+                                    {% elif param.data_type == 'float' %}
+                                        <div class="input-group">
+                                            <input type="number"
+                                                   class="form-control param-input"
+                                                   data-id="{{ param.id }}"
+                                                   data-type="{{ param.data_type }}"
+                                                   data-default="{{ param.default_value|default('') }}"
+                                                   {% if param.min_value %}min="{{ param.min_value }}"{% endif %}
+                                                   {% if param.max_value %}max="{{ param.max_value }}"{% endif %}
+                                                   step="0.01"
+                                                   value="{{ param.value }}"
+                                                   placeholder="请输入浮点数值">
+                                            {% if param.unit %}
+                                            <span class="input-group-text">{{ param.unit }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if param.min_value or param.max_value %}
+                                        <div class="range-hint">
+                                            {% if param.min_value %}最小值: {{ param.min_value }}{% endif %}
+                                            {% if param.max_value %}{% if param.min_value %}，{% endif %}最大值: {{ param.max_value }}{% endif %}
+                                        </div>
+                                        {% endif %}
+
+                                    {% elif param.data_type == 'boolean' %}
+                                        <div class="d-flex align-items-center">
+                                            <label class="toggle-switch">
+                                                <input type="checkbox"
+                                                       class="param-input"
+                                                       data-id="{{ param.id }}"
+                                                       data-type="{{ param.data_type }}"
+                                                       data-default="{{ param.default_value|default('false') }}"
+                                                       id="switch-{{ param.id }}"
+                                                       {% if param.value|lower == 'true' or param.value == '1' %}checked{% endif %}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <label for="switch-{{ param.id }}" class="form-check-label">
+                                                {% if param.value|lower == 'true' or param.value == '1' %}开启{% else %}关闭{% endif %}
+                                            </label>
+                                        </div>
+
+                                    {% elif param.data_type == 'text' %}
+                                        <textarea class="form-control param-input"
+                                                  data-id="{{ param.id }}"
+                                                  data-type="{{ param.data_type }}"
+                                                  data-default="{{ param.default_value|default('') }}"
+                                                  rows="4"
+                                                  placeholder="请输入文本内容">{{ param.value }}</textarea>
+
+                                    {% elif param.data_type == 'select' %}
+                                        {# 智能处理 select：尝试解析 JSON，否则回退到逗号分隔 #}
+                                        {% set select_data = param.value|from_json_if_valid %}
+                                        {% if select_data is mapping and select_data.options is defined %}
+                                            {% set options = select_data.options %}
+                                            {% set selected_val = select_data.selected|default('') %}
+                                        {% else %}
+                                            {% set options = param.value.split(',') if param.value else [] %}
+                                            {% set selected_val = options[0] if options else '' %}
+                                        {% endif %}
+                                        <select class="form-control param-input select2"
+                                                data-id="{{ param.id }}"
+                                                data-type="{{ param.data_type }}"
+                                                data-default="{{ param.default_value|default('') }}"
+                                                style="width: 100%;">
+                                            {% for option in options %}
+                                            <option value="{{ option|trim }}" {% if selected_val == option|trim %}selected{% endif %}>{{ option|trim }}</option>
+                                            {% endfor %}
+                                        </select>
+
+                                    {% else %}
+                                        <input type="text"
+                                               class="form-control param-input"
+                                               data-id="{{ param.id }}"
+                                               data-type="{{ param.data_type }}"
+                                               data-default="{{ param.default_value|default('') }}"
+                                               value="{{ param.value }}"
+                                               placeholder="请输入值">
+                                    {% endif %}
+
+                                    <div class="mt-2 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <button class="reset-btn" data-id="{{ param.id }}" title="重置为默认值">
+                                                <i class="fas fa-undo me-1"></i>重置
+                                            </button>
+                                        </div>
+                                        <div class="modified-indicator" data-id="{{ param.id }}" style="display: none;">
+                                            <span class="badge bg-warning">
+                                                <i class="fas fa-edit me-1"></i>已修改
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-sliders-h"></i>
+                        <h5>暂无参数</h5>
+                        <p>该分类下没有任何全局参数</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <i class="fas fa-cogs"></i>
+        <h5>暂无全局参数</h5>
+        <p>系统中没有找到任何全局参数</p>
+        <button class="btn btn-primary mt-3" id="initDefaultParamsBtn">
+            <i class="fas fa-magic me-2"></i>初始化默认参数
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<!-- 导入配置模态框 -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-upload me-2"></i>导入配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="configFile" class="form-label">选择配置文件</label>
+                    <input class="form-control" type="file" id="configFile" accept=".json">
+                    <div class="form-text">支持JSON格式的配置文件</div>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="overwriteExisting" checked>
+                    <label class="form-check-label" for="overwriteExisting">
+                        覆盖已存在的参数
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmImportBtn">导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Toastr JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<!-- Bootstrap JS (如果 base.html 未包含，则添加) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- 动态 API 端点（由 Flask 生成，确保蓝图前缀正确） -->
+<script>
+    const UPDATE_PARAMS_URL = "{{ url_for('config.update_params') }}";
+    const EXPORT_URL = "{{ url_for('config.export_params') }}";
+    const IMPORT_URL = "{{ url_for('config.import_params') }}";
+    const INITIALIZE_DEFAULTS_URL = "{{ url_for('config.initialize_default_params') }}";
+</script>
+
+<script>
+    // 获取 CSRF Token
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+    const csrfToken = getCsrfToken();
+
+    // 自定义 Jinja2 过滤器：尝试将字符串解析为 JSON，失败则返回原字符串
+    window.from_json_if_valid = function(value) {
+        if (typeof value !== 'string') return value;
+        try {
+            return JSON.parse(value);
+        } catch (e) {
+            return value;
+        }
+    };
+
+    // 初始化 Toastr
+    toastr.options = {
+        "closeButton": true,
+        "debug": false,
+        "newestOnTop": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "preventDuplicates": false,
+        "onclick": null,
+        "showDuration": "300",
+        "hideDuration": "1000",
+        "timeOut": "5000",
+        "extendedTimeOut": "1000",
+        "showEasing": "swing",
+        "hideEasing": "linear",
+        "showMethod": "fadeIn",
+        "hideMethod": "fadeOut"
+    };
+
+    // 全局变量
+    let modifiedParams = new Set();
+    let originalValues = {};
+
+    // 显示加载动画
+    function showLoading() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    // 隐藏加载动画
+    function hideLoading() {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    // 初始化页面
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化 Select2
+        $('.select2').select2({
+            width: '100%',
+            placeholder: '请选择或输入选项',
+            tags: true,
+            tokenSeparators: [',', ' ']
+        });
+
+        // 计算总参数数量（通过 DOM）
+        let totalParams = document.querySelectorAll('.param-item').length;
+        document.getElementById('totalParams').textContent = totalParams;
+
+        // 初始化启用参数计数
+        updateEnabledParamsCount();
+
+        // 保存原始值
+        document.querySelectorAll('.param-input').forEach(input => {
+            const paramId = input.dataset.id;
+            let value;
+
+            if (input.dataset.type === 'boolean') {
+                value = input.checked ? 'true' : 'false';
+            } else if (input.tagName === 'SELECT') {
+                value = $(input).val();
+            } else {
+                value = input.value;
+            }
+
+            originalValues[paramId] = value;
+        });
+
+        // 更新切换开关标签
+        updateSwitchLabels();
+
+        // 为所有开关添加事件监听
+        document.querySelectorAll('.param-input[data-type="boolean"]').forEach(switchEl => {
+            switchEl.addEventListener('change', function() {
+                updateSwitchLabel(this);
+                checkModified(this);
+            });
+        });
+
+        // 为所有输入框添加事件监听
+        document.querySelectorAll('.param-input:not([data-type="boolean"])').forEach(input => {
+            input.addEventListener('input', function() {
+                checkModified(this);
+            });
+
+            // Select2 特殊处理
+            if (input.classList.contains('select2')) {
+                $(input).on('change', function() {
+                    checkModified(this);
+                });
+            }
+        });
+
+        // 重置按钮事件
+        document.querySelectorAll('.reset-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const paramId = this.dataset.id;
+                resetToDefault(paramId);
+            });
+        });
+
+        // 搜索功能
+        const searchInput = document.getElementById('paramSearch');
+        searchInput.addEventListener('input', function() {
+            filterParams(this.value);
+        });
+
+        // 显示/禁用参数开关
+        const showDisabledToggle = document.getElementById('showDisabledParams');
+        showDisabledToggle.addEventListener('change', function() {
+            filterDisabledParams(this.checked);
+        });
+
+        // 重置筛选按钮
+        document.getElementById('resetFiltersBtn').addEventListener('click', function() {
+            searchInput.value = '';
+            showDisabledToggle.checked = true;
+            filterParams('');
+            filterDisabledParams(true);
+        });
+
+        // 导出配置按钮
+        document.getElementById('exportSettingsBtn').addEventListener('click', exportSettings);
+
+        // 导入配置按钮 - 显示模态框
+        const importBtn = document.getElementById('importSettingsBtn');
+        const importModalEl = document.getElementById('importModal');
+        let importModal = null;
+        if (importModalEl) {
+            importModal = new bootstrap.Modal(importModalEl);
+        }
+        importBtn.addEventListener('click', function() {
+            if (importModal) importModal.show();
+        });
+
+        // 确认导入按钮
+        document.getElementById('confirmImportBtn').addEventListener('click', importSettings);
+
+        // 初始化默认参数按钮
+        const initBtn = document.getElementById('initDefaultParamsBtn');
+        if (initBtn) {
+            initBtn.addEventListener('click', initializeDefaultParams);
+        }
+
+        // 保存单个分类
+        document.querySelectorAll('.save-category-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const category = this.dataset.category;
+                saveParams(category);
+            });
+        });
+
+        // 保存所有分类
+        document.getElementById('saveAllBtn').addEventListener('click', function() {
+            if (modifiedParams.size === 0) {
+                toastr.warning('没有修改需要保存');
+                return;
+            }
+            if (confirm('确定要保存所有修改的参数吗？')) {
+                saveParams(); // 不传 category 表示保存所有
+            }
+        });
+
+        // 为输入框添加输入监听，移除错误状态
+        document.querySelectorAll('.param-input').forEach(input => {
+            input.addEventListener('input', function() {
+                if (this.classList.contains('is-invalid')) {
+                    this.classList.remove('is-invalid');
+                }
+            });
+        });
+
+        // 快捷键支持：Ctrl+S 保存当前分类
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                const activeTab = document.querySelector('.nav-link.active');
+                if (activeTab) {
+                    const category = activeTab.id.replace('tab-', '');
+                    saveParams(category);
+                }
+            }
+        });
+
+        // 确保模态框关闭按钮正常工作（如果 Bootstrap 初始化失败，手动处理）
+        document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                const modalEl = this.closest('.modal');
+                if (modalEl) {
+                    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    modal.hide();
+                }
+            });
+        });
+    });
+
+    // 更新切换开关标签
+    function updateSwitchLabels() {
+        document.querySelectorAll('.param-input[data-type="boolean"]').forEach(switchEl => {
+            updateSwitchLabel(switchEl);
+        });
+    }
+
+    function updateSwitchLabel(switchEl) {
+        const label = switchEl.closest('.d-flex').querySelector('.form-check-label');
+        if (switchEl.checked) {
+            label.textContent = '开启';
+        } else {
+            label.textContent = '关闭';
+        }
+    }
+
+    // 检查参数是否被修改
+    function checkModified(input) {
+        const paramId = input.dataset.id;
+        let currentValue;
+
+        if (input.dataset.type === 'boolean') {
+            currentValue = input.checked ? 'true' : 'false';
+        } else if (input.tagName === 'SELECT') {
+            currentValue = $(input).val();
+        } else {
+            currentValue = input.value;
+        }
+
+        const originalValue = originalValues[paramId];
+
+        if (currentValue !== originalValue) {
+            modifiedParams.add(paramId);
+            showModifiedIndicator(paramId, true);
+        } else {
+            modifiedParams.delete(paramId);
+            showModifiedIndicator(paramId, false);
+        }
+
+        updateModifiedParamsCount();
+    }
+
+    function showModifiedIndicator(paramId, show) {
+        const indicator = document.querySelector(`.modified-indicator[data-id="${paramId}"]`);
+        if (indicator) {
+            indicator.style.display = show ? 'block' : 'none';
+        }
+    }
+
+    function updateModifiedParamsCount() {
+        document.getElementById('modifiedParams').textContent = modifiedParams.size;
+    }
+
+    function updateEnabledParamsCount() {
+        let enabledCount = 0;
+        document.querySelectorAll('.param-item').forEach(item => {
+            if (!item.classList.contains('param-disabled')) {
+                enabledCount++;
+            }
+        });
+        document.getElementById('enabledParams').textContent = enabledCount;
+    }
+
+    // 重置为默认值
+    function resetToDefault(paramId) {
+        const input = document.querySelector(`.param-input[data-id="${paramId}"]`);
+        if (!input) return;
+
+        const defaultValue = input.dataset.default;
+        const dataType = input.dataset.type;
+
+        if (defaultValue !== undefined && defaultValue !== '') {
+            if (dataType === 'boolean') {
+                input.checked = defaultValue === 'true';
+                updateSwitchLabel(input);
+            } else if (input.tagName === 'SELECT') {
+                $(input).val(defaultValue).trigger('change');
+            } else {
+                input.value = defaultValue;
+            }
+
+            checkModified(input);
+            toastr.success('参数已重置为默认值');
+        } else {
+            toastr.warning('该参数没有默认值');
+        }
+    }
+
+    // 搜索过滤
+    function filterParams(searchText) {
+        const searchLower = searchText.toLowerCase();
+        document.querySelectorAll('.param-item').forEach(item => {
+            const name = item.dataset.name.toLowerCase();
+            const description = item.dataset.description.toLowerCase();
+            item.style.display = (name.includes(searchLower) || description.includes(searchLower)) ? '' : 'none';
+        });
+        updateCategoryCounts();
+    }
+
+    function filterDisabledParams(showDisabled) {
+        document.querySelectorAll('.param-item.param-disabled').forEach(item => {
+            item.style.display = showDisabled ? '' : 'none';
+        });
+        updateCategoryCounts();
+    }
+
+    function updateCategoryCounts() {
+        document.querySelectorAll('.tab-pane').forEach(tabPane => {
+            const category = tabPane.id;
+            const visibleCount = tabPane.querySelectorAll('.param-item:not([style*="display: none"])').length;
+            const countElement = document.getElementById(`category-${category}-count`);
+            if (countElement) {
+                countElement.textContent = visibleCount;
+            }
+        });
+    }
+
+    // 收集表单数据，对于 select 类型特殊处理：如果是 JSON 格式，保留 options 并更新 selected
+    function collectFormData(category = null) {
+        const params = {};
+        let inputs;
+
+        if (category) {
+            inputs = document.querySelectorAll(`#${category} .param-input`);
+        } else {
+            inputs = document.querySelectorAll('.param-input');
+        }
+
+        inputs.forEach(input => {
+            const paramId = input.dataset.id;
+            const dataType = input.dataset.type;
+            let value;
+
+            if (dataType === 'boolean') {
+                value = input.checked ? 'true' : 'false';
+            } else if (input.tagName === 'SELECT') {
+                value = $(input).val();
+                // 检查原值是否为 JSON 格式，若是则保留 options 只更新 selected
+                const original = originalValues[paramId];
+                try {
+                    const parsed = JSON.parse(original);
+                    if (parsed && typeof parsed === 'object' && parsed.options) {
+                        // 构造新的 JSON
+                        value = JSON.stringify({
+                            options: parsed.options,
+                            selected: value
+                        });
+                    }
+                } catch (e) {
+                    // 不是 JSON，保持原样
+                }
+            } else {
+                value = input.value.trim();
+
+                // 数值范围验证
+                if (dataType === 'integer' || dataType === 'float') {
+                    const minValue = input.dataset.min;
+                    const maxValue = input.dataset.max;
+                    if (value !== '') {
+                        const numValue = parseFloat(value);
+                        if (minValue && numValue < parseFloat(minValue)) {
+                            input.classList.add('is-invalid');
+                            toastr.error(`"${input.closest('.param-item').querySelector('.param-name').textContent}" 不能小于 ${minValue}`);
+                            throw new Error('数值范围错误');
+                        }
+                        if (maxValue && numValue > parseFloat(maxValue)) {
+                            input.classList.add('is-invalid');
+                            toastr.error(`"${input.closest('.param-item').querySelector('.param-name').textContent}" 不能大于 ${maxValue}`);
+                            throw new Error('数值范围错误');
+                        }
+                    }
+                }
+            }
+            params[paramId] = value;
+        });
+
+        return params;
+    }
+
+    // 保存参数
+    function saveParams(category = null) {
+        try {
+            const params = collectFormData(category);
+            if (Object.keys(params).length === 0) {
+                toastr.warning('没有要保存的参数');
+                return;
+            }
+
+            showLoading();
+
+            fetch(UPDATE_PARAMS_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    params: params,
+                    category: category
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    toastr.success(data.message || '参数保存成功');
+                    // 更新原始值记录
+                    Object.keys(params).forEach(paramId => {
+                        originalValues[paramId] = params[paramId];
+                        modifiedParams.delete(paramId);
+                        showModifiedIndicator(paramId, false);
+                    });
+                    updateModifiedParamsCount();
+                    if (data.stats) {
+                        document.getElementById('enabledParams').textContent = data.stats.enabled_count || 0;
+                    }
+                } else {
+                    toastr.error(data.message || '保存失败，请重试');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                console.error('保存参数时出错:', error);
+                toastr.error('保存失败，请检查网络连接');
+            });
+        } catch (error) {
+            hideLoading(); // 错误已在 collectFormData 中处理
+        }
+    }
+
+    // 导出配置
+    function exportSettings() {
+        showLoading();
+        fetch(EXPORT_URL, {
+            method: 'GET',
+            headers: { 'X-CSRFToken': csrfToken }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `global_settings_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                toastr.success('配置导出成功');
+            } else {
+                toastr.error(data.message || '导出失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('导出配置时出错:', error);
+            toastr.error('导出失败，请检查网络连接');
+        });
+    }
+
+    // 导入配置
+    function importSettings() {
+        const fileInput = document.getElementById('configFile');
+        const overwrite = document.getElementById('overwriteExisting').checked;
+        if (!fileInput.files.length) {
+            toastr.error('请选择要导入的配置文件');
+            return;
+        }
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const config = JSON.parse(e.target.result);
+                showLoading();
+                fetch(IMPORT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ config: config, overwrite: overwrite })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        toastr.success(data.message || '配置导入成功');
+                        // 关闭模态框
+                        const modalEl = document.getElementById('importModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        // 清空文件输入
+                        fileInput.value = '';
+                        // 重新加载页面以显示新配置
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastr.error(data.message || '导入失败');
+                    }
+                })
+                .catch(error => {
+                    hideLoading();
+                    console.error('导入配置时出错:', error);
+                    toastr.error('导入失败，请检查网络连接');
+                });
+            } catch (error) {
+                toastr.error('配置文件格式错误');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // 初始化默认参数（注意：修改数据建议使用 POST，若后端仅支持 GET 可自行调整）
+    function initializeDefaultParams() {
+        if (!confirm('确定要初始化默认参数吗？这会重置所有参数为系统默认值。')) return;
+        showLoading();
+        fetch(INITIALIZE_DEFAULTS_URL, {
+            method: 'POST',  // 若后端只支持 GET，请改为 'GET'
+            headers: { 'X-CSRFToken': csrfToken }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                toastr.success(data.message || '默认参数初始化成功');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                toastr.error(data.message || '初始化失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('初始化默认参数时出错:', error);
+            toastr.error('初始化失败，请检查网络连接');
+        });
+    }
+</script>
+{% endblock %}

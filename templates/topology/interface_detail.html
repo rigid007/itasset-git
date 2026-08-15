@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}接口关系详情 - 网络管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 导航 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('interface_relationships') }}">接口关系</a></li>
+                <li class="breadcrumb-item active">详情</li>
+            </ol>
+        </nav>
+        <div>
+            <a href="{{ url_for('interface_relationships') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> 返回列表
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 基本信息 -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">基本信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 150px;">ID:</th>
+                            <td>{{ relationship.id }}</td>
+                        </tr>
+                        <tr>
+                            <th>协议:</th>
+                            <td>
+                                {% if relationship.protocol == 'LLDP' %}
+                                <span class="badge bg-info">LLDP</span>
+                                {% elif relationship.protocol == 'CDP' %}
+                                <span class="badge bg-success">CDP</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ relationship.protocol }}</span>
+                                {% endif %}
+                                {% if relationship.protocol_version %}
+                                <small class="text-muted">(v{{ relationship.protocol_version }})</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>关系类型:</th>
+                            <td>
+                                {% if relationship.relationship_type == 'Direct' %}
+                                <span class="badge bg-primary">直连</span>
+                                {% elif relationship.relationship_type == 'Indirect' %}
+                                <span class="badge bg-info">间接</span>
+                                {% else %}
+                                <span class="badge bg-warning">虚拟</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>置信度:</th>
+                            <td>
+                                <div class="progress" style="height: 10px; width: 100px;">
+                                    <div class="progress-bar bg-{{ 'success' if relationship.confidence > 0.8 else 'warning' if relationship.confidence > 0.5 else 'danger' }}" 
+                                         style="width: {{ relationship.confidence * 100 }}%">
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ "%.2f"|format(relationship.confidence) }}</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>状态:</th>
+                            <td>
+                                {% if relationship.status == 'Active' %}
+                                <span class="badge bg-success">活动</span>
+                                {% elif relationship.status == 'Expired' %}
+                                <span class="badge bg-warning">过期</span>
+                                {% else %}
+                                <span class="badge bg-danger">已删除</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>TTL:</th>
+                            <td>{{ relationship.ttl }} 秒</td>
+                        </tr>
+                        <tr>
+                            <th>最后发现:</th>
+                            <td>{{ relationship.last_discovered|format_datetime if relationship.last_discovered else '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>创建时间:</th>
+                            <td>{{ relationship.created_at|format_datetime if relationship.created_at else '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>更新时间:</th>
+                            <td>{{ relationship.updated_at|format_datetime if relationship.updated_at else '未知' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 本地设备信息 -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">本地设备信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 150px;">设备:</th>
+                            <td>
+                                {% if relationship.local_device %}
+                                <a href="{{ url_for('device_detail', id=relationship.local_device_id) }}">
+                                    {{ relationship.local_device.hostname }}
+                                </a>
+                                {% else %}
+                                    未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>接口:</th>
+                            <td>{{ relationship.local_interface }}</td>
+                        </tr>
+                        <tr>
+                            <th>IP地址:</th>
+                            <td>{{ relationship.local_ip or '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>MAC地址:</th>
+                            <td>
+                                {% if relationship.local_mac %}
+                                <code>{{ relationship.local_mac }}</code>
+                                {% else %}
+                                未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>本地VLAN:</th>
+                            <td>{{ relationship.local_vlan or '未配置' }}</td>
+                        </tr>
+                        <tr>
+                            <th>双工模式:</th>
+                            <td>
+                                {% if relationship.duplex %}
+                                {% if relationship.duplex == 'Full' %}
+                                <span class="badge bg-success">全双工</span>
+                                {% elif relationship.duplex == 'Half' %}
+                                <span class="badge bg-warning">半双工</span>
+                                {% else %}
+                                <span class="badge bg-info">自动协商</span>
+                                {% endif %}
+                                {% else %}
+                                未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>速率:</th>
+                            <td>
+                                {% if relationship.speed %}
+                                <span class="badge bg-primary">{{ relationship.speed }}</span>
+                                {% else %}
+                                未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 邻居设备信息 -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">邻居设备信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th style="width: 150px;">设备名称:</th>
+                            <td>
+                                {% if relationship.neighbor_device %}
+                                <a href="{{ url_for('device_detail', id=relationship.neighbor_device_id) }}">
+                                    {{ relationship.neighbor_device_name }}
+                                </a>
+                                {% else %}
+                                {{ relationship.neighbor_device_name or '未知' }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>接口:</th>
+                            <td>{{ relationship.neighbor_interface or '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>IP地址:</th>
+                            <td>{{ relationship.neighbor_ip or '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>MAC地址:</th>
+                            <td>
+                                {% if relationship.neighbor_mac %}
+                                <code>{{ relationship.neighbor_mac }}</code>
+                                {% else %}
+                                未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>平台/型号:</th>
+                            <td>{{ relationship.platform or '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>软件版本:</th>
+                            <td>
+                                {% if relationship.software_version %}
+                                <span class="badge bg-secondary">{{ relationship.software_version }}</span>
+                                {% else %}
+                                未知
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>设备描述:</th>
+                            <td>{{ relationship.neighbor_description or '无' }}</td>
+                        </tr>
+                        <tr>
+                            <th>邻居VLAN:</th>
+                            <td>{{ relationship.neighbor_vlan or '未知' }}</td>
+                        </tr>
+                        <tr>
+                            <th>管理VLAN:</th>
+                            <td>{{ relationship.management_vlan or '未配置' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 能力信息和备注 -->
+        <div class="col-md-6">
+            <!-- 能力信息 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">能力信息</h5>
+                </div>
+                <div class="card-body">
+                    {% if relationship.capabilities %}
+                    <div class="row">
+                        {% if relationship.capabilities %}
+                            {% set caps = relationship.capabilities.split(',') if relationship.capabilities else [] %}
+                            {% for cap in caps %}
+                                {% if cap.strip() %}
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge bg-info">{{ cap.strip() }}</span>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">无能力信息</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 备注 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">备注</h5>
+                </div>
+                <div class="card-body">
+                    {% if relationship.notes %}
+                    <p>{{ relationship.notes }}</p>
+                    {% else %}
+                    <p class="text-muted">无备注</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 操作 -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">操作</h5>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group" role="group">
+                        <form action="{{ url_for('delete_interface_relationship', id=relationship.id) }}"
+                              method="POST"
+                              class="d-inline"
+                              onsubmit="return confirm('确定要删除这个接口关系吗？');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> 删除关系
+                            </button>
+                        </form>
+
+                        {% if relationship.status == 'Active' %}
+                        <form action="{{ url_for('mark_interface_expired', id=relationship.id) }}"
+                              method="POST"
+                              class="d-inline ms-2"
+                              onsubmit="return confirm('确定要标记为过期吗？');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-clock"></i> 标记过期
+                            </button>
+                        </form>
+                        {% elif relationship.status == 'Expired' %}
+                        <form action="{{ url_for('mark_interface_active', id=relationship.id) }}"
+                              method="POST"
+                              class="d-inline ms-2"
+                              onsubmit="return confirm('确定要重新激活吗？');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check"></i> 重新激活
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        <a href="{{ url_for('edit_interface_relationship', id=relationship.id) }}" 
+                           class="btn btn-primary ms-2">
+                            <i class="fas fa-edit"></i> 编辑
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 原始数据（折叠显示） -->
+    {% if relationship.raw_data %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#rawDataCollapse">
+                            <i class="fas fa-code"></i> 原始数据
+                        </a>
+                    </h5>
+                </div>
+                <div class="collapse" id="rawDataCollapse">
+                    <div class="card-body">
+                        <pre class="bg-light p-3" style="max-height: 300px; overflow: auto;"><code>{{ relationship.raw_data }}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

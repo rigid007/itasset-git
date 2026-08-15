@@ -1,0 +1,1201 @@
+{% extends "base.html" %}
+
+{% block title %}运维管理仪表板 - IT资产管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .dashboard-card {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1.25rem;
+        transition: all 0.2s;
+        height: 100%;
+    }
+    
+    .dashboard-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        line-height: 1.2;
+    }
+    
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+    
+    .quick-action {
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        transition: all 0.2s;
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+    
+    .quick-action:hover {
+        border-color: #dee2e6;
+        background-color: #f8f9fa;
+        transform: translateY(-1px);
+    }
+    
+    .quick-action-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        color: #0d6efd;
+    }
+    
+    .quick-action-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .activity-item {
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #e9ecef;
+        transition: all 0.2s;
+    }
+    
+    .activity-item:hover {
+        background-color: #f8f9fa;
+        padding-left: 0.5rem;
+    }
+    
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+    }
+    
+    .status-online {
+        background-color: #198754;
+    }
+    
+    .status-warning {
+        background-color: #ffc107;
+    }
+    
+    .status-offline {
+        background-color: #dc3545;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 250px;
+        width: 100%;
+    }
+    
+    .priority-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .priority-critical {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .priority-high {
+        background-color: #fd7e14;
+        color: white;
+    }
+    
+    .priority-medium {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .priority-low {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .task-status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .status-scheduled {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .status-in-progress {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .status-completed {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .maintenance-type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .type-preventive {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .type-corrective {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .type-emergency {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .upcoming-tasks {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 2rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .alert-card {
+        border-left: 4px solid #dc3545;
+        background-color: #fff5f5;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    
+    .alert-card.warning {
+        border-left-color: #ffc107;
+        background-color: #fffcf5;
+    }
+    
+    .alert-card.info {
+        border-left-color: #0dcaf0;
+        background-color: #f5fdff;
+    }
+    
+    .metric-card {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    @media (max-width: 768px) {
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .stat-icon {
+            font-size: 2rem;
+        }
+        
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">首页</a></li>
+            <li class="breadcrumb-item active">运维管理仪表板</li>
+        </ol>
+    </nav>
+
+    <!-- 页面标题和刷新按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">运维管理仪表板</h1>
+            <p class="text-muted mb-0">设备维护概览和关键指标</p>
+        </div>
+        <div class="action-buttons">
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt me-2"></i>刷新数据
+            </button>
+        </div>
+    </div>
+    
+    <!-- 警告和通知 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert-card" id="emergencyAlert" style="display: none;">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size: 1.5rem;"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">紧急维护任务待处理</h6>
+                        <p class="mb-0 text-muted" id="emergencyAlertText">有 <span id="emergencyCount">0</span> 个紧急维护任务需要立即处理</p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('maintenance.maintenance_tasks') if url_for('maintenance.maintenance_tasks') else '#' }}" class="btn btn-sm btn-danger">查看详情</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert-card warning" id="lowStockAlert" style="display: none;">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <i class="fas fa-boxes text-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">备件库存不足</h6>
+                        <p class="mb-0 text-muted" id="lowStockAlertText">有 <span id="lowStockCount">0</span> 个备件库存低于最低水平</p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('maintenance.spare_parts_inventory') if url_for('maintenance.spare_parts_inventory') else '#' }}" class="btn btn-sm btn-warning">查看库存</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 关键指标 -->
+    <div class="row mb-4">
+        <div class="col-md-3 col-sm-6 mb-4">
+            <div class="dashboard-card">
+                <div class="metric-card">
+                    <div class="metric-value text-primary" id="totalTasks">0</div>
+                    <div class="metric-label">维护任务总数</div>
+                    <div class="mt-3">
+                        <i class="fas fa-tools stat-icon text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 col-sm-6 mb-4">
+            <div class="dashboard-card">
+                <div class="metric-card">
+                    <div class="metric-value text-warning" id="pendingTasks">0</div>
+                    <div class="metric-label">待处理任务</div>
+                    <div class="mt-3">
+                        <i class="fas fa-clock stat-icon text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 col-sm-6 mb-4">
+            <div class="dashboard-card">
+                <div class="metric-card">
+                    <div class="metric-value text-info" id="inProgressTasks">0</div>
+                    <div class="metric-label">进行中任务</div>
+                    <div class="mt-3">
+                        <i class="fas fa-spinner stat-icon text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 col-sm-6 mb-4">
+            <div class="dashboard-card">
+                <div class="metric-card">
+                    <div class="metric-value text-success" id="completedTasks">0</div>
+                    <div class="metric-label">已完成任务</div>
+                    <div class="mt-3">
+                        <i class="fas fa-check-circle stat-icon text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <!-- 左侧：快速操作和任务概览 -->
+        <div class="col-lg-8">
+            <div class="row">
+                <!-- 快速操作 -->
+                <div class="col-md-12 mb-4">
+                    <div class="dashboard-card">
+                        <h5 class="mb-3">快速操作</h5>
+                        <div class="row g-3">
+                            <div class="col-md-3 col-sm-6">
+                                <div class="quick-action" onclick="navigateTo('{{ url_for('maintenance.maintenance_tasks') if url_for('maintenance.maintenance_tasks') else '#' }}')">
+                                    <div class="quick-action-icon">
+                                        <i class="fas fa-tasks"></i>
+                                    </div>
+                                    <div class="quick-action-text">维护任务</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="quick-action" onclick="navigateTo('{{ url_for('maintenance.spare_parts_inventory') if url_for('maintenance.spare_parts_inventory') else '#' }}')">
+                                    <div class="quick-action-icon">
+                                        <i class="fas fa-boxes"></i>
+                                    </div>
+                                    <div class="quick-action-text">备件库存</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="quick-action" onclick="navigateTo('{{ url_for('maintenance.spare_parts_requests') if url_for('maintenance.spare_parts_requests') else '#' }}')">
+                                    <div class="quick-action-icon">
+                                        <i class="fas fa-file-alt"></i>
+                                    </div>
+                                    <div class="quick-action-text">备件申请</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="quick-action" onclick="navigateTo('{{ url_for('maintenance.inspection_results') if url_for('maintenance.inspection_results') else '#' }}')">
+                                    <div class="quick-action-icon">
+                                        <i class="fas fa-clipboard-check"></i>
+                                    </div>
+                                    <div class="quick-action-text">巡检结果</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 近期维护活动 -->
+                <div class="col-md-12 mb-4">
+                    <div class="dashboard-card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">近期维护活动</h5>
+                            <a href="{{ url_for('maintenance.maintenance_tasks') if url_for('maintenance.maintenance_tasks') else '#' }}" class="btn btn-sm btn-outline-primary">查看全部</a>
+                        </div>
+                        <div id="recentActivities">
+                            <!-- 活动列表将通过JavaScript动态加载 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 维护任务统计图表 -->
+                <div class="col-md-12">
+                    <div class="dashboard-card">
+                        <h5 class="mb-3">维护任务趋势</h5>
+                        <div class="chart-container">
+                            <canvas id="maintenanceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧：即将到来的任务和设备状态 -->
+        <div class="col-lg-4">
+            <!-- 即将到期的任务 -->
+            <div class="dashboard-card mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">即将到期的任务</h5>
+                    <a href="{{ url_for('maintenance.maintenance_schedule') if url_for('maintenance.maintenance_schedule') else '#' }}" class="btn btn-sm btn-outline-primary">查看日程</a>
+                </div>
+                <div class="upcoming-tasks" id="upcomingTasks">
+                    <!-- 任务列表将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            
+            <!-- 设备状态概览 -->
+            <div class="dashboard-card mb-4">
+                <h5 class="mb-3">设备状态概览</h5>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <div class="text-center p-3 border rounded">
+                            <div class="metric-value text-success" id="onlineDevices">0</div>
+                            <div class="metric-label">在线设备</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center p-3 border rounded">
+                            <div class="metric-value text-warning" id="maintenanceDevices">0</div>
+                            <div class="metric-label">维护中</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="deviceStatusChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- 维护类型分布 -->
+            <div class="dashboard-card">
+                <h5 class="mb-3">维护类型分布</h5>
+                <div class="chart-container">
+                    <canvas id="maintenanceTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 底部：性能和指标 -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="dashboard-card">
+                <h5 class="mb-3">任务完成率</h5>
+                <div class="d-flex align-items-center">
+                    <div class="me-4" style="width: 100px; height: 100px;">
+                        <canvas id="completionRateChart"></canvas>
+                    </div>
+                    <div>
+                        <div class="stat-number" id="completionRate">0%</div>
+                        <p class="text-muted mb-0">本月任务完成率</p>
+                        <div class="mt-2 small">
+                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i> 比上月提高</span>
+                            <span id="completionRateChange" class="text-success">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="dashboard-card">
+                <h5 class="mb-3">平均解决时间</h5>
+                <div class="d-flex align-items-center">
+                    <div class="me-4" style="width: 100px; height: 100px;">
+                        <canvas id="resolutionTimeChart"></canvas>
+                    </div>
+                    <div>
+                        <div class="stat-number" id="avgResolutionTime">0</div>
+                        <p class="text-muted mb-0">平均解决时间（小时）</p>
+                        <div class="mt-2 small">
+                            <span class="text-success"><i class="fas fa-arrow-down me-1"></i> 比上月减少</span>
+                            <span id="resolutionTimeChange" class="text-success">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.2.1/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js"></script>
+
+<script>
+    // 全局变量
+    let maintenanceChart;
+    let deviceStatusChart;
+    let maintenanceTypeChart;
+    let completionRateChart;
+    let resolutionTimeChart;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化页面
+        initializeDashboard();
+        
+        // 添加刷新按钮事件
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            refreshDashboard();
+        });
+        
+        // 加载初始数据
+        loadDashboardData();
+    });
+    
+    // 初始化仪表板
+    function initializeDashboard() {
+        // 初始化图表
+        initializeCharts();
+    }
+    
+    // 初始化图表
+    function initializeCharts() {
+        // 维护任务趋势图表
+        const maintenanceCtx = document.getElementById('maintenanceChart').getContext('2d');
+        maintenanceChart = new Chart(maintenanceCtx, {
+            type: 'line',
+            data: {
+                labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                datasets: [{
+                    label: '新建任务',
+                    data: [0, 0, 0, 0, 0, 0, 0],
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    tension: 0.1
+                }, {
+                    label: '完成任务',
+                    data: [0, 0, 0, 0, 0, 0, 0],
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+        
+        // 设备状态图表
+        const deviceStatusCtx = document.getElementById('deviceStatusChart').getContext('2d');
+        deviceStatusChart = new Chart(deviceStatusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['在线', '维护中', '离线'],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: [
+                        '#198754',
+                        '#ffc107',
+                        '#dc3545'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // 维护类型分布图表
+        const maintenanceTypeCtx = document.getElementById('maintenanceTypeChart').getContext('2d');
+        maintenanceTypeChart = new Chart(maintenanceTypeCtx, {
+            type: 'pie',
+            data: {
+                labels: ['预防性维护', '修复性维护', '紧急维护', '升级维护'],
+                datasets: [{
+                    data: [0, 0, 0, 0],
+                    backgroundColor: [
+                        '#198754',
+                        '#ffc107',
+                        '#dc3545',
+                        '#0d6efd'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // 任务完成率图表
+        const completionRateCtx = document.getElementById('completionRateChart').getContext('2d');
+        completionRateChart = new Chart(completionRateCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['已完成', '未完成'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: [
+                        '#198754',
+                        '#e9ecef'
+                    ]
+                }]
+            },
+            options: {
+                cutout: '75%',
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+        
+        // 平均解决时间图表
+        const resolutionTimeCtx = document.getElementById('resolutionTimeChart').getContext('2d');
+        resolutionTimeChart = new Chart(resolutionTimeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['实际', '剩余'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: [
+                        '#0d6efd',
+                        '#e9ecef'
+                    ]
+                }]
+            },
+            options: {
+                cutout: '75%',
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+    
+    // 加载仪表板数据
+    function loadDashboardData() {
+        // 加载统计数据和图表数据
+        Promise.all([
+            fetchDashboardStats(),
+            fetchRecentActivities(),
+            fetchUpcomingTasks(),
+            fetchChartData()
+        ]).then(() => {
+            console.log('所有数据加载完成');
+        }).catch(error => {
+            console.error('加载数据失败:', error);
+        });
+    }
+    
+    // 获取仪表板统计数据
+    function fetchDashboardStats() {
+        return fetch('/api/maintenance/dashboard_stats')
+            .then(response => response.json())
+            .then(data => {
+                // 更新关键指标
+                document.getElementById('totalTasks').textContent = data.total_tasks || 0;
+                document.getElementById('pendingTasks').textContent = data.pending_tasks || 0;
+                document.getElementById('inProgressTasks').textContent = data.in_progress_tasks || 0;
+                document.getElementById('completedTasks').textContent = data.completed_tasks || 0;
+                
+                // 更新设备状态
+                document.getElementById('onlineDevices').textContent = data.online_devices || 0;
+                document.getElementById('maintenanceDevices').textContent = data.maintenance_devices || 0;
+                
+                // 更新完成率
+                document.getElementById('completionRate').textContent = data.completion_rate || '0%';
+                document.getElementById('completionRateChange').textContent = data.completion_rate_change || '0%';
+                
+                // 更新平均解决时间
+                document.getElementById('avgResolutionTime').textContent = data.avg_resolution_time || 0;
+                document.getElementById('resolutionTimeChange').textContent = data.resolution_time_change || '0%';
+                
+                // 更新警告
+                updateAlerts(data.alerts || {});
+                
+                return data;
+            })
+            .catch(error => {
+                console.error('获取统计信息失败:', error);
+                // 使用模拟数据
+                useMockStats();
+                return null;
+            });
+    }
+    
+    // 获取近期活动
+    function fetchRecentActivities() {
+        return fetch('/api/maintenance/recent_activities')
+            .then(response => response.json())
+            .then(activities => {
+                updateRecentActivities(activities);
+                return activities;
+            })
+            .catch(error => {
+                console.error('获取近期活动失败:', error);
+                // 使用模拟数据
+                useMockActivities();
+                return null;
+            });
+    }
+    
+    // 获取即将到来的任务
+    function fetchUpcomingTasks() {
+        return fetch('/api/maintenance/upcoming_tasks')
+            .then(response => response.json())
+            .then(tasks => {
+                updateUpcomingTasks(tasks);
+                return tasks;
+            })
+            .catch(error => {
+                console.error('获取即将到来任务失败:', error);
+                // 使用模拟数据
+                useMockUpcomingTasks();
+                return null;
+            });
+    }
+    
+    // 获取图表数据
+    function fetchChartData() {
+        return fetch('/api/maintenance/chart_data')
+            .then(response => response.json())
+            .then(chartData => {
+                updateCharts(chartData);
+                return chartData;
+            })
+            .catch(error => {
+                console.error('获取图表数据失败:', error);
+                // 使用模拟数据
+                useMockChartData();
+                return null;
+            });
+    }
+    
+    // 更新警告信息
+    function updateAlerts(alerts) {
+        const emergencyAlert = document.getElementById('emergencyAlert');
+        const lowStockAlert = document.getElementById('lowStockAlert');
+        
+        // 紧急维护警告
+        if (alerts.emergency_tasks && alerts.emergency_tasks > 0) {
+            document.getElementById('emergencyCount').textContent = alerts.emergency_tasks;
+            emergencyAlert.style.display = 'block';
+        } else {
+            emergencyAlert.style.display = 'none';
+        }
+        
+        // 低库存警告
+        if (alerts.low_stock_parts && alerts.low_stock_parts > 0) {
+            document.getElementById('lowStockCount').textContent = alerts.low_stock_parts;
+            lowStockAlert.style.display = 'block';
+        } else {
+            lowStockAlert.style.display = 'none';
+        }
+    }
+    
+    // 更新近期活动
+    function updateRecentActivities(activities) {
+        const container = document.getElementById('recentActivities');
+        
+        if (!activities || activities.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <p class="text-muted">暂无近期活动</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        
+        activities.forEach(activity => {
+            const timeAgo = getTimeAgo(activity.timestamp);
+            let icon = 'fa-info-circle';
+            let iconColor = 'text-primary';
+            
+            // 根据活动类型设置图标
+            switch(activity.type) {
+                case 'task_created':
+                    icon = 'fa-plus-circle';
+                    iconColor = 'text-success';
+                    break;
+                case 'task_completed':
+                    icon = 'fa-check-circle';
+                    iconColor = 'text-success';
+                    break;
+                case 'task_updated':
+                    icon = 'fa-edit';
+                    iconColor = 'text-warning';
+                    break;
+                case 'part_request':
+                    icon = 'fa-file-alt';
+                    iconColor = 'text-info';
+                    break;
+                case 'inspection':
+                    icon = 'fa-clipboard-check';
+                    iconColor = 'text-primary';
+                    break;
+            }
+            
+            html += `
+                <div class="activity-item">
+                    <div class="d-flex align-items-start">
+                        <div class="me-3 ${iconColor}">
+                            <i class="fas ${icon}"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${activity.title}</strong>
+                                    <p class="mb-0 text-muted small">${activity.description}</p>
+                                </div>
+                                <div class="text-muted small text-end" style="white-space: nowrap;">
+                                    ${timeAgo}
+                                </div>
+                            </div>
+                            ${activity.user ? `<div class="text-muted small mt-1">由 ${activity.user} 执行</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // 更新即将到来的任务
+    function updateUpcomingTasks(tasks) {
+        const container = document.getElementById('upcomingTasks');
+        
+        if (!tasks || tasks.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <p class="text-muted">暂无即将到期的任务</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        
+        tasks.forEach(task => {
+            const dueDate = new Date(task.due_date);
+            const daysUntilDue = Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24));
+            
+            let priorityClass = 'priority-medium';
+            if (task.priority === 'high') priorityClass = 'priority-high';
+            if (task.priority === 'critical') priorityClass = 'priority-critical';
+            if (task.priority === 'low') priorityClass = 'priority-low';
+            
+            let statusClass = 'status-scheduled';
+            if (task.status === 'in_progress') statusClass = 'status-in-progress';
+            if (task.status === 'completed') statusClass = 'status-completed';
+            
+            html += `
+                <div class="activity-item">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <strong class="text-truncate" style="max-width: 70%;">${task.name}</strong>
+                        <span class="priority-badge ${priorityClass}">
+                            ${task.priority === 'critical' ? '紧急' : 
+                              task.priority === 'high' ? '高' : 
+                              task.priority === 'medium' ? '中' : '低'}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">
+                            <i class="fas fa-calendar-alt me-1"></i>${dueDate.toLocaleDateString()}
+                            ${daysUntilDue === 0 ? '<span class="badge bg-danger ms-2">今天到期</span>' : 
+                             daysUntilDue === 1 ? '<span class="badge bg-warning ms-2">明天到期</span>' : 
+                             daysUntilDue < 0 ? '<span class="badge bg-danger ms-2">已逾期</span>' : 
+                             `<span class="badge bg-info ms-2">${daysUntilDue}天后</span>`}
+                        </div>
+                        <span class="task-status-badge ${statusClass}">
+                            ${task.status === 'in_progress' ? '进行中' : 
+                             task.status === 'completed' ? '已完成' : '已计划'}
+                        </span>
+                    </div>
+                    ${task.device ? `<div class="text-muted small mt-1"><i class="fas fa-server me-1"></i>${task.device}</div>` : ''}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // 更新图表数据
+    function updateCharts(chartData) {
+        // 更新维护任务趋势图表
+        if (chartData.trend_data) {
+            maintenanceChart.data.labels = chartData.trend_data.labels || [];
+            maintenanceChart.data.datasets[0].data = chartData.trend_data.new_tasks || [];
+            maintenanceChart.data.datasets[1].data = chartData.trend_data.completed_tasks || [];
+            maintenanceChart.update();
+        }
+        
+        // 更新设备状态图表
+        if (chartData.device_status) {
+            deviceStatusChart.data.datasets[0].data = [
+                chartData.device_status.online || 0,
+                chartData.device_status.maintenance || 0,
+                chartData.device_status.offline || 0
+            ];
+            deviceStatusChart.update();
+        }
+        
+        // 更新维护类型分布图表
+        if (chartData.maintenance_types) {
+            maintenanceTypeChart.data.datasets[0].data = [
+                chartData.maintenance_types.preventive || 0,
+                chartData.maintenance_types.corrective || 0,
+                chartData.maintenance_types.emergency || 0,
+                chartData.maintenance_types.upgrade || 0
+            ];
+            maintenanceTypeChart.update();
+        }
+        
+        // 更新任务完成率图表
+        if (chartData.completion_rate) {
+            completionRateChart.data.datasets[0].data = [
+                chartData.completion_rate.completed || 0,
+                chartData.completion_rate.total - chartData.completion_rate.completed || 0
+            ];
+            completionRateChart.update();
+        }
+        
+        // 更新平均解决时间图表
+        if (chartData.resolution_time) {
+            resolutionTimeChart.data.datasets[0].data = [
+                chartData.resolution_time.actual || 0,
+                chartData.resolution_time.target - chartData.resolution_time.actual || 0
+            ];
+            resolutionTimeChart.update();
+        }
+    }
+    
+    // 刷新仪表板
+    function refreshDashboard() {
+        const refreshBtn = document.getElementById('refreshBtn');
+        const originalText = refreshBtn.innerHTML;
+        
+        // 显示加载状态
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>刷新中...';
+        refreshBtn.disabled = true;
+        
+        // 重新加载数据
+        loadDashboardData();
+        
+        // 恢复按钮状态
+        setTimeout(() => {
+            refreshBtn.innerHTML = originalText;
+            refreshBtn.disabled = false;
+            
+            // 显示成功提示
+            showToast('仪表板数据已刷新', 'success');
+        }, 1000);
+    }
+    
+    // 导航到指定页面
+    function navigateTo(url) {
+        if (url && url !== '#') {
+            window.location.href = url;
+        }
+    }
+    
+    // 显示Toast消息
+    function showToast(message, type = 'info') {
+        // 创建一个简单的Toast通知
+        const toastId = 'dashboard-toast-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0 position-fixed bottom-0 end-0 m-3" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        // 添加到页面
+        document.body.insertAdjacentHTML('beforeend', toastHtml);
+        
+        // 显示Toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+        
+        // 自动移除Toast
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            toastElement.remove();
+        });
+    }
+    
+    // 获取时间间隔描述
+    function getTimeAgo(timestamp) {
+        const now = new Date();
+        const past = new Date(timestamp);
+        const diffMs = now - past;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffMins < 1) {
+            return '刚刚';
+        } else if (diffMins < 60) {
+            return `${diffMins}分钟前`;
+        } else if (diffHours < 24) {
+            return `${diffHours}小时前`;
+        } else if (diffDays < 7) {
+            return `${diffDays}天前`;
+        } else {
+            return past.toLocaleDateString();
+        }
+    }
+    
+    // 模拟数据函数（在没有API时使用）
+    function useMockStats() {
+        // 模拟统计信息
+        document.getElementById('totalTasks').textContent = 42;
+        document.getElementById('pendingTasks').textContent = 8;
+        document.getElementById('inProgressTasks').textContent = 12;
+        document.getElementById('completedTasks').textContent = 22;
+        
+        document.getElementById('onlineDevices').textContent = 156;
+        document.getElementById('maintenanceDevices').textContent = 8;
+        
+        document.getElementById('completionRate').textContent = '85%';
+        document.getElementById('completionRateChange').textContent = '5%';
+        
+        document.getElementById('avgResolutionTime').textContent = '4.2';
+        document.getElementById('resolutionTimeChange').textContent = '12%';
+        
+        // 模拟警告
+        updateAlerts({
+            emergency_tasks: 3,
+            low_stock_parts: 7
+        });
+    }
+    
+    function useMockActivities() {
+        const mockActivities = [
+            {
+                type: 'task_completed',
+                title: '服务器巡检完成',
+                description: '数据中心服务器巡检任务已完成',
+                user: '张三',
+                timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() // 30分钟前
+            },
+            {
+                type: 'task_created',
+                title: '创建维护任务',
+                description: '创建了新的交换机维护任务',
+                user: '李四',
+                timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2小时前
+            },
+            {
+                type: 'part_request',
+                title: '备件申请',
+                description: '申请了5个服务器内存备件',
+                user: '王五',
+                timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() // 5小时前
+            },
+            {
+                type: 'task_updated',
+                title: '任务状态更新',
+                description: '紧急维护任务状态更新为进行中',
+                user: '赵六',
+                timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() // 1天前
+            },
+            {
+                type: 'inspection',
+                title: '设备巡检',
+                description: '完成了机房环境巡检',
+                user: '钱七',
+                timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2天前
+            }
+        ];
+        
+        updateRecentActivities(mockActivities);
+    }
+    
+    function useMockUpcomingTasks() {
+        const mockTasks = [
+            {
+                name: '服务器硬件升级',
+                priority: 'high',
+                status: 'scheduled',
+                due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 明天
+                device: 'Server-001'
+            },
+            {
+                name: '网络设备巡检',
+                priority: 'medium',
+                status: 'scheduled',
+                due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 后天
+                device: 'Switch-01'
+            },
+            {
+                name: '备份系统维护',
+                priority: 'low',
+                status: 'in_progress',
+                due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3天后
+                device: 'Backup-Server'
+            },
+            {
+                name: '数据库优化',
+                priority: 'critical',
+                status: 'scheduled',
+                due_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 已逾期
+                device: 'DB-001'
+            }
+        ];
+        
+        updateUpcomingTasks(mockTasks);
+    }
+    
+    function useMockChartData() {
+        const mockChartData = {
+            trend_data: {
+                labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                new_tasks: [5, 7, 3, 8, 6, 2, 4],
+                completed_tasks: [3, 5, 6, 4, 7, 3, 5]
+            },
+            device_status: {
+                online: 156,
+                maintenance: 8,
+                offline: 3
+            },
+            maintenance_types: {
+                preventive: 25,
+                corrective: 12,
+                emergency: 3,
+                upgrade: 2
+            },
+            completion_rate: {
+                completed: 85,
+                total: 100
+            },
+            resolution_time: {
+                actual: 4.2,
+                target: 8
+            }
+        };
+        
+        updateCharts(mockChartData);
+    }
+</script>
+{% endblock %}

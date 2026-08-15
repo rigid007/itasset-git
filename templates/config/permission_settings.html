@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block title %}权限设置 - 系统配置{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    :root {
+        --primary-color: #3498db;
+        --success-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --info-color: #17a2b8;
+        --light-bg: #f8f9fa;
+        --border-color: #dee2e6;
+    }
+
+    .permission-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .permission-card:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .permission-card.system {
+        border-left-color: #e74c3c;
+        background-color: #fff8f8;
+    }
+
+    .category-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+
+    .category-system {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .category-config {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .category-user {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .category-permission {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .category-device {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .category-report {
+        background-color: #d6d8db;
+        color: #383d41;
+    }
+
+    .category-general {
+        background-color: #cce5ff;
+        color: #004085;
+    }
+
+    .module-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background-color: #e8f4fc;
+        color: #2c3e50;
+    }
+
+    .system-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .action-buttons button {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+
+    .search-container {
+        position: relative;
+    }
+
+    .search-container i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+
+    .search-container input {
+        padding-left: 40px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #dee2e6;
+    }
+
+    .permission-detail-modal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .detail-row {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .detail-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .detail-value {
+        color: #212529;
+        word-break: break-word;
+    }
+
+    .form-section {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .form-section h6 {
+        color: #495057;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    
+    .required::after {
+        content: " *";
+        color: #e74c3c;
+    }
+    
+    .modal-footer {
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .alert-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+    }
+    
+    .permission-code {
+        font-family: monospace;
+        background-color: #f8f9fa;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        color: #e83e8c;
+    }
+    
+    .permission-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    .card-header-toggle {
+        cursor: pointer;
+    }
+    
+    .card-header-toggle:hover {
+        background-color: rgba(0, 0, 0, 0.03);
+    }
+    
+    .permission-actions {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    
+    .import-btn-container {
+        margin-left: 10px;
+    }
+    
+    .permission-count {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-left: 10px;
+    }
+    
+    .table-permissions th {
+        position: sticky;
+        top: 0;
+        background-color: white;
+        z-index: 10;
+    }
+    
+    .collapsible-section {
+        margin-bottom: 20px;
+    }
+    
+    .collapsible-section .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+    }
+    
+    .collapsible-section .card-body {
+        padding: 0;
+    }
+    
+    .collapsible-section .table {
+        margin-bottom: 0;
+    }
+    
+    .collapsible-section .table td {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2 text-gray-800">权限设置</h1>
+            <p class="mb-0">管理系统权限，定义不同角色可以执行的操作</p>
+        </div>
+        <div>
+            {% if current_user.is_admin %}
+            <button class="btn btn-primary" id="addPermissionBtn">
+                <i class="fas fa-plus-circle mr-2"></i>添加权限
+            </button>
+            <div class="btn-group import-btn-container" role="group">
+                <button type="button" class="btn btn-outline-info" id="importDefaultBtn">
+                    <i class="fas fa-download mr-2"></i>导入默认权限
+                </button>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt mr-2"></i>刷新
+            </button>
+        </div>
+    </div>
+
+    <!-- 搜索和筛选 -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="search-container">
+                        <i class="fas fa-search"></i>
+                        <input type="text" class="form-control" id="searchInput" placeholder="搜索权限代码、名称或描述...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="categoryFilter">
+                        <option value="">所有分类</option>
+                        <option value="system">系统</option>
+                        <option value="config">配置</option>
+                        <option value="user">用户</option>
+                        <option value="permission">权限</option>
+                        <option value="device">设备</option>
+                        <option value="report">报告</option>
+                        <option value="general">通用</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="moduleFilter">
+                        <option value="">所有模块</option>
+                        <option value="system">系统管理</option>
+                        <option value="config">配置管理</option>
+                        <option value="user">用户管理</option>
+                        <option value="permission">权限管理</option>
+                        <option value="device">设备管理</option>
+                        <option value="report">报告管理</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 权限列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">权限列表</h6>
+            <div class="permission-count" id="permissionCount">
+                <!-- 权限数量将通过JavaScript动态更新 -->
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="permissionsContainer">
+                <!-- 权限将通过JavaScript动态加载 -->
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载权限数据...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑权限模态框 -->
+<div class="modal fade" id="permissionModal" tabindex="-1" role="dialog" aria-labelledby="permissionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="permissionModalLabel">添加新权限</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="permissionForm">
+                <div class="modal-body">
+                    <input type="hidden" id="permissionId" name="id">
+                    
+                    <div class="form-section">
+                        <h6>基本信息</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="code" class="required">权限代码</label>
+                                    <input type="text" class="form-control" id="code" name="code" required>
+                                    <small class="form-text text-muted">权限的唯一标识符，只能包含字母、数字、下划线、冒号和点号</small>
+                                    <div class="mt-2">
+                                        <small class="text-muted">示例:</small>
+                                        <div class="d-flex flex-wrap gap-2 mt-1">
+                                            <code>system:admin</code>
+                                            <code>config:view</code>
+                                            <code>user:edit</code>
+                                            <code>device:manage</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="name" class="required">权限名称</label>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                    <small class="form-text text-muted">权限的显示名称</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="description">权限描述</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                            <small class="form-text text-muted">权限的详细描述，说明该权限允许执行的操作</small>
+                        </div>
+                    </div>
+
+                    <!-- 分类信息 -->
+                    <div class="form-section">
+                        <h6>分类信息</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="category">分类</label>
+                                    <select class="form-control" id="category" name="category">
+                                        <option value="general">通用</option>
+                                        <option value="system">系统</option>
+                                        <option value="config">配置</option>
+                                        <option value="user">用户</option>
+                                        <option value="permission">权限</option>
+                                        <option value="device">设备</option>
+                                        <option value="report">报告</option>
+                                        <option value="other">其他</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="module">模块</label>
+                                    <select class="form-control" id="module" name="module">
+                                        <option value="">请选择模块</option>
+                                        <option value="system">系统管理</option>
+                                        <option value="config">配置管理</option>
+                                        <option value="user">用户管理</option>
+                                        <option value="permission">权限管理</option>
+                                        <option value="device">设备管理</option>
+                                        <option value="report">报告管理</option>
+                                        <option value="other">其他</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 系统属性 -->
+                    <div class="form-section">
+                        <h6>系统属性</h6>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="is_system" name="is_system">
+                                        <label class="custom-control-label" for="is_system">系统权限</label>
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        系统权限是系统内置的权限，不能删除，只能修改部分属性。普通权限可以自由编辑和删除。
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="savePermissionBtn">
+                        <i class="fas fa-save mr-2"></i>保存权限
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 权限详情模态框 -->
+<div class="modal fade" id="permissionDetailModal" tabindex="-1" role="dialog" aria-labelledby="permissionDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="permissionDetailModalLabel">权限详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="permissionDetailContent">
+                    <!-- 详情内容将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                {% if current_user.is_admin %}
+                <button type="button" class="btn btn-primary" id="editFromDetailBtn">
+                    <i class="fas fa-edit mr-2"></i>编辑
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除这个权限吗？此操作不可撤销。</p>
+                <p class="text-danger"><strong>警告：</strong>删除权限可能会影响使用此权限的角色和用户。</p>
+                <input type="hidden" id="permissionToDelete">
+                <div id="deletePermissionInfo" class="mt-3 p-3 bg-light rounded">
+                    <!-- 删除的权限信息将在这里显示 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入确认模态框 -->
+<div class="modal fade" id="importConfirmModal" tabindex="-1" role="dialog" aria-labelledby="importConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importConfirmModalLabel">导入默认权限</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要导入默认权限吗？</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>注意：</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>系统权限将会被更新</li>
+                        <li>新权限将会被添加</li>
+                        <li>现有非系统权限不会被删除</li>
+                        <li>此操作主要用于初始化系统或添加缺失的权限</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmImportBtn">确认导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    $(document).ready(function() {
+        console.log("权限设置页面加载完成");
+        
+        // 全局变量
+        let permissions = [];
+        let categories = [];
+        let modules = [];
+        let csrfToken = $('meta[name="csrf-token"]').attr('content') || '';
+        let isAdmin = {% if current_user.is_admin %}true{% else %}false{% endif %};
+        
+        // 初始化页面
+        loadPermissions();
+        loadCategories();
+        loadModules();
+        
+        // 只有管理员可以添加权限
+        if (isAdmin) {
+            $('#addPermissionBtn').on('click', function() {
+                console.log("添加权限按钮被点击");
+                openPermissionModal();
+            });
+            
+            $('#importDefaultBtn').on('click', function() {
+                console.log("导入默认权限按钮被点击");
+                $('#importConfirmModal').modal('show');
+            });
+        } else {
+            $('#addPermissionBtn').hide();
+            $('#importDefaultBtn').hide();
+        }
+        
+        // 刷新按钮事件
+        $('#refreshBtn').on('click', function() {
+            console.log("刷新按钮被点击");
+            loadPermissions();
+            loadCategories();
+            loadModules();
+        });
+        
+        // 搜索功能
+        $('#searchInput').on('keyup', debounce(function() {
+            filterPermissions();
+        }, 300));
+        
+        // 分类筛选
+        $('#categoryFilter').change(function() {
+            filterPermissions();
+        });
+        
+        // 模块筛选
+        $('#moduleFilter').change(function() {
+            filterPermissions();
+        });
+        
+        // 权限表单提交
+        $('#permissionForm').submit(function(e) {
+            e.preventDefault();
+            savePermission();
+        });
+        
+        // 确认删除按钮事件
+        $('#confirmDeleteBtn').on('click', function() {
+            const id = $('#permissionToDelete').val();
+            if (id) {
+                deletePermission(id);
+            }
+        });
+        
+        // 确认导入按钮事件
+        $('#confirmImportBtn').on('click', function() {
+            importDefaultPermissions();
+        });
+        
+        // 从详情页编辑按钮
+        $('#editFromDetailBtn').on('click', function() {
+            $('#permissionDetailModal').modal('hide');
+            const id = $('#editFromDetailBtn').data('permission-id');
+            if (id) {
+                setTimeout(() => {
+                    editPermission(id);
+                }, 300);
+            }
+        });
+        
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // 加载权限数据
+        function loadPermissions() {
+            console.log("开始加载权限数据...");
+            
+            $('#permissionsContainer').html(`
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载权限数据...</p>
+                </div>
+            `);
+            
+            $.ajax({
+                url: '/config/api/permissions',
+                method: 'GET',
+                success: function(data) {
+                    console.log("权限数据加载成功，数量:", data.length);
+                    permissions = data;
+                    renderPermissions(data);
+                    updatePermissionCount(data.length);
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载权限失败:', error, xhr.responseText);
+                    showToast('加载权限失败: ' + (xhr.responseJSON?.error || error), 'danger');
+                    $('#permissionsContainer').html(`
+                        <div class="empty-state">
+                            <i class="fas fa-exclamation-circle text-danger"></i>
+                            <h4>加载权限失败</h4>
+                            <p>无法从服务器获取权限数据，请检查网络连接或刷新页面重试。</p>
+                            <button class="btn btn-primary" onclick="location.reload()">刷新页面</button>
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // 加载分类数据
+        function loadCategories() {
+            if (!isAdmin) return;
+            
+            $.ajax({
+                url: '/config/api/permissions/categories',
+                method: 'GET',
+                success: function(data) {
+                    console.log("分类数据加载成功:", data);
+                    categories = data;
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载分类失败:', error);
+                }
+            });
+        }
+        
+        // 加载模块数据
+        function loadModules() {
+            if (!isAdmin) return;
+            
+            $.ajax({
+                url: '/config/api/permissions/modules',
+                method: 'GET',
+                success: function(data) {
+                    console.log("模块数据加载成功:", data);
+                    modules = data;
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载模块失败:', error);
+                }
+            });
+        }
+        
+        // 更新权限数量显示
+        function updatePermissionCount(count) {
+            $('#permissionCount').text(`共 ${count} 个权限`);
+        }
+        
+        // 渲染权限列表
+        function renderPermissions(permissionList) {
+            console.log("渲染权限列表，数量:", permissionList.length);
+            
+            if (permissionList.length === 0) {
+                let html = `
+                    <div class="empty-state">
+                        <i class="fas fa-shield-alt"></i>
+                        <h4>暂无权限</h4>
+                        <p>系统尚未定义任何权限。</p>
+                `;
+                
+                if (isAdmin) {
+                    html += `
+                        <div class="mt-3">
+                            <button class="btn btn-primary" id="addPermissionEmptyBtn">
+                                <i class="fas fa-plus-circle mr-2"></i>添加权限
+                            </button>
+                            <button class="btn btn-outline-info ml-2" id="importDefaultEmptyBtn">
+                                <i class="fas fa-download mr-2"></i>导入默认权限
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                html += `</div>`;
+                
+                $('#permissionsContainer').html(html);
+                
+                // 为空状态下的按钮绑定事件
+                if (isAdmin) {
+                    $('#addPermissionEmptyBtn').on('click', function() {
+                        openPermissionModal();
+                    });
+                    
+                    $('#importDefaultEmptyBtn').on('click', function() {
+                        $('#importConfirmModal').modal('show');
+                    });
+                }
+                return;
+            }
+            
+            // 按分类分组
+            const groupedPermissions = {};
+            permissionList.forEach(permission => {
+                const category = permission.category || 'other';
+                if (!groupedPermissions[category]) {
+                    groupedPermissions[category] = [];
+                }
+                groupedPermissions[category].push(permission);
+            });
+            
+            let html = '';
+            
+            // 对分类进行排序
+            const sortedCategories = Object.keys(groupedPermissions).sort();
+            
+            sortedCategories.forEach(category => {
+                const categoryPermissions = groupedPermissions[category];
+                const categoryDisplay = getCategoryDisplay(category);
+                const categoryBadgeClass = getCategoryBadgeClass(category);
+                
+                html += `
+                <div class="collapsible-section">
+                    <div class="card">
+                        <div class="card-header card-header-toggle" data-toggle="collapse" data-target="#collapseCategory${category}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge ${categoryBadgeClass} category-badge">${categoryDisplay}</span>
+                                    <span class="ml-2">${categoryPermissions.length} 个权限</span>
+                                </div>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                        </div>
+                        <div id="collapseCategory${category}" class="collapse show">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-permissions">
+                                        <thead>
+                                            <tr>
+                                                <th width="15%">权限代码</th>
+                                                <th width="20%">权限名称</th>
+                                                <th width="30%">描述</th>
+                                                <th width="15%">模块</th>
+                                                <th width="10%">类型</th>
+                                                <th width="10%" class="text-center">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                `;
+                
+                categoryPermissions.forEach(permission => {
+                    const isSystem = permission.is_system;
+                    const moduleDisplay = permission.module ? getModuleDisplay(permission.module) : '未分类';
+                    
+                    html += `
+                    <tr class="${isSystem ? 'table-danger' : ''}">
+                        <td>
+                            <span class="permission-code">${permission.code}</span>
+                        </td>
+                        <td>
+                            <strong>${permission.name}</strong>
+                        </td>
+                        <td>
+                            <div class="permission-description">
+                                ${permission.description || '<span class="text-muted">无描述</span>'}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge module-badge">${moduleDisplay}</span>
+                        </td>
+                        <td>
+                            ${isSystem ? '<span class="badge system-badge">系统</span>' : '<span class="badge badge-secondary">普通</span>'}
+                        </td>
+                        <td class="text-center">
+                            <div class="permission-actions">
+                                <button class="btn btn-sm btn-outline-info view-permission" data-id="${permission.id}" title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                    `;
+                    
+                    if (isAdmin) {
+                        html += `
+                                <button class="btn btn-sm btn-outline-primary edit-permission" data-id="${permission.id}" title="编辑">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                        `;
+                        
+                        if (!isSystem) {
+                            html += `
+                                <button class="btn btn-sm btn-outline-danger delete-permission" data-id="${permission.id}" title="删除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            `;
+                        }
+                    }
+                    
+                    html += `
+                            </div>
+                        </td>
+                    </tr>
+                    `;
+                });
+                
+                html += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+            
+            $('#permissionsContainer').html(html);
+            
+            // 绑定折叠事件
+            $('.card-header-toggle').off('click').on('click', function() {
+                const icon = $(this).find('i');
+                if (icon.hasClass('fa-chevron-down')) {
+                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                } else {
+                    icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                }
+            });
+            
+            // 绑定按钮事件
+            bindPermissionActions();
+        }
+        
+        // 绑定权限操作事件
+        function bindPermissionActions() {
+            console.log("绑定权限操作事件...");
+            
+            // 查看权限
+            $('.view-permission').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("查看权限，ID:", id);
+                viewPermission(id);
+            });
+            
+            // 编辑权限
+            $('.edit-permission').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("编辑权限，ID:", id);
+                editPermission(id);
+            });
+            
+            // 删除权限
+            $('.delete-permission').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("删除权限，ID:", id);
+                confirmDeletePermission(id);
+            });
+        }
+        
+        // 筛选权限
+        function filterPermissions() {
+            const searchTerm = $('#searchInput').val().toLowerCase();
+            const categoryFilter = $('#categoryFilter').val();
+            const moduleFilter = $('#moduleFilter').val();
+            
+            const filtered = permissions.filter(permission => {
+                // 搜索条件
+                const matchesSearch = !searchTerm || 
+                    permission.code.toLowerCase().includes(searchTerm) ||
+                    permission.name.toLowerCase().includes(searchTerm) ||
+                    (permission.description && permission.description.toLowerCase().includes(searchTerm));
+                
+                // 分类筛选
+                const matchesCategory = !categoryFilter || permission.category === categoryFilter;
+                
+                // 模块筛选
+                const matchesModule = !moduleFilter || permission.module === moduleFilter;
+                
+                return matchesSearch && matchesCategory && matchesModule;
+            });
+            
+            renderPermissions(filtered);
+            updatePermissionCount(filtered.length);
+        }
+        
+        // 查看权限详情
+        function viewPermission(id) {
+            // 先从当前数据中查找权限信息
+            let permission = permissions.find(p => p.id === id);
+            if (!permission) {
+                showToast('找不到要查看的权限', 'danger');
+                return;
+            }
+            
+            let html = `
+                <div class="detail-row">
+                    <div class="detail-label">权限代码</div>
+                    <div class="detail-value">
+                        <span class="permission-code">${permission.code}</span>
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">权限名称</div>
+                    <div class="detail-value">${permission.name}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">权限描述</div>
+                    <div class="detail-value">${permission.description || '<span class="text-muted">无描述</span>'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">分类</div>
+                    <div class="detail-value">
+                        <span class="badge ${getCategoryBadgeClass(permission.category)}">
+                            ${getCategoryDisplay(permission.category)}
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">模块</div>
+                    <div class="detail-value">
+                        <span class="badge module-badge">${getModuleDisplay(permission.module)}</span>
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">权限类型</div>
+                    <div class="detail-value">
+                        ${permission.is_system ? 
+                            '<span class="badge system-badge">系统权限</span>' : 
+                            '<span class="badge badge-secondary">普通权限</span>'
+                        }
+                        ${permission.is_system ? 
+                            '<div class="mt-1"><small class="text-muted">系统权限不能删除，只能修改部分属性</small></div>' : 
+                            ''
+                        }
+                    </div>
+                </div>
+            `;
+            
+            if (permission.created_at) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">创建时间</div>
+                    <div class="detail-value">${formatDate(permission.created_at)}</div>
+                </div>
+                `;
+            }
+            
+            $('#permissionDetailContent').html(html);
+            if (isAdmin) {
+                $('#editFromDetailBtn').show().data('permission-id', id);
+            } else {
+                $('#editFromDetailBtn').hide();
+            }
+            $('#permissionDetailModal').modal('show');
+        }
+        
+        // 打开权限模态框（添加）
+        function openPermissionModal() {
+            console.log("打开权限模态框");
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以添加权限', 'warning');
+                return;
+            }
+            
+            // 重置表单
+            $('#permissionForm')[0].reset();
+            $('#permissionId').val('');
+            $('#permissionModalLabel').text('添加新权限');
+            $('#category').val('general');
+            $('#module').val('');
+            $('#is_system').prop('checked', false);
+            
+            // 显示模态框
+            $('#permissionModal').modal('show');
+        }
+        
+        // 编辑权限
+        function editPermission(id) {
+            console.log("编辑权限，ID:", id);
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以编辑权限', 'warning');
+                return;
+            }
+            
+            // 先尝试从当前数据中获取权限信息
+            let permission = permissions.find(p => p.id === id);
+            if (!permission) {
+                showToast('找不到要编辑的权限', 'danger');
+                return;
+            }
+            
+            // 填充表单
+            $('#permissionId').val(permission.id);
+            $('#code').val(permission.code);
+            $('#name').val(permission.name);
+            $('#description').val(permission.description || '');
+            $('#category').val(permission.category || 'general');
+            $('#module').val(permission.module || '');
+            $('#is_system').prop('checked', permission.is_system);
+            
+            // 如果是系统权限，代码字段禁用
+            if (permission.is_system) {
+                $('#code').prop('disabled', true);
+                $('#is_system').prop('disabled', true);
+            } else {
+                $('#code').prop('disabled', false);
+                $('#is_system').prop('disabled', false);
+            }
+            
+            // 更新模态框标题
+            $('#permissionModalLabel').text('编辑权限');
+            $('#permissionModal').modal('show');
+        }
+        
+        // 保存权限
+        function savePermission() {
+            console.log("保存权限...");
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以保存权限', 'warning');
+                return;
+            }
+            
+            const formData = {
+                id: $('#permissionId').val() || null,
+                code: $('#code').val(),
+                name: $('#name').val(),
+                description: $('#description').val() || null,
+                category: $('#category').val(),
+                module: $('#module').val() || null,
+                is_system: $('#is_system').is(':checked')
+            };
+            
+            console.log("表单数据:", formData);
+            
+            // 验证必填字段
+            if (!formData.code || !formData.name) {
+                showToast('权限代码和名称是必填项', 'danger');
+                return;
+            }
+            
+            // 验证权限代码格式
+            const codeRegex = /^[a-zA-Z0-9_:.]+$/;
+            if (!codeRegex.test(formData.code)) {
+                showToast('权限代码只能包含字母、数字、下划线、冒号和点号', 'danger');
+                return;
+            }
+            
+            $('#savePermissionBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>保存中...');
+            
+            // 根据是否有ID决定是添加还是更新
+            const method = formData.id ? 'PUT' : 'POST';
+            const url = formData.id ? `/config/api/permissions/${formData.id}` : '/config/api/permissions';
+            
+            $.ajax({
+                url: url,
+                method: method,
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    $('#savePermissionBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存权限');
+                    $('#permissionModal').modal('hide');
+                    
+                    showToast(response.message || '权限保存成功', 'success');
+                    
+                    // 重新加载权限列表
+                    loadPermissions();
+                },
+                error: function(xhr, status, error) {
+                    $('#savePermissionBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存权限');
+                    
+                    let errorMsg = '保存权限失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法保存权限';
+                    } else if (xhr.status === 400) {
+                        errorMsg = '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 导入默认权限
+        function importDefaultPermissions() {
+            if (!isAdmin) {
+                showToast('只有管理员可以导入权限', 'warning');
+                return;
+            }
+            
+            $('#importConfirmModal').modal('hide');
+            
+            $.ajax({
+                url: '/config/api/permissions/import-default',
+                method: 'POST',
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    showToast(response.message || '默认权限导入成功', 'success');
+                    
+                    if (response.added > 0 || response.updated > 0) {
+                        // 重新加载权限列表
+                        loadPermissions();
+                        loadCategories();
+                        loadModules();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '导入默认权限失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法导入权限';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 确认删除权限
+        function confirmDeletePermission(id) {
+            if (!isAdmin) {
+                showToast('只有管理员可以删除权限', 'warning');
+                return;
+            }
+            
+            const permission = permissions.find(p => p.id === id);
+            if (!permission) {
+                showToast('找不到要删除的权限', 'danger');
+                return;
+            }
+            
+            // 检查是否是系统权限
+            if (permission.is_system) {
+                showToast('系统权限不能删除', 'warning');
+                return;
+            }
+            
+            $('#permissionToDelete').val(id);
+            
+            // 显示要删除的权限信息
+            $('#deletePermissionInfo').html(`
+                <h6>即将删除的权限：</h6>
+                <p><strong>权限代码：</strong><span class="permission-code">${permission.code}</span></p>
+                <p><strong>权限名称：</strong>${permission.name}</p>
+                <p><strong>分类：</strong>${getCategoryDisplay(permission.category)}</p>
+                <p><strong>模块：</strong>${getModuleDisplay(permission.module)}</p>
+                <p class="text-danger mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>此操作不可撤销，请谨慎操作！</p>
+            `);
+            
+            $('#deleteConfirmModal').modal('show');
+        }
+        
+        // 删除权限
+        function deletePermission(id) {
+            if (!isAdmin) {
+                showToast('只有管理员可以删除权限', 'warning');
+                return;
+            }
+            
+            $('#deleteConfirmModal').modal('hide');
+            
+            $.ajax({
+                url: `/config/api/permissions/${id}`,
+                method: 'DELETE',
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    showToast(response.message || '权限删除成功', 'success');
+                    loadPermissions();
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '删除权限失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法删除权限';
+                    } else if (xhr.status === 404) {
+                        errorMsg = '权限不存在或已被删除';
+                    } else if (xhr.status === 400) {
+                        errorMsg = xhr.responseJSON?.error || '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 显示提示信息
+        function showToast(message, type) {
+            // 移除现有提示
+            $('.alert-toast').remove();
+            
+            const toast = $(`
+                <div class="alert alert-${type} alert-dismissible fade show alert-toast" role="alert">
+                    ${message}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `);
+            
+            $('body').append(toast);
+            
+            // 自动关闭
+            setTimeout(() => {
+                toast.alert('close');
+            }, 5000);
+        }
+        
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        // 获取分类徽章类名
+        function getCategoryBadgeClass(category) {
+            switch(category) {
+                case 'system': return 'category-system';
+                case 'config': return 'category-config';
+                case 'user': return 'category-user';
+                case 'permission': return 'category-permission';
+                case 'device': return 'category-device';
+                case 'report': return 'category-report';
+                case 'general': return 'category-general';
+                default: return 'badge-secondary';
+            }
+        }
+        
+        // 获取分类显示文本
+        function getCategoryDisplay(category) {
+            switch(category) {
+                case 'system': return '系统';
+                case 'config': return '配置';
+                case 'user': return '用户';
+                case 'permission': return '权限';
+                case 'device': return '设备';
+                case 'report': return '报告';
+                case 'general': return '通用';
+                default: return category || '未分类';
+            }
+        }
+        
+        // 获取模块显示文本
+        function getModuleDisplay(module) {
+            switch(module) {
+                case 'system': return '系统管理';
+                case 'config': return '配置管理';
+                case 'user': return '用户管理';
+                case 'permission': return '权限管理';
+                case 'device': return '设备管理';
+                case 'report': return '报告管理';
+                default: return module || '未分类';
+            }
+        }
+    });
+$(document).ready(function() {
+    // 确保模态框关闭按钮能正常工作
+    $('#permissionModal').on('click', '.close, .btn-secondary[data-dismiss="modal"]', function() {
+        $('#permissionModal').modal('hide');
+    });
+});
+
+</script>
+{% endblock %}

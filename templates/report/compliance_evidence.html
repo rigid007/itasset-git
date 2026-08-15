@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}合规证据{% endblock %}
+{% block page_title %}合规证据{% endblock %}
+{% block page_subtitle %}合规审计证据收集与管理{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-primary mb-1">{{ evidences|length }}</h4><small>总证据</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-success mb-1">{{ evidences|selectattr('status', 'equalto', 'pass')|list|length }}</h4><small>通过</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-danger text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-danger mb-1">{{ evidences|selectattr('status', 'equalto', 'fail')|list|length }}</h4><small>未通过</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-secondary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-secondary mb-1">{{ evidences|selectattr('status', 'equalto', 'pending')|list|length }}</h4><small>待审核</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addEvidenceModal"><i class="fas fa-plus"></i> 添加证据</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>框架</th><th>控制项</th><th>类型</th><th>状态</th><th>收集时间</th><th>操作</th></tr></thead>
+            <tbody>
+                {% for ev in evidences %}
+                <tr>
+                    <td>{{ ev.framework.name if ev.framework else '-' }}</td>
+                    <td><code>{{ ev.control_id }}</code></td>
+                    <td><span class="badge bg-info">{{ ev.evidence_type }}</span></td>
+                    <td>
+                        {% if ev.status == 'pass' %}<span class="badge bg-success">通过</span>
+                        {% elif ev.status == 'fail' %}<span class="badge bg-danger">未通过</span>
+                        {% elif ev.status == 'na' %}<span class="badge bg-secondary">不适用</span>
+                        {% else %}<span class="badge bg-warning">待审核</span>{% endif %}
+                    </td>
+                    <td>{{ ev.collected_at.strftime('%Y-%m-%d %H:%M') if ev.collected_at else '-' }}</td>
+                    <td>
+                        {% if has_permission(current_user, 'report:edit') %}
+                        <form method="POST" action="{{ url_for('report_extra.compliance_evidence_delete', id=ev.id) }}" style="display:inline"
+                              onsubmit="return confirm('确定要删除该合规证据吗？')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" title="删除"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无合规证据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addEvidenceModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('report_extra.compliance_evidence_add') }}">
+    <div class="modal-header"><h5 class="modal-title">添加合规证据</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label class="form-label">合规框架 <span class="text-danger">*</span></label>
+            <select name="framework_id" class="form-select" required>
+                <option value="">请选择</option>
+                {% for fw in frameworks %}
+                <option value="{{ fw.id }}">{{ fw.name }} {{ fw.version or '' }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3"><label class="form-label">控制项ID <span class="text-danger">*</span></label><input type="text" name="control_id" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">证据类型</label>
+                <select name="evidence_type" class="form-select">
+                    <option value="manual">人工收集</option>
+                    <option value="automated">自动采集</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">状态</label>
+                <select name="status" class="form-select">
+                    <option value="pending">待审核</option>
+                    <option value="pass">通过</option>
+                    <option value="fail">未通过</option>
+                    <option value="na">不适用</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">证据内容</label><textarea name="content" class="form-control" rows="3"></textarea></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+{% endblock %}

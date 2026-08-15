@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加接口 - 网络设备管理系统</title>
+    
+    <!-- 用于 AJAX 请求的基础 URL（动态生成，避免硬编码） -->
+    <meta name="api-device-interfaces" content="{{ url_for('device.api_device_interfaces', device_id=0) }}">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            border: none;
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            border-radius: 10px 10px 0 0 !important;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+        
+        .form-section {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4a6fa5;
+        }
+        
+        .section-title {
+            color: #4a6fa5;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .required::after {
+            content: " *";
+            color: #dc3545;
+        }
+        
+        .btn-primary {
+            background-color: #4a6fa5;
+            border-color: #4a6fa5;
+            padding: 10px 25px;
+            font-weight: 600;
+        }
+        
+        .btn-primary:hover {
+            background-color: #3a5a8c;
+            border-color: #3a5a8c;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            padding: 10px 25px;
+            font-weight: 600;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #4a6fa5;
+            box-shadow: 0 0 0 0.25rem rgba(74, 111, 165, 0.25);
+        }
+        
+        .help-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .neighbor-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #28a745;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏（使用 url_for 生成链接） -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="fas fa-network-wired"></i> 网络设备管理
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('device.device_list') }}">设备管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('topology.interface_view') }}">接口管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('config.system_settings') }}">系统配置</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="navbar-text me-3">欢迎，{{ current_user.username }}</span>
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">退出</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- 主要内容 -->
+    <div class="container mt-4">
+        <!-- 页面标题和返回按钮 -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-0"><i class="fas fa-plus-circle"></i> 添加新接口</h2>
+                <p class="text-muted">为网络设备添加新的网络接口</p>
+            </div>
+            <a href="{{ url_for('topology.interface_view') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> 返回接口列表
+            </a>
+        </div>
+        
+        <!-- 接口添加表单 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-ethernet"></i> 接口基本信息
+            </div>
+            <div class="card-body">
+                <form id="interfaceForm" action="{{ url_for('device.interface_add') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <!-- 基本接口信息 -->
+                    <div class="form-section">
+                        <h5 class="section-title"><i class="fas fa-info-circle"></i> 基本接口信息</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="device_id" class="form-label required">所属设备</label>
+                                <select class="form-select" id="device_id" name="device_id" required>
+                                    <option value="">请选择设备</option>
+                                    {% for dev in devices %}
+                                    <option value="{{ dev.id }}" {% if selected_device_id == dev.id %}selected{% endif %}>
+                                        {{ dev.name }} ({{ dev.management_ip or '无IP' }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="help-text">选择该接口所属的网络设备</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="name" class="form-label required">接口名称</label>
+                                <input type="text" class="form-control" id="name" name="name" required
+                                       placeholder="例如: GigabitEthernet0/1, FastEthernet1/0/24">
+                                <div class="help-text">接口标准名称，如 GigabitEthernet0/1</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="description" class="form-label">接口描述</label>
+                                <input type="text" class="form-control" id="description" name="description"
+                                       placeholder="例如: 连接至核心交换机，上行链路">
+                                <div class="help-text">接口描述信息，便于识别接口用途</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="mac_address" class="form-label">MAC地址</label>
+                                <input type="text" class="form-control" id="mac_address" name="mac_address"
+                                       placeholder="例如: 00:1A:2B:3C:4D:5E">
+                                <div class="help-text">接口的物理地址，格式: 00:1A:2B:3C:4D:5E</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="ip_address" class="form-label">IP地址</label>
+                                <input type="text" class="form-control" id="ip_address" name="ip_address"
+                                       placeholder="例如: 192.168.1.10">
+                                <div class="help-text">接口的IP地址（如果有）</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="subnet_mask" class="form-label">子网掩码</label>
+                                <input type="text" class="form-control" id="subnet_mask" name="subnet_mask"
+                                       placeholder="例如: 255.255.255.0">
+                                <div class="help-text">IP地址对应的子网掩码</div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="speed" class="form-label">接口速度</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="speed" name="speed" 
+                                           placeholder="1000">
+                                    <span class="input-group-text">Mbps</span>
+                                </div>
+                                <div class="help-text">接口速率，单位为Mbps</div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="mtu" class="form-label">MTU</label>
+                                <input type="number" class="form-control" id="mtu" name="mtu" 
+                                       placeholder="1500" value="1500">
+                                <div class="help-text">最大传输单元，默认1500字节</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 接口状态信息 -->
+                    <div class="form-section">
+                        <h5 class="section-title"><i class="fas fa-chart-line"></i> 接口状态信息</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="admin_status" class="form-label">管理状态</label>
+                                <select class="form-select" id="admin_status" name="admin_status">
+                                    <option value="up" selected>Up (启用)</option>
+                                    <option value="down">Down (禁用)</option>
+                                </select>
+                                <div class="help-text">接口的管理状态，即配置状态</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="oper_status" class="form-label">操作状态</label>
+                                <select class="form-select" id="oper_status" name="oper_status">
+                                    <option value="up" selected>Up (运行)</option>
+                                    <option value="down">Down (停止)</option>
+                                </select>
+                                <div class="help-text">接口的实际运行状态</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 邻居信息（可选） -->
+                    <div class="form-section">
+                        <h5 class="section-title"><i class="fas fa-link"></i> 邻居信息 (可选)</h5>
+                        <div class="neighbor-info">
+                            <p class="help-text mb-3">
+                                选择邻居设备后，将自动加载该设备的接口列表。保存接口时会同时创建连接关系。
+                            </p>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="neighbor_device_id" class="form-label">邻居设备</label>
+                                    <select class="form-select" id="neighbor_device_id" name="neighbor_device_id">
+                                        <option value="">无/未选择</option>
+                                        {% for dev in devices %}
+                                        <option value="{{ dev.id }}">{{ dev.name }} ({{ dev.management_ip or '无IP' }})</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="help-text">选择与该接口相连的邻居设备</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="neighbor_interface_id" class="form-label">邻居接口</label>
+                                    <select class="form-select" id="neighbor_interface_id" name="neighbor_interface_id">
+                                        <option value="">请先选择邻居设备</option>
+                                    </select>
+                                    <div class="help-text">选择邻居设备上的接口</div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="discovery_protocol" class="form-label">发现协议</label>
+                                    <select class="form-select" id="discovery_protocol" name="discovery_protocol">
+                                        <option value="">手动配置</option>
+                                        <option value="lldp">LLDP</option>
+                                        <option value="cdp">CDP</option>
+                                    </select>
+                                    <div class="help-text">用于发现邻居信息的协议（可选）</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 表单按钮 -->
+                    <div class="d-flex justify-content-between mt-4">
+                        <button type="button" class="btn btn-outline-secondary" onclick="clearForm()">
+                            <i class="fas fa-eraser"></i> 清空表单
+                        </button>
+                        <div>
+                            <button type="button" class="btn btn-secondary me-2" onclick="window.history.back()">
+                                <i class="fas fa-times"></i> 取消
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> 保存接口
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 操作提示 -->
+        <div class="alert alert-info mt-4">
+            <h5><i class="fas fa-lightbulb"></i> 操作提示</h5>
+            <ul class="mb-0">
+                <li>带 <span class="text-danger">*</span> 的字段为必填项</li>
+                <li>接口名称应遵循设备厂商的标准命名规范</li>
+                <li>选择邻居设备后，接口列表将自动加载；若未选择邻居，则仅创建接口</li>
+                <li>添加接口后，可继续在设备详情页查看接口列表</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        (function() {
+            // 获取 meta 标签中存储的 API 基础 URL
+            const apiBaseUrl = document.querySelector('meta[name="api-device-interfaces"]').getAttribute('content');
+            
+            const neighborDeviceSelect = document.getElementById('neighbor_device_id');
+            const neighborInterfaceSelect = document.getElementById('neighbor_interface_id');
+            
+            // 加载邻居接口列表
+            function loadNeighborInterfaces(deviceId) {
+                if (!deviceId) {
+                    neighborInterfaceSelect.innerHTML = '<option value="">请先选择邻居设备</option>';
+                    neighborInterfaceSelect.disabled = true;
+                    return;
+                }
+                
+                neighborInterfaceSelect.disabled = false;
+                neighborInterfaceSelect.innerHTML = '<option value="">加载中...</option>';
+                
+                // 构建完整的请求 URL（将占位符 0 替换为实际设备 ID）
+                const url = apiBaseUrl.replace('0', deviceId);
+                
+                fetch(url, {
+                    credentials: 'same-origin'  // 携带同源 cookie，确保登录认证
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    let options = '<option value="">请选择接口</option>';
+                    if (data.length === 0) {
+                        options = '<option value="">该设备暂无接口</option>';
+                    } else {
+                        data.forEach(iface => {
+                            options += `<option value="${iface.id}">${iface.name} (${iface.ip || '无IP'})</option>`;
+                        });
+                    }
+                    neighborInterfaceSelect.innerHTML = options;
+                })
+                .catch(error => {
+                    console.error('加载接口失败:', error);
+                    neighborInterfaceSelect.innerHTML = '<option value="">加载失败，请重试</option>';
+                });
+            }
+            
+            // 监听邻居设备变化
+            neighborDeviceSelect.addEventListener('change', function() {
+                loadNeighborInterfaces(this.value);
+            });
+            
+            // 如果页面加载时邻居设备已有选中值（比如表单验证失败返回），则自动加载
+            if (neighborDeviceSelect.value) {
+                loadNeighborInterfaces(neighborDeviceSelect.value);
+            }
+            
+            // 表单提交验证
+            document.getElementById('interfaceForm').addEventListener('submit', function(event) {
+                const deviceId = document.getElementById('device_id').value;
+                const interfaceName = document.getElementById('name').value.trim();
+                
+                if (!deviceId) {
+                    alert('请选择所属设备');
+                    event.preventDefault();
+                    return;
+                }
+                
+                if (!interfaceName) {
+                    alert('请输入接口名称');
+                    event.preventDefault();
+                    return;
+                }
+                
+                // MAC 地址格式验证（如果填写）
+                const macAddress = document.getElementById('mac_address').value.trim();
+                if (macAddress && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(macAddress)) {
+                    alert('MAC地址格式不正确，正确格式如: 00:1A:2B:3C:4D:5E');
+                    event.preventDefault();
+                    return;
+                }
+                
+                // IP 地址格式验证（如果填写）
+                const ipAddress = document.getElementById('ip_address').value.trim();
+                if (ipAddress && !/^(\d{1,3}\.){3}\d{1,3}$/.test(ipAddress)) {
+                    alert('IP地址格式不正确');
+                    event.preventDefault();
+                    return;
+                }
+                
+                // 验证邻居信息一致性（如果选择了邻居设备，必须选择接口）
+                const neighborDevice = neighborDeviceSelect.value;
+                const neighborInterface = neighborInterfaceSelect.value;
+                if (neighborDevice && !neighborInterface) {
+                    alert('选择了邻居设备，请选择对应的邻居接口');
+                    event.preventDefault();
+                    return;
+                }
+                
+                // 所有验证通过，允许提交
+            });
+            
+            // 清空表单函数
+            window.clearForm = function() {
+                if (confirm('确定要清空所有表单内容吗？')) {
+                    document.getElementById('interfaceForm').reset();
+                    // 重置邻居接口下拉状态
+                    neighborInterfaceSelect.innerHTML = '<option value="">请先选择邻居设备</option>';
+                    neighborInterfaceSelect.disabled = true;
+                }
+            };
+        })();
+    </script>
+</body>
+</html>

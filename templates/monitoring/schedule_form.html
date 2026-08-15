@@ -1,0 +1,203 @@
+{# templates/monitoring/schedule_form.html #}
+{% extends "base.html" %}
+
+{% block title %}编辑监控调度 - {{ schedule.name if schedule else '未知' }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            {% if not schedule %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> 无法加载调度信息，可能已被删除或不存在。
+                </div>
+                <div class="text-center">
+                    <a href="{{ url_for('monitoring.schedule_list') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> 返回列表
+                    </a>
+                </div>
+            {% else %}
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>编辑监控调度</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('monitoring.edit_schedule', schedule_id=schedule.id) }}" id="scheduleForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <!-- 基本信息 -->
+                        <div class="mb-3">
+                            <label for="name" class="form-label">调度名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ schedule.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" name="description" rows="2">{{ schedule.description or '' }}</textarea>
+                        </div>
+                        
+                        <!-- 监控类型 -->
+                        <div class="mb-3">
+                            <label for="monitor_type" class="form-label">监控类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="monitor_type" name="monitor_type" required>
+                                <optgroup label="可调度监控任务">
+                                    <option value="device_status" {% if schedule.monitor_type == 'device_status' %}selected{% endif %}>设备状态检测 (Ping/SNMP)</option>
+                                    <option value="interface_poll" {% if schedule.monitor_type == 'interface_poll' %}selected{% endif %}>接口状态轮询</option>
+                                    <option value="metrics" {% if schedule.monitor_type == 'metrics' %}selected{% endif %}>指标采集</option>
+                                    <option value="link_monitor" {% if schedule.monitor_type == 'link_monitor' %}selected{% endif %}>链路状态监控</option>
+                                    <option value="lldp_discovery" {% if schedule.monitor_type == 'lldp_discovery' %}selected{% endif %}>LLDP 拓扑发现</option>
+                                    <option value="alert_evaluate" {% if schedule.monitor_type == 'alert_evaluate' %}selected{% endif %}>告警规则评估</option>
+                                </optgroup>
+                                <optgroup label="兼容旧类型">
+                                    <option value="ping" {% if schedule.monitor_type == 'ping' %}selected{% endif %}>Ping (兼容)</option>
+                                    <option value="snmp" {% if schedule.monitor_type == 'snmp' %}selected{% endif %}>SNMP (兼容)</option>
+                                    <option value="ssh" {% if schedule.monitor_type == 'ssh' %}selected{% endif %}>SSH</option>
+                                    <option value="api" {% if schedule.monitor_type == 'api' %}selected{% endif %}>API</option>
+                                    <option value="custom" {% if schedule.monitor_type == 'custom' %}selected{% endif %}>自定义</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        
+                        <!-- 目标类型 -->
+                        <div class="mb-3">
+                            <label for="target_type" class="form-label">目标类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="target_type" name="target_type" required>
+                                <option value="all" {% if schedule.target_type == 'all' %}selected{% endif %}>所有设备</option>
+                                <option value="group" {% if schedule.target_type == 'group' %}selected{% endif %}>设备组</option>
+                                <option value="device" {% if schedule.target_type == 'device' %}selected{% endif %}>单个设备</option>
+                                <option value="subnet" {% if schedule.target_type == 'subnet' %}selected{% endif %}>子网</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 目标值（JSON格式） -->
+                        <div class="mb-3">
+                            <label for="target_value" class="form-label">目标值 (JSON)</label>
+                            <textarea class="form-control" id="target_value" name="target_value" rows="3" placeholder='如：["192.168.1.1", "192.168.1.2"] 或 {"group_id": 1}'>{{ schedule.target_value or '' }}</textarea>
+                            <div class="form-text">根据目标类型填写 JSON 格式的目标标识。</div>
+                        </div>
+                        
+                        <!-- 调度类型 -->
+                        <div class="mb-3">
+                            <label for="schedule_type" class="form-label">调度方式 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="schedule_type" name="schedule_type" required onchange="toggleScheduleFields()">
+                                <option value="interval" {% if schedule.schedule_type == 'interval' %}selected{% endif %}>间隔执行</option>
+                                <option value="cron" {% if schedule.schedule_type == 'cron' %}selected{% endif %}>Cron表达式</option>
+                                <option value="manual" {% if schedule.schedule_type == 'manual' %}selected{% endif %}>手动</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 间隔秒数（根据调度类型显示） -->
+                        <div class="mb-3" id="interval_field" style="{% if schedule.schedule_type != 'interval' %}display:none;{% endif %}">
+                            <label for="interval_seconds" class="form-label">间隔秒数</label>
+                            <input type="number" class="form-control" id="interval_seconds" name="interval_seconds" value="{{ schedule.interval_seconds or 60 }}" min="1">
+                        </div>
+                        
+                        <!-- Cron表达式（根据调度类型显示） -->
+                        <div class="mb-3" id="cron_field" style="{% if schedule.schedule_type != 'cron' %}display:none;{% endif %}">
+                            <label for="cron_expression" class="form-label">Cron表达式</label>
+                            <input type="text" class="form-control" id="cron_expression" name="cron_expression" value="{{ schedule.cron_expression or '' }}" placeholder="如：0 */5 * * *">
+                            <div class="form-text">标准 Cron 表达式（分 时 日 月 周）</div>
+                        </div>
+                        
+                        <!-- 时间窗口 -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="start_time" class="form-label">开始时间</label>
+                                <input type="time" class="form-control" id="start_time" name="start_time" value="{{ schedule.start_time.strftime('%H:%M') if schedule.start_time else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="end_time" class="form-label">结束时间</label>
+                                <input type="time" class="form-control" id="end_time" name="end_time" value="{{ schedule.end_time.strftime('%H:%M') if schedule.end_time else '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="weekdays" class="form-label">执行星期</label>
+                                <input type="text" class="form-control" id="weekdays" name="weekdays" value="{{ schedule.weekdays or '' }}" placeholder="如：1,2,3,4,5">
+                                <div class="form-text">1=周一，7=周日，留空表示每天</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 额外配置区域：使用 JSON 编辑，提交时自动转换为 config_* 字段 -->
+                        <div class="mb-3">
+                            <label for="config_json" class="form-label">额外配置 (JSON)</label>
+                            <textarea class="form-control" id="config_json" rows="4" placeholder='{"timeout": 5, "retries": 3}'>{{ schedule.get_config() | tojson(indent=2) if schedule.config else '{}' }}</textarea>
+                            <div class="form-text">以 JSON 格式输入配置参数，保存后将自动分解为 config_* 字段提交。</div>
+                        </div>
+                        
+                        <!-- 启用状态 -->
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" {% if schedule.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="enabled">
+                                启用
+                            </label>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('monitoring.schedule_list') }}" class="btn btn-secondary">取消</a>
+                            <button type="submit" class="btn btn-primary">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 仅当 schedule 存在时执行相关脚本（因为隐藏字段需要）
+    {% if schedule %}
+    // 根据调度类型显示/隐藏对应字段
+    function toggleScheduleFields() {
+        const scheduleType = document.getElementById('schedule_type').value;
+        const intervalField = document.getElementById('interval_field');
+        const cronField = document.getElementById('cron_field');
+        
+        if (scheduleType === 'interval') {
+            intervalField.style.display = 'block';
+            cronField.style.display = 'none';
+            document.getElementById('cron_expression').required = false;
+            document.getElementById('interval_seconds').required = true;
+        } else if (scheduleType === 'cron') {
+            intervalField.style.display = 'none';
+            cronField.style.display = 'block';
+            document.getElementById('interval_seconds').required = false;
+            document.getElementById('cron_expression').required = true;
+        } else {
+            intervalField.style.display = 'none';
+            cronField.style.display = 'none';
+            document.getElementById('interval_seconds').required = false;
+            document.getElementById('cron_expression').required = false;
+        }
+    }
+    
+    // 表单提交前处理 config_json → config_* 字段
+    document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+        const configJson = document.getElementById('config_json').value;
+        if (configJson.trim()) {
+            try {
+                const config = JSON.parse(configJson);
+                // 为每个顶级键创建隐藏输入
+                for (const [key, value] of Object.entries(config)) {
+                    const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'config_' + key;
+                    hiddenInput.value = stringValue;
+                    this.appendChild(hiddenInput);
+                }
+            } catch (err) {
+                alert('配置 JSON 格式错误：' + err.message);
+                e.preventDefault(); // 阻止提交
+                return;
+            }
+        }
+    });
+
+    // 页面加载时初始化字段可见性
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleScheduleFields();
+    });
+    {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}变更影响模拟{% endblock %}
+{% block page_title %}变更影响模拟{% endblock %}
+{% block page_subtitle %}先算影响再实施 · 变更 {{ change.change_number }}{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('maintenance.change_detail', change_id=change.id) }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> 返回变更</a>
+<a href="{{ url_for('itsm_adv.change_impact', change_id=change.id) }}" class="btn btn-primary btn-sm"><i class="fas fa-sync"></i> 重新模拟</a>
+{% endblock %}
+
+{% block content %}
+<!-- 风险摘要 -->
+<div class="row mb-4">
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="mb-1 text-{% if result.risk_level == 'high' %}danger{% elif result.risk_level == 'medium' %}warning{% else %}success{% endif %}">{{ result.risk_level|upper }}</h4>
+    <small>风险级别</small></div></div></div>
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="mb-1">{{ result.risk_score }}</h4><small>风险评分</small></div></div></div>
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="mb-1">{{ result.affected_user_count }}</h4><small>估算影响用户</small></div></div></div>
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="mb-1">{{ '%.0f'|format(result.downtime_estimate_min) }}</h4><small>预估停机(分钟)</small></div></div></div>
+</div>
+
+<div class="alert alert-{% if result.risk_level == 'high' %}danger{% elif result.risk_level == 'medium' %}warning{% else %}success{% endif %}">
+  <i class="fas fa-info-circle"></i> {{ result.summary }}
+  级联影响设备 <strong>{{ result.cascade_count }}</strong> 台（直接 {{ result.direct_device_ids|length }} → 合计 {{ result.impacted_device_ids|length }}）。
+</div>
+
+<div class="row">
+  <div class="col-md-6"><div class="card mb-4"><div class="card-header"><h6 class="mb-0">直接受影响设备（变更明确关联）</h6></div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0"><tbody>
+      {% for d in direct_devices %}
+        <tr><td>{{ d.name }}</td><td>{{ d.ip_address or '-' }}</td><td>{{ d.status or '-' }}</td></tr>
+      {% else %}<tr><td colspan="3" class="text-center text-muted py-3">未直接关联设备，请在变更中填写受影响设备</td></tr>{% endfor %}
+      </tbody></table>
+    </div></div></div>
+
+  <div class="col-md-6"><div class="card mb-4"><div class="card-header"><h6 class="mb-0">级联受影响设备（依赖传播）</h6></div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0"><tbody>
+      {% for d in impacted_devices %}
+        {% set is_direct = d.id in result.direct_device_ids %}
+        <tr class="{% if is_direct %}table-light{% endif %}">
+          <td>{{ d.name }}{% if is_direct %} <span class="badge bg-secondary">直接</span>{% endif %}</td>
+          <td>{{ d.ip_address or '-' }}</td><td>{{ d.status or '-' }}</td>
+        </tr>
+      {% else %}<tr><td colspan="3" class="text-center text-muted py-3">无级联影响（无 CMDB 依赖）</td></tr>{% endfor %}
+      </tbody></table>
+    </div></div></div>
+</div>
+
+<div class="card mb-4"><div class="card-header"><h6 class="mb-0">受影响服务目录</h6></div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0"><tbody>
+    {% for s in impacted_services %}
+      <tr><td>{{ s.name }}</td><td>{{ s.category or '-' }}</td>
+        <td>{% if s.sla_policy %}{{ s.sla_policy.name }}{% else %}-{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="text-center text-muted py-3">映射设备未关联任何服务目录</td></tr>{% endfor %}
+    </tbody></table>
+  </div></div>
+
+{% if last %}
+<div class="text-muted small">最近快照模拟于 {{ last.simulated_at.strftime('%Y-%m-%d %H:%M') if last.simulated_at else '-' }}</div>
+{% endif %}
+{% endblock %}

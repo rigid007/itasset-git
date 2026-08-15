@@ -1,0 +1,894 @@
+{% extends "base.html" %}
+
+{% block title %}接口监控 - 网络设备监控系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/interface-monitor.css') }}">
+<style>
+    .traffic-in { color: #28a745; }
+    .traffic-out { color: #dc3545; }
+    .progress { background-color: #e9ecef; }
+    .interface-row td { vertical-align: middle; }
+    #interfaceChartContainer { height: 300px; }
+    #historyChartContainer { height: 300px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-network-wired text-primary me-2"></i>接口监控
+            </h1>
+            <p class="text-muted mb-0">监控网络设备接口状态、流量和性能</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="refreshInterfaceData()">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+            {% if device_id %}
+            <a href="{{ url_for('monitoring.interface_monitor') }}" class="btn btn-outline-primary">
+                <i class="fas fa-list me-2"></i>查看所有设备
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 设备选择卡片 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">设备选择</h6>
+        </div>
+        <div class="card-body">
+            <form id="deviceSelectForm" class="row g-3" method="GET" action="{{ url_for('monitoring.interface_monitor') }}">
+                <div class="col-md-6">
+                    <label for="deviceSelect" class="form-label">选择设备</label>
+                    <select class="form-select" id="deviceSelect" name="device_id">
+                        <option value="">-- 请选择设备 --</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                            {{ device.name }} ({{ device.management_ip or device.ip_address }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>查看接口
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if device_id %}
+        {% if interfaces %}
+        <!-- 接口监控主内容 -->
+        <div class="row">
+            <!-- 接口列表 -->
+            <div class="col-lg-8">
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            接口列表 ({{ interfaces|length }} 个接口)
+                        </h6>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" onclick="toggleInterfaceFilter()">
+                                <i class="fas fa-filter me-1"></i>筛选
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="exportInterfaceData()">
+                                <i class="fas fa-download me-1"></i>导出
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- 接口筛选器 -->
+                        <div id="interfaceFilter" class="mb-3" style="display: none;">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <select class="form-select form-select-sm" id="statusFilter">
+                                        <option value="">所有状态</option>
+                                        <option value="up">运行中</option>
+                                        <option value="down">已关闭</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control form-control-sm" id="nameFilter" placeholder="接口名称">
+                                </div>
+                                <div class="col-md-4">
+                                    <button class="btn btn-sm btn-secondary" onclick="applyInterfaceFilter()">应用</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearInterfaceFilter()">清除</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 接口表格 -->
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="interfaceTable">
+                                <thead>
+                                    <tr>
+                                        <th>接口名称</th>
+                                        <th>IP地址</th>
+                                        <th>管理状态</th>
+                                        <th>运行状态</th>
+                                        <th>入站累计</th>
+                                        <th>出站累计</th>
+                                        <th>入站速率</th>
+                                        <th>出站速率</th>
+                                        <th>带宽使用率</th>
+                                        <th>最后更新</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for interface in interfaces %}
+                                    {% set stats = interface_stats.get(interface.id, {}) %}
+                                    <tr class="interface-row" 
+                                        data-interface-id="{{ interface.id }}"
+                                        data-status="{{ stats.get('oper_status', 'unknown') }}"
+                                        data-name="{{ interface.name }}">
+                                        <td>
+                                            <strong>{{ interface.name }}</strong>
+                                            {% if interface.description %}
+                                            <br>
+                                            <small class="text-muted">{{ interface.description|truncate(30) }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if interface.ip_address %}
+                                            <code>{{ interface.ip_address }}</code>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% set admin_status = stats.get('admin_status', 'unknown') %}
+                                            <span class="badge bg-{{ 'success' if admin_status == 'up' else 'danger' if admin_status == 'down' else 'secondary' }}">
+                                                {{ admin_status|upper }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% set oper_status = stats.get('oper_status', 'unknown') %}
+                                            <span class="badge bg-{{ 'success' if oper_status == 'up' else 'danger' if oper_status == 'down' else 'warning' }}">
+                                                {{ oper_status|upper }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if stats.get('bytes_in') %}
+                                            <span class="traffic-in">{{ stats.bytes_in|filesizeformat }}</span>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if stats.get('bytes_out') %}
+                                            <span class="traffic-out">{{ stats.bytes_out|filesizeformat }}</span>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if stats.get('speed_in') %}
+                                            <span class="traffic-in">{{ stats.speed_in|format_speed }}</span>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if stats.get('speed_out') %}
+                                            <span class="traffic-out">{{ stats.speed_out|format_speed }}</span>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if stats.get('bandwidth_usage') %}
+                                            <div class="progress" style="height: 6px;">
+                                                <div class="progress-bar bg-{{ 'success' if stats.bandwidth_usage < 50 else 'warning' if stats.bandwidth_usage < 80 else 'danger' }}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ stats.bandwidth_usage|default(0) }}%"
+                                                     aria-valuenow="{{ stats.bandwidth_usage|default(0) }}" aria-valuemin="0" aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            <small>{{ stats.bandwidth_usage|default(0)|round(1) }}%</small>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if stats.get('last_updated') %}
+                                            <small data-bs-toggle="tooltip" title="{{ stats.last_updated }}">
+                                                {{ stats.last_updated|time_ago }}
+                                            </small>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-info" onclick="viewInterfaceDetails({{ interface.id }})">
+                                                    <i class="fas fa-info-circle"></i>
+                                                </button>
+                                                <button class="btn btn-outline-warning" onclick="showInterfaceHistory({{ interface.id }}, '{{ interface.name }}')">
+                                                    <i class="fas fa-chart-line"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 接口历史数据图表 -->
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3">
+                        <h6 class="m-0 font-weight-bold text-primary">接口流量趋势</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="interfaceChartContainer">
+                            <canvas id="interfaceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 侧边栏 - 设备信息和连接关系 -->
+            <div class="col-lg-4">
+                <!-- 设备信息卡片 -->
+                {% if device %}
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3">
+                        <h6 class="m-0 font-weight-bold text-primary">设备信息</h6>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="mb-3">{{ device.name }}</h5>
+                        <div class="mb-2">
+                            <small class="text-muted">管理IP:</small>
+                            <div>{{ device.management_ip or '-' }}</div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">设备类型:</small>
+                            <div>{{ device.device_type or '-' }}</div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">品牌/型号:</small>
+                            <div>{{ device.brand or '-' }} / {{ device.model or '-' }}</div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">状态:</small>
+                            <div>
+                                <span class="badge bg-{{ 'success' if device.status == 'active' else 'danger' if device.status == 'down' else 'warning' }}">
+                                    {{ device.status|default('unknown')|upper }}
+                                </span>
+                            </div>
+                        </div>
+                        <hr>
+                        <a href="{{ url_for('device.device_detail', id=device.id) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-external-link-alt me-1"></i>查看设备详情
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 连接关系卡片 -->
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold text-primary">连接关系</h6>
+                        <span class="badge bg-primary">{{ connections|length }}</span>
+                    </div>
+                    <div class="card-body">
+                        {% if connections %}
+                        <div class="list-group">
+                            {% for conn in connections %}
+                            <div class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">
+                                        <i class="fas fa-exchange-alt text-primary me-2"></i>
+                                        {{ conn.source_port or '未知端口' }}
+                                    </h6>
+                                    <small class="text-muted">{{ conn.connection_type or '物理连接' }}</small>
+                                </div>
+                                <p class="mb-1">
+                                    <small class="text-muted">连接到:</small>
+                                    {% if conn.target_device %}
+                                    {{ conn.target_device.name }} ({{ conn.target_port }})
+                                    {% else %}
+                                    {{ conn.target_port or '未知设备' }}
+                                    {% endif %}
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <small>
+                                        <span class="badge bg-{{ 'success' if conn.link_status == 'active' else 'danger' if conn.link_status == 'down' else 'warning' }}">
+                                            {{ conn.link_status|default('unknown')|upper }}
+                                        </span>
+                                    </small>
+                                    <small class="text-muted">
+                                        <i class="fas fa-bolt me-1"></i>
+                                        {% if conn.bandwidth %}
+                                        {{ (conn.bandwidth / 1000000)|round(2) }} Mbps
+                                        {% else %}
+                                        未知带宽
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-unlink fa-2x text-muted mb-3"></i>
+                            <p class="text-muted mb-0">未发现连接关系</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- 接口状态统计卡片 -->
+                <div class="card shadow">
+                    <div class="card-header py-3">
+                        <h6 class="m-0 font-weight-bold text-primary">接口状态统计</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="h4 text-success" id="adminUpCount">
+                                    {% set admin_up_count = interfaces|selectattr('admin_status', 'equalto', 'up')|list|length %}
+                                    {{ admin_up_count }}
+                                </div>
+                                <div class="text-muted">管理开启</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="h4 text-primary" id="operUpCount">
+                                    {% set oper_up_count = interfaces|selectattr('oper_status', 'equalto', 'up')|list|length %}
+                                    {{ oper_up_count }}
+                                </div>
+                                <div class="text-muted">运行正常</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="h4 text-danger" id="operDownCount">
+                                    {% set oper_down_count = interfaces|selectattr('oper_status', 'equalto', 'down')|list|length %}
+                                    {{ oper_down_count }}
+                                </div>
+                                <div class="text-muted">运行异常</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="text-center">
+                            <small class="text-muted" id="lastUpdateTime">
+                                最后更新: 
+                                {% if interface_stats %}
+                                    {% set latest_update = interface_stats.values()|map(attribute='last_updated')|sort(reverse=true)|first %}
+                                    {% if latest_update %}
+                                        {{ latest_update|time_ago }}
+                                    {% else %}
+                                        无数据
+                                    {% endif %}
+                                {% else %}
+                                    无数据
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- 没有接口数据时的显示 -->
+        <div class="card shadow mb-4">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-network-wired fa-4x text-muted mb-4"></i>
+                <h4 class="text-muted mb-3">未找到接口数据</h4>
+                <p class="text-muted mb-4">该设备没有配置接口或接口数据尚未采集</p>
+                <div class="mt-4">
+                    <button class="btn btn-primary me-2" onclick="manualDiscoverInterfaces({{ device_id }})">
+                        <i class="fas fa-search me-2"></i>发现接口
+                    </button>
+                    <a href="{{ url_for('device.device_detail', id=device_id) }}" class="btn btn-outline-primary">
+                        <i class="fas fa-cog me-2"></i>配置设备
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% else %}
+    <!-- 未选择设备时的提示 -->
+    <div class="card shadow mb-4">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-mouse-pointer fa-4x text-muted mb-4"></i>
+            <h4 class="text-muted mb-3">请选择设备</h4>
+            <p class="text-muted mb-4">从上方选择设备以查看其接口监控数据</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 接口详情模态框 (Bootstrap 5) -->
+<div class="modal fade" id="interfaceDetailModal" tabindex="-1" aria-labelledby="interfaceDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="interfaceDetailModalLabel">接口详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="interfaceDetailContent">
+                <!-- 内容将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 接口历史数据模态框 (Bootstrap 5) -->
+<div class="modal fade" id="interfaceHistoryModal" tabindex="-1" aria-labelledby="interfaceHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="interfaceHistoryModalLabel">接口历史数据</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="historyChartContainer">
+                    <canvas id="historyChart"></canvas>
+                </div>
+                <div class="mt-4" id="historyTableContainer">
+                    <!-- 历史数据表格将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 引入 Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<!-- 可选的自定义 JS -->
+<script src="{{ url_for('static', filename='js/interface-monitor.js') }}"></script>
+
+<script>
+    // CSRF 令牌（从 meta 标签获取）
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    // 当前设备ID（从模板变量注入）
+    const currentDeviceId = {{ device_id|default('null') }};
+    let refreshInterval = null;
+    let interfaceChart = null;      // 设备级流量趋势图实例
+    let historyChartInstance = null; // 历史模态框图表实例
+
+    // ========== 辅助函数 ==========
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function formatSpeed(bps) {
+        if (!bps && bps !== 0) return '-';
+        if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps';
+        if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
+        if (bps >= 1e3) return (bps / 1e3).toFixed(2) + ' Kbps';
+        return bps + ' bps';
+    }
+    function timeAgo(date) {
+        // 如果是字符串，先按UTC解析（关键修复）
+        if (typeof date === 'string') {
+            // 处理格式：2026-03-08T15:36:22.022605 → 拼接Z表示UTC时间
+            const utcDateStr = date.endsWith('Z') ? date : `${date}Z`;
+            date = new Date(utcDateStr);
+        }
+        
+        // 校验时间有效性
+        if (isNaN(date.getTime())) return '未知时间';
+        
+        const seconds = Math.floor((new Date() - date) / 1000);
+        let interval = seconds / 31536000;
+        if (interval > 1) return Math.floor(interval) + '年前';
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + '个月前';
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + '天前';
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + '小时前';
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + '分钟前';
+        return '刚刚';
+    }
+
+
+
+    // ========== 初始化 ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // 如果选择了设备且有接口，加载真实数据
+        if (currentDeviceId && {{ interfaces|length }} > 0) {
+            loadInterfaceTrendChart();      // 加载趋势图
+            startAutoRefresh();              // 启动定时刷新
+        }
+    });
+
+    // ========== 自动刷新 ==========
+    function startAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+            loadInterfaceStats();
+        }, 30000); // 30秒
+    }
+
+    function stopAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    }
+
+    // 加载接口最新统计数据并更新表格
+    function loadInterfaceStats() {
+        if (!currentDeviceId) return;
+        fetch(`/monitoring/api/devices/${currentDeviceId}/interfaces/latest`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Received stats:', data);
+                updateInterfaceTable(data);
+                updateSummaryCards(data);
+            })
+            .catch(error => console.error('刷新接口数据失败:', error));
+    }
+
+    // 更新表格行内容（注意列顺序：1接口名,2IP,3管理状态,4运行状态,5入站累计,6出站累计,7入站速率,8出站速率,9带宽使用率,10最后更新,11操作）
+    function updateInterfaceTable(statsList) {
+        statsList.forEach(stat => {
+            const row = document.querySelector(`tr[data-interface-id="${stat.interface_id}"]`);
+            if (!row) return;
+
+            // 更新管理状态徽章（第3列）
+            const adminBadge = row.querySelector('td:nth-child(3) .badge');
+            if (adminBadge) {
+                adminBadge.className = `badge bg-${stat.admin_status === 'up' ? 'success' : (stat.admin_status === 'down' ? 'danger' : 'secondary')}`;
+                adminBadge.textContent = (stat.admin_status || 'unknown').toUpperCase();
+            }
+
+            // 更新运行状态徽章（第4列）
+            const operBadge = row.querySelector('td:nth-child(4) .badge');
+            if (operBadge) {
+                operBadge.className = `badge bg-${stat.oper_status === 'up' ? 'success' : (stat.oper_status === 'down' ? 'danger' : 'warning')}`;
+                operBadge.textContent = (stat.oper_status || 'unknown').toUpperCase();
+            }
+
+            // 更新入站累计（第5列）
+            const inCell = row.querySelector('td:nth-child(5)');
+            if (inCell) {
+                inCell.innerHTML = stat.bytes_in ? `<span class="traffic-in">${formatBytes(stat.bytes_in)}</span>` : '<span class="text-muted">-</span>';
+            }
+
+            // 更新出站累计（第6列）
+            const outCell = row.querySelector('td:nth-child(6)');
+            if (outCell) {
+                outCell.innerHTML = stat.bytes_out ? `<span class="traffic-out">${formatBytes(stat.bytes_out)}</span>` : '<span class="text-muted">-</span>';
+            }
+
+            // 更新入站速率（第7列）
+            const speedInCell = row.querySelector('td:nth-child(7)');
+            if (speedInCell) {
+                speedInCell.innerHTML = stat.speed_in ? `<span class="traffic-in">${formatSpeed(stat.speed_in)}</span>` : '<span class="text-muted">-</span>';
+            }
+
+            // 更新出站速率（第8列）
+            const speedOutCell = row.querySelector('td:nth-child(8)');
+            if (speedOutCell) {
+                speedOutCell.innerHTML = stat.speed_out ? `<span class="traffic-out">${formatSpeed(stat.speed_out)}</span>` : '<span class="text-muted">-</span>';
+            }
+
+            // 更新带宽使用率（第9列）
+            const usageCell = row.querySelector('td:nth-child(9)');
+            if (usageCell && stat.bandwidth_usage !== undefined) {
+                const usage = stat.bandwidth_usage;
+                const barColor = usage < 50 ? 'success' : (usage < 80 ? 'warning' : 'danger');
+                usageCell.innerHTML = `
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-${barColor}" role="progressbar" style="width: ${usage}%" aria-valuenow="${usage}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <small>${usage.toFixed(1)}%</small>
+                `;
+            } else {
+                usageCell.innerHTML = '<span class="text-muted">-</span>';
+            }
+
+            // 更新最后更新时间（第10列）
+            const updateCell = row.querySelector('td:nth-child(10)');
+            if (updateCell && stat.last_updated) {
+                // 关键修复：拼接Z标识UTC时间，确保解析正确
+                const utcDateStr = stat.last_updated.endsWith('Z') ? stat.last_updated : `${stat.last_updated}Z`;
+                const date = new Date(utcDateStr);
+                // tooltip显示本地时区时间（用户易理解）
+                const localTimeStr = date.toLocaleString('zh-CN', { 
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+                updateCell.innerHTML = `<small data-bs-toggle="tooltip" title="${localTimeStr}">${timeAgo(date)}</small>`;
+                // 重新初始化该单元格的tooltip
+                new bootstrap.Tooltip(updateCell.querySelector('small'));
+            } else {
+                updateCell.innerHTML = '<span class="text-muted">-</span>';
+            }
+
+            // 更新行数据属性（用于筛选）
+            row.setAttribute('data-status', stat.oper_status || 'unknown');
+        });
+    }
+
+    // 更新侧边栏统计卡片
+    function updateSummaryCards(statsList) {
+        let adminUp = 0, operUp = 0, operDown = 0;
+        statsList.forEach(stat => {
+            if (stat.admin_status === 'up') adminUp++;
+            if (stat.oper_status === 'up') operUp++;
+            if (stat.oper_status === 'down') operDown++;
+        });
+
+        document.getElementById('adminUpCount').textContent = adminUp;
+        document.getElementById('operUpCount').textContent = operUp;
+        document.getElementById('operDownCount').textContent = operDown;
+
+        const latest = statsList.reduce((max, stat) => {
+            if (!stat.last_updated) return max;
+            // 关键修复：按UTC解析时间
+            const utcDateStr = stat.last_updated.endsWith('Z') ? stat.last_updated : `${stat.last_updated}Z`;
+            const currentDate = new Date(utcDateStr);
+            return (!max || currentDate > new Date(max)) ? utcDateStr : max;
+        }, null);
+        if (latest) {
+            document.getElementById('lastUpdateTime').innerHTML = `最后更新: ${timeAgo(latest)}`;
+}
+    }
+
+    // 加载设备级流量趋势图（真实数据）
+    function loadInterfaceTrendChart() {
+        const ctx = document.getElementById('interfaceChart')?.getContext('2d');
+        if (!ctx) return;
+
+        fetch(`/monitoring/api/devices/${currentDeviceId}/interface-trend?hours=6`)
+            .then(response => response.json())
+            .then(data => {
+                if (interfaceChart) interfaceChart.destroy();
+                interfaceChart = new Chart(ctx, {
+                    type: 'line',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: '流量 (Mbps)' } } }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('加载趋势图失败:', error);
+                ctx.canvas.parentNode.innerHTML = '<div class="alert alert-info">暂无趋势数据</div>';
+            });
+    }
+
+    // ========== 页面操作函数 ==========
+    function refreshInterfaceData() {
+        if (currentDeviceId) {
+            loadInterfaceStats();
+        }
+    }
+
+    function toggleInterfaceFilter() {
+        const filterDiv = document.getElementById('interfaceFilter');
+        filterDiv.style.display = filterDiv.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function applyInterfaceFilter() {
+        const statusFilter = document.getElementById('statusFilter').value;
+        const nameFilter = document.getElementById('nameFilter').value.toLowerCase();
+
+        document.querySelectorAll('.interface-row').forEach(row => {
+            const status = row.getAttribute('data-status');
+            const name = row.getAttribute('data-name').toLowerCase();
+
+            let show = true;
+            if (statusFilter && status !== statusFilter) show = false;
+            if (nameFilter && !name.includes(nameFilter)) show = false;
+
+            row.style.display = show ? '' : 'none';
+        });
+    }
+
+    function clearInterfaceFilter() {
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('nameFilter').value = '';
+        document.querySelectorAll('.interface-row').forEach(row => {
+            row.style.display = '';
+        });
+    }
+
+    function viewInterfaceDetails(interfaceId) {
+        fetch(`/monitoring/api/interfaces/${interfaceId}`)
+            .then(response => response.json())
+            .then(data => {
+                let content = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>基本信息</h6>
+                            <dl class="row">
+                                <dt class="col-sm-4">接口名称:</dt>
+                                <dd class="col-sm-8">${data.name || '-'}</dd>
+                                <dt class="col-sm-4">描述:</dt>
+                                <dd class="col-sm-8">${data.description || '-'}</dd>
+                                <dt class="col-sm-4">MAC地址:</dt>
+                                <dd class="col-sm-8">${data.mac_address || '-'}</dd>
+                                <dt class="col-sm-4">IP地址:</dt>
+                                <dd class="col-sm-8">${data.ip_address || '-'}</dd>
+                                <dt class="col-sm-4">子网掩码:</dt>
+                                <dd class="col-sm-8">${data.subnet_mask || '-'}</dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>状态信息</h6>
+                            <dl class="row">
+                                <dt class="col-sm-4">管理状态:</dt>
+                                <dd class="col-sm-8">
+                                    <span class="badge bg-${data.admin_status === 'up' ? 'success' : 'danger'}">
+                                        ${(data.admin_status || '').toUpperCase()}
+                                    </span>
+                                </dd>
+                                <dt class="col-sm-4">运行状态:</dt>
+                                <dd class="col-sm-8">
+                                    <span class="badge bg-${data.oper_status === 'up' ? 'success' : 'danger'}">
+                                        ${(data.oper_status || '').toUpperCase()}
+                                    </span>
+                                </dd>
+                                <dt class="col-sm-4">速度:</dt>
+                                <dd class="col-sm-8">${data.speed ? formatSpeed(data.speed) : '-'}</dd>
+                                <dt class="col-sm-4">MTU:</dt>
+                                <dd class="col-sm-8">${data.mtu || '-'}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                `;
+                if (data.neighbor_device_id || data.neighbor_interface) {
+                    content += `
+                        <hr>
+                        <h6>邻居信息</h6>
+                        <dl class="row">
+                            <dt class="col-sm-4">邻居设备:</dt>
+                            <dd class="col-sm-8">${data.neighbor_device ? data.neighbor_device.name : (data.neighbor_device_id || '-')}</dd>
+                            <dt class="col-sm-4">邻居接口:</dt>
+                            <dd class="col-sm-8">${data.neighbor_interface || '-'}</dd>
+                            <dt class="col-sm-4">邻居IP:</dt>
+                            <dd class="col-sm-8">${data.neighbor_ip || '-'}</dd>
+                        </dl>
+                    `;
+                }
+                document.getElementById('interfaceDetailContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('interfaceDetailModal')).show();
+            })
+            .catch(error => {
+                console.error('Error fetching interface details:', error);
+                alert('获取接口详情失败');
+            });
+    }
+
+    function showInterfaceHistory(interfaceId, interfaceName) {
+        fetch(`/monitoring/api/interfaces/${interfaceId}/history?hours=24`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('interfaceHistoryModalLabel').textContent = `接口历史数据 - ${interfaceName}`;
+                renderHistoryChart(data);
+                renderHistoryTable(data);
+                new bootstrap.Modal(document.getElementById('interfaceHistoryModal')).show();
+            })
+            .catch(error => {
+                console.error('获取接口历史数据失败:', error);
+                alert('获取历史数据失败');
+            });
+    }
+
+    function renderHistoryChart(data) {
+        const ctx = document.getElementById('historyChart')?.getContext('2d');
+        if (!ctx) return;
+        if (historyChartInstance) historyChartInstance.destroy();
+
+        const timestamps = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+        const bytesIn = data.map(d => (d.bytes_in / 1024 / 1024).toFixed(2));
+        const bytesOut = data.map(d => (d.bytes_out / 1024 / 1024).toFixed(2));
+
+        historyChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [
+                    { label: '入站累计 (MB)', data: bytesIn, borderColor: 'rgb(40, 167, 69)', backgroundColor: 'rgba(40, 167, 69, 0.1)', tension: 0.3 },
+                    { label: '出站累计 (MB)', data: bytesOut, borderColor: 'rgb(220, 53, 69)', backgroundColor: 'rgba(220, 53, 69, 0.1)', tension: 0.3 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top' } },
+                scales: { y: { beginAtZero: true, title: { display: true, text: '流量 (MB)' } } }
+            }
+        });
+    }
+
+    function renderHistoryTable(data) {
+        let html = `
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>入站累计</th>
+                        <th>出站累计</th>
+                        <th>入站速率</th>
+                        <th>出站速率</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        data.forEach(record => {
+            html += `
+                <tr>
+                    <td>${new Date(record.timestamp).toLocaleString()}</td>
+                    <td>${record.bytes_in ? formatBytes(record.bytes_in) : '-'}</td>
+                    <td>${record.bytes_out ? formatBytes(record.bytes_out) : '-'}</td>
+                    <td>${record.speed_in ? formatSpeed(record.speed_in) : '-'}</td>
+                    <td>${record.speed_out ? formatSpeed(record.speed_out) : '-'}</td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table>';
+        document.getElementById('historyTableContainer').innerHTML = html;
+    }
+
+    function exportInterfaceData() {
+        if (!{{ device_id|default('false') }}) {
+            alert('请先选择设备');
+            return;
+        }
+        window.location.href = `/monitoring/api/export/interfaces?device_id={{ device_id }}&format=csv`;
+    }
+
+    function manualDiscoverInterfaces(deviceId) {
+        if (confirm('确定要手动发现该设备的接口吗？')) {
+            fetch(`/monitoring/api/devices/${deviceId}/discover-interfaces`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('接口发现任务已启动，请稍后刷新页面查看结果');
+                } else {
+                    alert('接口发现失败: ' + (data.message || '未知错误'));
+                }
+            })
+            .catch(error => {
+                console.error('Error discovering interfaces:', error);
+                alert('请求失败，请检查网络连接');
+            });
+        }
+    }
+</script>
+{% endblock %}

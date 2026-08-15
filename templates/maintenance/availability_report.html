@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}真实可用率报表{% endblock %}
+{% block page_title %}真实可用率报表{% endblock %}
+{% block page_subtitle %}对接监控/设备在线状态(DeviceMonitorLog)，替代基于工单时长的代理算法{% endblock %}
+{% block header_actions %}
+<div class="btn-group btn-group-sm me-2" role="group">
+  {% for d in [7, 30, 90] %}
+  <a href="{{ url_for('itsm_adv.availability_report', days=d) }}"
+     class="btn btn-outline-secondary {% if days == d %}active{% endif %}">{{ d }}天</a>
+  {% endfor %}
+</div>
+{% if has_permission(current_user, 'availability:collect') %}
+<form method="POST" action="{{ url_for('itsm_adv.availability_collect') }}" class="d-inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="days" value="{{ days }}">
+  <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-sync"></i> 采集当前窗口</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-info">
+  <i class="fas fa-info-circle"></i> 可用率 = 1 − 总停机时长 / 统计窗长。设备级由 <code>DeviceMonitorLog</code> 在线/离线跃迁推算；
+  服务级对映射设备做「任一设备宕机即服务不可用」并集。未映射设备的服务暂无真实数据，请先在服务目录中关联设备。
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-6"><div class="card h-100"><div class="card-header"><h6 class="mb-0">设备可用率（按低到高）</h6></div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-light"><tr><th>设备</th><th>IP</th><th>可用率</th><th>停机(分)</th></tr></thead>
+        <tbody>
+        {% for r in device_recs %}
+          <tr>
+            <td>{{ r.device.name if r.device else '#'+r.device_id|string }}</td>
+            <td>{{ r.device.ip_address if r.device and r.device.ip_address else '-' }}</td>
+            <td>
+              {% set pct = r.availability_pct %}
+              <span class="badge {% if pct >= 99.9 %}bg-success{% elif pct >= 99 %}bg-info{% elif pct >= 95 %}bg-warning{% else %}bg-danger{% endif %}">
+                {{ '%.2f'|format(pct) }}%</span>
+            </td>
+            <td>{{ '%.1f'|format(r.down_minutes) }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="text-center text-muted py-4">本窗口内无监控日志，请先运行链路/设备监控</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div></div></div>
+
+  <div class="col-md-6"><div class="card h-100"><div class="card-header"><h6 class="mb-0">服务目录可用率</h6></div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-light"><tr><th>服务</th><th>可用率</th><th>停机(分)</th><th>数据</th></tr></thead>
+        <tbody>
+        {% for r in service_recs %}
+          <tr>
+            <td>{{ r.service_catalog.name if r.service_catalog else '#'+r.service_catalog_id|string }}</td>
+            <td>
+              {% set pct = r.availability_pct %}
+              <span class="badge {% if pct >= 99.9 %}bg-success{% elif pct >= 99 %}bg-info{% elif pct >= 95 %}bg-warning{% else %}bg-danger{% endif %}">
+                {{ '%.2f'|format(pct) }}%</span>
+            </td>
+            <td>{{ '%.1f'|format(r.down_minutes) }}</td>
+            <td><span class="badge bg-success">真实</span></td>
+          </tr>
+        {% endfor %}
+        {% for s in all_services %}
+          {% if s.id not in mapped_service_ids %}
+          <tr class="text-muted">
+            <td>{{ s.name }}</td>
+            <td colspan="2"><span class="badge bg-secondary">未采集</span></td>
+            <td><span class="badge bg-light text-dark">未映射设备</span></td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        {% if not service_recs and not all_services %}
+          <tr><td colspan="4" class="text-center text-muted py-4">暂无服务目录</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div></div></div>
+</div>
+{% endblock %}

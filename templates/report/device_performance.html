@@ -1,0 +1,1249 @@
+{% extends "base.html" %}
+
+{% block title %}设备性能报表 - 数据中心管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 引入Chart.js用于图表 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- 引入Bootstrap Switch -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-switch/3.3.4/css/bootstrap3/bootstrap-switch.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-switch/3.3.4/js/bootstrap-switch.min.js"></script>
+<style>
+    /* 保持之前的样式不变 */
+    .performance-card {
+        transition: transform 0.3s;
+        border-left: 4px solid #007bff;
+    }
+    .performance-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .stat-card {
+        border-left: 4px solid #007bff;
+        background-color: #f8f9fa;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 30px;
+    }
+    .performance-table th {
+        border-top: none;
+    }
+    .progress {
+        height: 20px;
+    }
+    .export-btn {
+        margin-right: 10px;
+    }
+    .metric-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .metric-critical { background-color: #f8d7da; color: #721c24; }
+    .metric-warning { background-color: #fff3cd; color: #856404; }
+    .metric-normal { background-color: #d4edda; color: #155724; }
+    .metric-info { background-color: #d1ecf1; color: #0c5460; }
+    
+    .cpu-indicator { border-left-color: #dc3545 !important; }
+    .memory-indicator { border-left-color: #17a2b8 !important; }
+    .disk-indicator { border-left-color: #ffc107 !important; }
+    .network-indicator { border-left-color: #28a745 !important; }
+    
+    .resource-bar {
+        height: 10px;
+        border-radius: 5px;
+        background-color: #e9ecef;
+        margin: 5px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .resource-fill {
+        height: 100%;
+        border-radius: 5px;
+        transition: width 0.5s ease;
+    }
+    .resource-cpu { background-color: #dc3545; }
+    .resource-memory { background-color: #17a2b8; }
+    .resource-disk { background-color: #ffc107; }
+    
+    .tab-content {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        padding: 20px;
+        border-radius: 0 0 0.35rem 0.35rem;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: 600;
+    }
+    
+    /* 性能状态指示灯 */
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    .status-normal { background-color: #28a745; }
+    .status-warning { background-color: #ffc107; }
+    .status-critical { background-color: #dc3545; }
+    
+    /* 排名徽章 */
+    .rank-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        font-weight: bold;
+        font-size: 14px;
+        margin-right: 10px;
+    }
+    .rank-1 { background-color: #ffd700; color: #000; }
+    .rank-2 { background-color: #c0c0c0; color: #000; }
+    .rank-3 { background-color: #cd7f32; color: #000; }
+    .rank-other { background-color: #6c757d; color: #fff; }
+    
+    /* 时间筛选 */
+    .time-filter {
+        border: 1px solid #dee2e6;
+        border-radius: 0.35rem;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    /* 性能指标卡片 */
+    .metric-card {
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+        color: white;
+        text-align: center;
+    }
+    .metric-card-cpu { background: linear-gradient(45deg, #dc3545, #e4606d); }
+    .metric-card-memory { background: linear-gradient(45deg, #17a2b8, #39c0d9); }
+    .metric-card-disk { background: linear-gradient(45deg, #ffc107, #ffd454); color: #212529; }
+    .metric-card-network { background: linear-gradient(45deg, #28a745, #5cb85c); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">设备性能报表</h1>
+            <p class="text-muted">统计系统中设备CPU和内存使用情况，识别性能瓶颈</p>
+        </div>
+        <div>
+            <button onclick="exportToCSV()" class="btn btn-outline-success export-btn">
+                <i class="fas fa-file-csv"></i> 导出CSV
+            </button>
+            <button onclick="printReport()" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> 打印报表
+            </button>
+        </div>
+    </div>
+
+    <!-- 时间筛选 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-filter mr-2"></i>数据筛选
+            </h6>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('report.device_performance_report') }}" method="get" class="time-filter">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="timeRange"><i class="fas fa-clock mr-2"></i>时间范围</label>
+                            <select class="form-control" id="timeRange" name="timeRange">
+                                <option value="1">最近1小时</option>
+                                <option value="6">最近6小时</option>
+                                <option value="24" selected>最近24小时</option>
+                                <option value="168">最近7天</option>
+                                <option value="720">最近30天</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label><i class="fas fa-chart-line mr-2"></i>显示选项</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showCharts" checked>
+                                <label class="form-check-label" for="showCharts">
+                                    显示图表
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showDetails" checked>
+                                <label class="form-check-label" for="showDetails">
+                                    显示详细数据
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-sync-alt mr-2"></i>刷新数据
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetFilters()">
+                            <i class="fas fa-undo mr-2"></i>重置筛选
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 性能概览卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2 cpu-indicator">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                CPU使用率最高
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if cpu_devices %}
+                                    {{ "%.1f"|format(cpu_devices[0].avg_cpu) if cpu_devices[0].avg_cpu else 0 }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </div>
+                            <div class="mt-2 mb-0 text-muted text-xs">
+                                <span>设备: {% if cpu_devices %}{{ cpu_devices[0].name }}{% else %}无数据{% endif %}</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-microchip fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2 memory-indicator">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                内存使用率最高
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if memory_devices %}
+                                    {{ "%.1f"|format(memory_devices[0].avg_memory) if memory_devices[0].avg_memory else 0 }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </div>
+                            <div class="mt-2 mb-0 text-muted text-xs">
+                                <span>设备: {% if memory_devices %}{{ memory_devices[0].name }}{% else %}无数据{% endif %}</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-memory fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                CPU超负荷设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set high_cpu_count = 0 %}
+                                {% for device in cpu_devices %}
+                                    {% if device.avg_cpu and device.avg_cpu >= 80 %}
+                                        {% set high_cpu_count = high_cpu_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ high_cpu_count }}
+                            </div>
+                            <div class="mt-2 mb-0 text-muted text-xs">
+                                <span>CPU使用率 > 80%</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                内存超负荷设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set high_memory_count = 0 %}
+                                {% for device in memory_devices %}
+                                    {% if device.avg_memory and device.avg_memory >= 85 %}
+                                        {% set high_memory_count = high_memory_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ high_memory_count }}
+                            </div>
+                            <div class="mt-2 mb-0 text-muted text-xs">
+                                <span>内存使用率 > 85%</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="performanceTab" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="cpu-tab" data-toggle="tab" href="#cpu" role="tab">
+                                <i class="fas fa-microchip mr-1"></i> CPU使用率Top 10
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="memory-tab" data-toggle="tab" href="#memory" role="tab">
+                                <i class="fas fa-memory mr-1"></i> 内存使用率Top 10
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="comparison-tab" data-toggle="tab" href="#comparison" role="tab">
+                                <i class="fas fa-chart-bar mr-1"></i> 综合对比
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content" id="performanceTabContent">
+                    <!-- CPU使用率标签页 -->
+                    <div class="tab-pane fade show active" id="cpu" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="chart-container">
+                                    <canvas id="cpuChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered performance-table" width="100%" cellspacing="0">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th width="60">排名</th>
+                                                <th>设备名称</th>
+                                                <th>平均CPU</th>
+                                                <th>最高CPU</th>
+                                                <th>状态</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for device in cpu_devices %}
+                                            {% set i = loop.index0 %}
+                                            {% set rank_class = 'rank-1' if i == 0 else ('rank-2' if i == 1 else ('rank-3' if i == 2 else 'rank-other')) %}
+                                            <tr>
+                                                <td class="text-center">
+                                                    <span class="rank-badge {{ rank_class }}">
+                                                        {{ i + 1 }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <strong>{{ device.name }}</strong>
+                                                    <div class="resource-bar">
+                                                        {% set cpu_percentage = device.avg_cpu if device.avg_cpu else 0 %}
+                                                        <div class="resource-fill resource-cpu" style="width: {{ cpu_percentage if cpu_percentage <= 100 else 100 }}%"></div>
+                                                    </div>
+                                                </td>
+                                                <td class="font-weight-bold">
+                                                    {{ "%.1f"|format(device.avg_cpu) if device.avg_cpu else 0 }}%
+                                                    {% if device.avg_cpu and device.avg_cpu >= 80 %}
+                                                    <span class="metric-badge metric-critical ml-1">高危</span>
+                                                    {% elif device.avg_cpu and device.avg_cpu >= 60 %}
+                                                    <span class="metric-badge metric-warning ml-1">警告</span>
+                                                    {% elif device.avg_cpu %}
+                                                    <span class="metric-badge metric-normal ml-1">正常</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {{ "%.1f"|format(device.max_cpu) if device.max_cpu else 0 }}%
+                                                    <div class="progress mt-1" style="height: 5px;">
+                                                        {% set max_cpu_percentage = device.max_cpu if device.max_cpu else 0 %}
+                                                        <div class="progress-bar bg-danger" 
+                                                             role="progressbar" 
+                                                             style="width: {{ max_cpu_percentage if max_cpu_percentage <= 100 else 100 }}%"
+                                                             aria-valuenow="{{ max_cpu_percentage }}" 
+                                                             aria-valuemin="0" 
+                                                             aria-valuemax="100"></div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {% if device.avg_cpu and device.avg_cpu >= 80 %}
+                                                    <span class="status-indicator status-critical"></span> 高危
+                                                    {% elif device.avg_cpu and device.avg_cpu >= 60 %}
+                                                    <span class="status-indicator status-warning"></span> 警告
+                                                    {% else %}
+                                                    <span class="status-indicator status-normal"></span> 正常
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted">
+                                                    <i class="fas fa-info-circle mr-2"></i>暂无CPU性能数据
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- CPU性能建议 -->
+                        {% if cpu_devices and cpu_devices|length > 0 %}
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-lightbulb mr-2"></i>CPU性能优化建议
+                                        </h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <h6>高CPU使用率设备:</h6>
+                                                <ul class="mb-0">
+                                                    {% for device in cpu_devices if device.avg_cpu and device.avg_cpu >= 80 %}
+                                                    <li>
+                                                        <strong>{{ device.name }}</strong> (平均CPU: {{ "%.1f"|format(device.avg_cpu) }}%)
+                                                        <ul>
+                                                            <li>检查是否有异常进程</li>
+                                                            <li>考虑优化应用程序或增加CPU资源</li>
+                                                            <li>监控进程级CPU使用率</li>
+                                                        </ul>
+                                                    </li>
+                                                    {% else %}
+                                                    <li>暂无高CPU使用率设备</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6>常规建议:</h6>
+                                                <ul class="mb-0">
+                                                    <li>定期检查系统日志，识别异常进程</li>
+                                                    <li>对于持续高负载设备，考虑负载均衡</li>
+                                                    <li>优化数据库查询和应用程序代码</li>
+                                                    <li>考虑使用缓存减少计算负载</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 内存使用率标签页 -->
+                    <div class="tab-pane fade" id="memory" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="chart-container">
+                                    <canvas id="memoryChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered performance-table" width="100%" cellspacing="0">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th width="60">排名</th>
+                                                <th>设备名称</th>
+                                                <th>平均内存</th>
+                                                <th>最高内存</th>
+                                                <th>状态</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for device in memory_devices %}
+                                            {% set i = loop.index0 %}
+                                            {% set rank_class = 'rank-1' if i == 0 else ('rank-2' if i == 1 else ('rank-3' if i == 2 else 'rank-other')) %}
+                                            <tr>
+                                                <td class="text-center">
+                                                    <span class="rank-badge {{ rank_class }}">
+                                                        {{ i + 1 }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <strong>{{ device.name }}</strong>
+                                                    <div class="resource-bar">
+                                                        {% set memory_percentage = device.avg_memory if device.avg_memory else 0 %}
+                                                        <div class="resource-fill resource-memory" style="width: {{ memory_percentage if memory_percentage <= 100 else 100 }}%"></div>
+                                                    </div>
+                                                </td>
+                                                <td class="font-weight-bold">
+                                                    {{ "%.1f"|format(device.avg_memory) if device.avg_memory else 0 }}%
+                                                    {% if device.avg_memory and device.avg_memory >= 85 %}
+                                                    <span class="metric-badge metric-critical ml-1">高危</span>
+                                                    {% elif device.avg_memory and device.avg_memory >= 70 %}
+                                                    <span class="metric-badge metric-warning ml-1">警告</span>
+                                                    {% elif device.avg_memory %}
+                                                    <span class="metric-badge metric-normal ml-1">正常</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {{ "%.1f"|format(device.max_memory) if device.max_memory else 0 }}%
+                                                    <div class="progress mt-1" style="height: 5px;">
+                                                        {% set max_memory_percentage = device.max_memory if device.max_memory else 0 %}
+                                                        <div class="progress-bar bg-info" 
+                                                             role="progressbar" 
+                                                             style="width: {{ max_memory_percentage if max_memory_percentage <= 100 else 100 }}%"
+                                                             aria-valuenow="{{ max_memory_percentage }}" 
+                                                             aria-valuemin="0" 
+                                                             aria-valuemax="100"></div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {% if device.avg_memory and device.avg_memory >= 85 %}
+                                                    <span class="status-indicator status-critical"></span> 高危
+                                                    {% elif device.avg_memory and device.avg_memory >= 70 %}
+                                                    <span class="status-indicator status-warning"></span> 警告
+                                                    {% else %}
+                                                    <span class="status-indicator status-normal"></span> 正常
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted">
+                                                    <i class="fas fa-info-circle mr-2"></i>暂无内存性能数据
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 内存性能建议 -->
+                        {% if memory_devices and memory_devices|length > 0 %}
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-lightbulb mr-2"></i>内存性能优化建议
+                                        </h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <h6>高内存使用率设备:</h6>
+                                                <ul class="mb-0">
+                                                    {% for device in memory_devices if device.avg_memory and device.avg_memory >= 85 %}
+                                                    <li>
+                                                        <strong>{{ device.name }}</strong> (平均内存: {{ "%.1f"|format(device.avg_memory) }}%)
+                                                        <ul>
+                                                            <li>检查内存泄漏的应用程序</li>
+                                                            <li>考虑增加物理内存或优化内存配置</li>
+                                                            <li>调整应用程序内存使用策略</li>
+                                                        </ul>
+                                                    </li>
+                                                    {% else %}
+                                                    <li>暂无高内存使用率设备</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6>常规建议:</h6>
+                                                <ul class="mb-0">
+                                                    <li>监控内存使用趋势，识别增长模式</li>
+                                                    <li>调整系统交换空间配置</li>
+                                                    <li>优化应用程序内存分配策略</li>
+                                                    <li>定期重启长期运行的服务以释放内存</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 综合对比标签页 -->
+                    <div class="tab-pane fade" id="comparison" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="chart-container">
+                                    <canvas id="comparisonChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">CPU与内存使用率对比</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>设备名称</th>
+                                                    <th>CPU使用率</th>
+                                                    <th>内存使用率</th>
+                                                    <th>综合评分</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set combined_devices = [] %}
+                                                {% for cpu_device in cpu_devices %}
+                                                    {% for memory_device in memory_devices %}
+                                                        {% if cpu_device.device_id == memory_device.device_id %}
+                                                            {% set _ = combined_devices.append({
+                                                                'name': cpu_device.name,
+                                                                'cpu': cpu_device.avg_cpu or 0,
+                                                                'memory': memory_device.avg_memory or 0,
+                                                                'score': ((cpu_device.avg_cpu or 0) + (memory_device.avg_memory or 0)) / 2
+                                                            }) %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                {% endfor %}
+                                                
+                                                {% for device in combined_devices %}
+                                                {% if loop.index <= 5 %}
+                                                <tr>
+                                                    <td>{{ device.name }}</td>
+                                                    <td>
+                                                        <span class="font-weight-bold">{{ "%.1f"|format(device.cpu) }}%</span>
+                                                        <div class="progress mt-1" style="height: 5px;">
+                                                            <div class="progress-bar bg-danger" 
+                                                                 role="progressbar" 
+                                                                 style="width: {{ device.cpu if device.cpu <= 100 else 100 }}%"></div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="font-weight-bold">{{ "%.1f"|format(device.memory) }}%</span>
+                                                        <div class="progress mt-1" style="height: 5px;">
+                                                            <div class="progress-bar bg-info" 
+                                                                 role="progressbar" 
+                                                                 style="width: {{ device.memory if device.memory <= 100 else 100 }}%"></div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="font-weight-bold">{{ "%.1f"|format(device.score) }}</span>
+                                                        {% if device.score >= 75 %}
+                                                        <span class="metric-badge metric-critical ml-1">高负载</span>
+                                                        {% elif device.score >= 50 %}
+                                                        <span class="metric-badge metric-warning ml-1">中负载</span>
+                                                        {% else %}
+                                                        <span class="metric-badge metric-normal ml-1">低负载</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                                {% else %}
+                                                <tr>
+                                                    <td colspan="4" class="text-center text-muted">
+                                                        暂无综合对比数据
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">性能指标说明</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-12 mb-3">
+                                                <h6>CPU使用率:</h6>
+                                                <div class="metric-card metric-card-cpu">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <h5 class="mb-0">正常范围: 0-60%</h5>
+                                                            <small>警告: 60-80% | 危险: 80-100%</small>
+                                                        </div>
+                                                        <i class="fas fa-microchip fa-2x"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 mb-3">
+                                                <h6>内存使用率:</h6>
+                                                <div class="metric-card metric-card-memory">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <h5 class="mb-0">正常范围: 0-70%</h5>
+                                                            <small>警告: 70-85% | 危险: 85-100%</small>
+                                                        </div>
+                                                        <i class="fas fa-memory fa-2x"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <h6>性能状态说明:</h6>
+                                                <ul class="list-unstyled">
+                                                    <li class="mb-2">
+                                                        <span class="status-indicator status-normal mr-2"></span>
+                                                        <strong>正常:</strong> 性能指标在安全范围内
+                                                    </li>
+                                                    <li class="mb-2">
+                                                        <span class="status-indicator status-warning mr-2"></span>
+                                                        <strong>警告:</strong> 性能指标接近阈值，需要关注
+                                                    </li>
+                                                    <li class="mb-2">
+                                                        <span class="status-indicator status-critical mr-2"></span>
+                                                        <strong>危险:</strong> 性能指标超出阈值，需要立即处理
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 初始化Bootstrap Switch
+    $(function() {
+        $('[type="checkbox"]').bootstrapSwitch();
+    });
+
+    // 获取CPU性能数据
+    const cpuDevices = [
+        {% for device in cpu_devices %}
+        {
+            name: '{{ device.name }}',
+            avg_cpu: {{ device.avg_cpu or 0 }},
+            max_cpu: {{ device.max_cpu or 0 }}
+        },
+        {% endfor %}
+    ];
+
+    // 获取内存性能数据
+    const memoryDevices = [
+        {% for device in memory_devices %}
+        {
+            name: '{{ device.name }}',
+            avg_memory: {{ device.avg_memory or 0 }},
+            max_memory: {{ device.max_memory or 0 }}
+        },
+        {% endfor %}
+    ];
+
+    // 生成渐变色
+    function generateGradientColors(count, startColor, endColor) {
+        const colors = [];
+        for (let i = 0; i < count; i++) {
+            const ratio = i / (count - 1);
+            const r = Math.round(startColor.r + (endColor.r - startColor.r) * ratio);
+            const g = Math.round(startColor.g + (endColor.g - startColor.g) * ratio);
+            const b = Math.round(startColor.b + (endColor.b - startColor.b) * ratio);
+            colors.push(`rgb(${r}, ${g}, ${b})`);
+        }
+        return colors;
+    }
+
+    // 绘制CPU图表
+    if (cpuDevices.length > 0) {
+        const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+        
+        const cpuLabels = cpuDevices.map(device => device.name.length > 10 ? device.name.substring(0, 10) + '...' : device.name);
+        const cpuAvgData = cpuDevices.map(device => device.avg_cpu);
+        const cpuMaxData = cpuDevices.map(device => device.max_cpu);
+        
+        // 生成渐变色
+        const cpuColors = generateGradientColors(
+            cpuDevices.length,
+            {r: 220, g: 53, b: 69}, // #dc3545
+            {r: 255, g: 193, b: 7}  // #ffc107
+        );
+        
+        const cpuChart = new Chart(cpuCtx, {
+            type: 'bar',
+            data: {
+                labels: cpuLabels,
+                datasets: [
+                    {
+                        label: '平均CPU使用率 (%)',
+                        data: cpuAvgData,
+                        backgroundColor: cpuColors,
+                        borderColor: cpuColors.map(color => color.replace('rgb', 'rgba').replace(')', ', 0.8)')),
+                        borderWidth: 1,
+                        order: 2
+                    },
+                    {
+                        label: '最高CPU使用率 (%)',
+                        data: cpuMaxData,
+                        type: 'line',
+                        borderColor: '#343a40',
+                        backgroundColor: 'rgba(52, 58, 64, 0.1)',
+                        borderWidth: 2,
+                        fill: false,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: '使用率 (%)'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.raw.toFixed(1)}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('cpuChart').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p>暂无CPU性能数据</p>
+            </div>
+        `;
+    }
+
+    // 绘制内存图表
+    if (memoryDevices.length > 0) {
+        const memoryCtx = document.getElementById('memoryChart').getContext('2d');
+        
+        const memoryLabels = memoryDevices.map(device => device.name.length > 10 ? device.name.substring(0, 10) + '...' : device.name);
+        const memoryAvgData = memoryDevices.map(device => device.avg_memory);
+        const memoryMaxData = memoryDevices.map(device => device.max_memory);
+        
+        // 生成渐变色
+        const memoryColors = generateGradientColors(
+            memoryDevices.length,
+            {r: 23, g: 162, b: 184}, // #17a2b8
+            {r: 102, g: 16, b: 242}  // #6610f2
+        );
+        
+        const memoryChart = new Chart(memoryCtx, {
+            type: 'bar',
+            data: {
+                labels: memoryLabels,
+                datasets: [
+                    {
+                        label: '平均内存使用率 (%)',
+                        data: memoryAvgData,
+                        backgroundColor: memoryColors,
+                        borderColor: memoryColors.map(color => color.replace('rgb', 'rgba').replace(')', ', 0.8)')),
+                        borderWidth: 1,
+                        order: 2
+                    },
+                    {
+                        label: '最高内存使用率 (%)',
+                        data: memoryMaxData,
+                        type: 'line',
+                        borderColor: '#343a40',
+                        backgroundColor: 'rgba(52, 58, 64, 0.1)',
+                        borderWidth: 2,
+                        fill: false,
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: '使用率 (%)'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.raw.toFixed(1)}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('memoryChart').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p>暂无内存性能数据</p>
+            </div>
+        `;
+    }
+
+    // 绘制对比图表
+    if (cpuDevices.length > 0 && memoryDevices.length > 0) {
+        const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+        
+        // 获取前5个设备的CPU和内存数据
+        const topDevices = cpuDevices.slice(0, Math.min(5, cpuDevices.length));
+        const comparisonLabels = topDevices.map(device => device.name.length > 8 ? device.name.substring(0, 8) + '...' : device.name);
+        
+        // 查找对应设备的内存数据
+        const comparisonCpuData = topDevices.map(device => device.avg_cpu);
+        const comparisonMemoryData = topDevices.map(device => {
+            const memoryDevice = memoryDevices.find(mem => mem.name === device.name);
+            return memoryDevice ? memoryDevice.avg_memory : 0;
+        });
+        
+        const comparisonChart = new Chart(comparisonCtx, {
+            type: 'radar',
+            data: {
+                labels: comparisonLabels,
+                datasets: [
+                    {
+                        label: 'CPU使用率 (%)',
+                        data: comparisonCpuData,
+                        backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                        borderColor: 'rgba(220, 53, 69, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(220, 53, 69, 1)'
+                    },
+                    {
+                        label: '内存使用率 (%)',
+                        data: comparisonMemoryData,
+                        backgroundColor: 'rgba(23, 162, 184, 0.2)',
+                        borderColor: 'rgba(23, 162, 184, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(23, 162, 184, 1)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 20
+                        },
+                        pointLabels: {
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.raw.toFixed(1)}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('comparisonChart').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-chart-radar fa-3x mb-3"></i>
+                <p>暂无综合对比数据</p>
+            </div>
+        `;
+    }
+
+    // 导出CSV功能
+    function exportToCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        
+        // 添加CPU数据
+        csvContent += "CPU使用率Top 10设备\r\n";
+        csvContent += "排名,设备名称,平均CPU使用率(%),最高CPU使用率(%)\r\n";
+        
+        cpuDevices.forEach((device, index) => {
+            csvContent += `${index + 1},${device.name},${device.avg_cpu.toFixed(2)},${device.max_cpu.toFixed(2)}\r\n`;
+        });
+        
+        csvContent += "\r\n内存使用率Top 10设备\r\n";
+        csvContent += "排名,设备名称,平均内存使用率(%),最高内存使用率(%)\r\n";
+        
+        memoryDevices.forEach((device, index) => {
+            csvContent += `${index + 1},${device.name},${device.avg_memory.toFixed(2)},${device.max_memory.toFixed(2)}\r\n`;
+        });
+        
+        // 添加生成时间
+        csvContent += `\r\n报表生成时间:,${new Date().toLocaleString('zh-CN')}\r\n`;
+        csvContent += `数据时间范围:,最近24小时\r\n`;
+        
+        // 创建下载链接
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `设备性能报表_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        
+        // 触发下载
+        link.click();
+        document.body.removeChild(link);
+        
+        // 显示提示
+        showAlert('success', 'CSV文件已开始下载');
+    }
+
+    // 打印报表功能
+    function printReport() {
+        const printContent = `
+            <html>
+            <head>
+                <title>设备性能报表</title>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .print-header { text-align: center; margin-bottom: 30px; }
+                    .print-header h1 { margin-bottom: 5px; }
+                    .print-header .date { color: #666; margin-bottom: 20px; }
+                    .stat-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .stat-table th, .stat-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .stat-table th { background-color: #f2f2f2; }
+                    .section-title { margin-top: 30px; margin-bottom: 15px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; }
+                    .summary { margin-top: 30px; font-weight: bold; }
+                    .page-break { page-break-before: always; }
+                    .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+                    .status-normal { background-color: #28a745; }
+                    .status-warning { background-color: #ffc107; }
+                    .status-critical { background-color: #dc3545; }
+                </style>
+            </head>
+            <body>
+                <div class="print-header">
+                    <h1>设备性能报表</h1>
+                    <div class="date">生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+                    <div class="date">数据时间范围: 最近24小时</div>
+                </div>
+                
+                <div class="section-title">CPU使用率Top 10设备</div>
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>设备名称</th>
+                            <th>平均CPU使用率</th>
+                            <th>最高CPU使用率</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cpuDevices.map((device, index) => `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${device.name}</td>
+                                <td>${device.avg_cpu.toFixed(1)}%</td>
+                                <td>${device.max_cpu.toFixed(1)}%</td>
+                                <td>
+                                    ${device.avg_cpu >= 80 ? 
+                                        '<span class="status-indicator status-critical"></span>危险' : 
+                                        device.avg_cpu >= 60 ? 
+                                        '<span class="status-indicator status-warning"></span>警告' : 
+                                        '<span class="status-indicator status-normal"></span>正常'}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="page-break"></div>
+                
+                <div class="section-title">内存使用率Top 10设备</div>
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>设备名称</th>
+                            <th>平均内存使用率</th>
+                            <th>最高内存使用率</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${memoryDevices.map((device, index) => `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${device.name}</td>
+                                <td>${device.avg_memory.toFixed(1)}%</td>
+                                <td>${device.max_memory.toFixed(1)}%</td>
+                                <td>
+                                    ${device.avg_memory >= 85 ? 
+                                        '<span class="status-indicator status-critical"></span>危险' : 
+                                        device.avg_memory >= 70 ? 
+                                        '<span class="status-indicator status-warning"></span>警告' : 
+                                        '<span class="status-indicator status-normal"></span>正常'}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    报表统计信息:<br>
+                    高CPU负载设备: ${cpuDevices.filter(d => d.avg_cpu >= 80).length} 台<br>
+                    高内存负载设备: ${memoryDevices.filter(d => d.avg_memory >= 85).length} 台<br>
+                    生成单位: 数据中心管理系统
+                </div>
+            </body>
+            </html>
+        `;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    // 重置筛选
+    function resetFilters() {
+        document.getElementById('timeRange').value = '24';
+        document.getElementById('showCharts').checked = true;
+        document.getElementById('showDetails').checked = true;
+        showAlert('info', '筛选条件已重置');
+    }
+
+    // 显示提示
+    function showAlert(type, message) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="close" data-dismiss="alert">
+                    <span>&times;</span>
+                </button>
+            </div>
+        `;
+        
+        const alertContainer = document.createElement('div');
+        alertContainer.innerHTML = alertHtml;
+        document.querySelector('.container-fluid').prepend(alertContainer.firstElementChild);
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+            $('.alert').alert('close');
+        }, 3000);
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        // 添加标签页切换事件
+        const tabLinks = document.querySelectorAll('#performanceTab a');
+        tabLinks.forEach(link => {
+            link.addEventListener('shown.bs.tab', function (e) {
+                // 重新渲染图表以适应新的大小
+                if (window.cpuChart) cpuChart.resize();
+                if (window.memoryChart) memoryChart.resize();
+                if (window.comparisonChart) comparisonChart.resize();
+            });
+        });
+        
+        // 添加时间范围选择器事件
+        document.getElementById('timeRange').addEventListener('change', function() {
+            const timeLabels = {
+                '1': '最近1小时',
+                '6': '最近6小时',
+                '24': '最近24小时',
+                '168': '最近7天',
+                '720': '最近30天'
+            };
+            
+            showAlert('info', `已切换到${timeLabels[this.value]}的数据`);
+        });
+    });
+</script>
+{% endblock %}

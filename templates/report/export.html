@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}报表导出{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>报表导出</h2>
+    
+    <!-- Flash 消息显示 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <!-- 导出表单 -->
+    <form method="POST" action="{{ url_for('report.report_export') }}">
+        {{ form.hidden_tag() }}  <!-- CSRF 令牌 -->
+        
+        <div class="mb-3">
+            {{ form.report_type.label(class="form-label") }}
+            {{ form.report_type(class="form-select") }}
+            {% if form.report_type.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.report_type.errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="mb-3">
+            {{ form.format_type.label(class="form-label") }}
+            {{ form.format_type(class="form-select") }}
+            {% if form.format_type.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.format_type.errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="mb-3">
+            {{ form.start_date.label(class="form-label") }}
+            {{ form.start_date(class="form-control", type="date") }}
+            {% if form.start_date.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.start_date.errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="mb-3">
+            {{ form.end_date.label(class="form-label") }}
+            {{ form.end_date(class="form-control", type="date") }}
+            {% if form.end_date.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.end_date.errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <button type="submit" class="btn btn-primary">导出</button>
+    </form>
+</div>
+{% endblock %}
+
+{# 如果有额外的 JavaScript，可以放在 scripts 块中 #}
+{% block scripts %}
+{{ super() }}
+<script>
+    // 如果需要自定义前端行为，可以在这里添加
+    // 例如：日期范围验证
+    document.querySelector('form').addEventListener('submit', function(e) {
+        let startDate = document.querySelector('input[name="start_date"]').value;
+        let endDate = document.querySelector('input[name="end_date"]').value;
+        if (startDate && endDate && startDate > endDate) {
+            e.preventDefault();
+            alert('开始日期不能晚于结束日期！');
+        }
+    });
+</script>
+{% endblock %}

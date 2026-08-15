@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}巡检任务 - 维护管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tasks"></i> 巡检任务</h2>
+        <a href="{{ url_for('maintenance.create_inspection_task') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> 新建巡检任务
+        </a>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">总任务数</h5>
+                    <p class="card-text display-4">{{ total_tasks }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">待处理</h5>
+                    <p class="card-text display-4">{{ pending_tasks }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">进行中</h5>
+                    <p class="card-text display-4">{{ in_progress_tasks }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">已完成</h5>
+                    <p class="card-text display-4">{{ completed_tasks }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态筛选 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-filter"></i> 筛选状态
+        </div>
+        <div class="card-body">
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('maintenance.inspection_tasks', status='all') }}"
+                   class="btn btn-outline-secondary {{ 'active' if status_filter == 'all' else '' }}">全部</a>
+                <a href="{{ url_for('maintenance.inspection_tasks', status='pending') }}"
+                   class="btn btn-outline-warning {{ 'active' if status_filter == 'pending' else '' }}">待处理</a>
+                <a href="{{ url_for('maintenance.inspection_tasks', status='in_progress') }}"
+                   class="btn btn-outline-info {{ 'active' if status_filter == 'in_progress' else '' }}">进行中</a>
+                <a href="{{ url_for('maintenance.inspection_tasks', status='completed') }}"
+                   class="btn btn-outline-success {{ 'active' if status_filter == 'completed' else '' }}">已完成</a>
+                <a href="{{ url_for('maintenance.inspection_tasks', status='overdue') }}"
+                   class="btn btn-outline-danger {{ 'active' if status_filter == 'overdue' else '' }}">逾期</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-list"></i> 任务列表
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>任务编号</th>
+                            <th>标题</th>
+                            <th>巡检类型</th>
+                            <th>计划日期</th>
+                            <th>到期日期</th>
+                            <th>负责人</th>
+                            <th>状态</th>
+                            <th>完成进度</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in tasks %}
+                        <tr>
+                            <td>{{ task.task_number }}</td>
+                            <td>{{ task.title }}</td>
+                            <td>
+                                {% if task.inspection_type == 'daily' %}每日
+                                {% elif task.inspection_type == 'weekly' %}每周
+                                {% elif task.inspection_type == 'monthly' %}每月
+                                {% elif task.inspection_type == 'quarterly' %}每季度
+                                {% elif task.inspection_type == 'annual' %}年度
+                                {% elif task.inspection_type == 'special' %}专项
+                                {% else %}{{ task.inspection_type }}{% endif %}
+                            </td>
+                            <td>{{ task.scheduled_date }}</td>
+                            <td>{{ task.due_date or '无' }}</td>
+                            <td>{{ task.assigned_to_name or '未分配' }}</td>
+                            <td>
+                                {% if task.status == 'pending' %}
+                                    <span class="badge bg-warning">待处理</span>
+                                {% elif task.status == 'in_progress' %}
+                                    <span class="badge bg-info">进行中</span>
+                                {% elif task.status == 'completed' %}
+                                    <span class="badge bg-success">已完成</span>
+                                {% elif task.status == 'overdue' %}
+                                    <span class="badge bg-danger">逾期</span>
+                                {% elif task.status == 'cancelled' %}
+                                    <span class="badge bg-secondary">已取消</span>
+                                {% else %}
+                                    <span class="badge bg-light">{{ task.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar" role="progressbar"
+                                         style="width: {{ task.completion_percentage }}%;"
+                                         aria-valuenow="{{ task.completion_percentage }}"
+                                         aria-valuemin="0"
+                                         aria-valuemax="100">
+                                        {{ task.completion_percentage }}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <!-- 详情按钮 -->
+                                <a href="{{ url_for('maintenance.inspection_task_detail', task_id=task.id) }}"
+                                   class="btn btn-sm btn-outline-primary" title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+
+                                <!-- 执行按钮（仅当状态允许时显示） -->
+                                {% if task.status in ['pending', 'in_progress'] %}
+                                <a href="{{ url_for('maintenance.process_inspection_task', task_id=task.id) }}"
+                                   class="btn btn-sm btn-outline-success" title="开始执行">
+                                    <i class="fas fa-play"></i>
+                                </a>
+                                {% endif %}
+
+                                <!-- 取消按钮（表单） -->
+                                {% if task.status in ['pending', 'in_progress'] %}
+                                <form action="{{ url_for('maintenance.cancel_inspection_task', task_id=task.id) }}"
+                                      method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="取消"
+                                            onclick="return confirm('确定要取消该任务吗？');">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+
+                                <!-- 删除按钮 -->
+                                {% if has_permission(current_user, 'maintenance:edit') %}
+                                <form action="{{ url_for('maintenance.delete_inspection_task', task_id=task.id) }}"
+                                      method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="删除"
+                                            onclick="return confirm('确定要永久删除巡检任务「{{ task.title }}」吗？关联的巡检结果也将被删除。');">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center">暂无巡检任务</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 可在此添加页面专用的 JavaScript，例如 tooltip 初始化等 -->
+{% endblock %}

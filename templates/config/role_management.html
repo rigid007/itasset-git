@@ -1,0 +1,333 @@
+{# templates/config/role_management.html #}
+{% extends "base.html" %}
+
+{% block title %}角色管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">角色管理</h1>
+        <button type="button" class="btn btn-primary" onclick="openAddModal()">
+            <i class="bi bi-plus-lg"></i> 新增角色
+        </button>
+    </div>
+
+    <!-- 角色列表表格 -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>角色名称</th>
+                            <th>描述</th>
+                            <th>权限数量</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="role-table-body">
+                        {% for role in roles %}
+                            <tr data-role-id="{{ role.id }}" data-role-name="{{ role.name }}" data-role-description="{{ role.description }}">
+                                <td>{{ role.id }}</td>
+                                <td class="role-name">{{ role.name }}</td>
+                                <td class="role-description">{{ role.description or '-' }}</td>
+                                <td>{{ (role.permissions or [])|length }}</td>  <!-- 修复位置 -->
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="openEditModal({{ role.id }})">
+                                        <i class="bi bi-pencil"></i> 编辑
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRole({{ role.id }})">
+                                        <i class="bi bi-trash"></i> 删除
+                                    </button>
+                                </td>
+                            </tr>
+                            <td colspan="5" class="text-center text-muted py-4">暂无角色数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 角色编辑模态框 -->
+<div class="modal fade" id="roleModal" tabindex="-1" aria-labelledby="roleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="roleModalLabel">新增角色</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="roleForm">
+                    <input type="hidden" id="roleId" name="roleId">
+                    <div class="mb-3">
+                        <label for="roleName" class="form-label">角色名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="roleName" name="name" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="roleDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="roleDescription" name="description" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">权限分配</label>
+                        <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                            {% for category, modules in permissions_by_category.items() %}
+                            <div class="mb-3">
+                                <h6 class="border-bottom pb-2">{{ category|title }}</h6>
+                                {% for module, perms in modules.items() %}
+                                <div class="ms-3 mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <input type="checkbox" class="form-check-input module-checkbox me-2" 
+                                               data-category="{{ category }}" data-module="{{ module }}"
+                                               id="module_{{ category|replace(' ', '_') }}_{{ module|replace(' ', '_') }}">
+                                        <label class="form-check-label fw-semibold" for="module_{{ category|replace(' ', '_') }}_{{ module|replace(' ', '_') }}">
+                                            {{ module|title }}
+                                        </label>
+                                    </div>
+                                    <div class="ms-4 mt-1">
+                                        {% for perm in perms %}
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input permission-checkbox" type="checkbox" 
+                                                   name="permissions" value="{{ perm.id }}" 
+                                                   data-category="{{ category }}" data-module="{{ module }}"
+                                                   id="perm_{{ perm.id }}">
+                                            <label class="form-check-label" for="perm_{{ perm.id }}">
+                                                {{ perm.name }}
+                                                <small class="text-muted">({{ perm.code }})</small>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitRoleForm()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框（可选，直接用浏览器confirm） -->
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 将后端数据转换为JavaScript对象
+    const permissionsByCategory = {{ permissions_by_category|tojson|safe }};
+    
+    // 构建角色数据数组（用于编辑时填充）
+    const rolesData = [
+        {% for role in roles %}
+        {
+            id: {{ role.id }},
+            name: "{{ role.name|e }}",
+            description: "{{ role.description|e if role.description else '' }}",
+            permission_ids: [{% for perm in role.permissions %}{{ perm.id }}{% if not loop.last %},{% endif %}{% endfor %}]
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    document.addEventListener('DOMContentLoaded', function() {
+    // 获取所有带 data-bs-dismiss="modal" 的按钮
+    document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            if (modal) {
+                modal.hide();
+            }
+        });
+    });
+});
+
+    let currentModalMode = 'add'; // 'add' 或 'edit'
+    let modal = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化Bootstrap模态框
+        const modalElement = document.getElementById('roleModal');
+        if (modalElement) {
+            modal = new bootstrap.Modal(modalElement);
+        }
+
+        // 模块全选/取消功能
+        document.querySelectorAll('.module-checkbox').forEach(moduleCheckbox => {
+            moduleCheckbox.addEventListener('change', function(e) {
+                const category = this.dataset.category;
+                const module = this.dataset.module;
+                const checked = this.checked;
+                // 选中/取消该模块下的所有权限
+                document.querySelectorAll(`.permission-checkbox[data-category="${category}"][data-module="${module}"]`).forEach(permCheckbox => {
+                    permCheckbox.checked = checked;
+                });
+            });
+        });
+
+        // 当单个权限变化时，更新模块复选框的状态
+        document.querySelectorAll('.permission-checkbox').forEach(permCheckbox => {
+            permCheckbox.addEventListener('change', function(e) {
+                const category = this.dataset.category;
+                const module = this.dataset.module;
+                const moduleCheckbox = document.querySelector(`.module-checkbox[data-category="${category}"][data-module="${module}"]`);
+                if (moduleCheckbox) {
+                    const permsInModule = document.querySelectorAll(`.permission-checkbox[data-category="${category}"][data-module="${module}"]`);
+                    const allChecked = Array.from(permsInModule).every(cb => cb.checked);
+                    const someChecked = Array.from(permsInModule).some(cb => cb.checked);
+                    moduleCheckbox.checked = allChecked;
+                    moduleCheckbox.indeterminate = someChecked && !allChecked;
+                }
+            });
+        });
+    });
+
+    // 打开新增模态框
+    function openAddModal() {
+        currentModalMode = 'add';
+        document.getElementById('roleModalLabel').textContent = '新增角色';
+        document.getElementById('roleId').value = '';
+        document.getElementById('roleName').value = '';
+        document.getElementById('roleDescription').value = '';
+        // 清空所有权限复选框
+        document.querySelectorAll('.permission-checkbox').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.module-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
+        modal.show();
+    }
+
+    // 打开编辑模态框
+    function openEditModal(roleId) {
+        const role = rolesData.find(r => r.id === roleId);
+        if (!role) {
+            alert('角色数据不存在');
+            return;
+        }
+        currentModalMode = 'edit';
+        document.getElementById('roleModalLabel').textContent = '编辑角色';
+        document.getElementById('roleId').value = role.id;
+        document.getElementById('roleName').value = role.name;
+        document.getElementById('roleDescription').value = role.description || '';
+
+        // 先清空所有权限复选框
+        document.querySelectorAll('.permission-checkbox').forEach(cb => cb.checked = false);
+        
+        // 勾选角色拥有的权限
+        if (role.permission_ids && role.permission_ids.length) {
+            role.permission_ids.forEach(permId => {
+                const checkbox = document.getElementById(`perm_${permId}`);
+                if (checkbox) checkbox.checked = true;
+            });
+        }
+
+        // 更新模块复选框的状态
+        document.querySelectorAll('.module-checkbox').forEach(moduleCheckbox => {
+            const category = moduleCheckbox.dataset.category;
+            const module = moduleCheckbox.dataset.module;
+            const permsInModule = document.querySelectorAll(`.permission-checkbox[data-category="${category}"][data-module="${module}"]`);
+            const allChecked = Array.from(permsInModule).every(cb => cb.checked);
+            const someChecked = Array.from(permsInModule).some(cb => cb.checked);
+            moduleCheckbox.checked = allChecked;
+            moduleCheckbox.indeterminate = someChecked && !allChecked;
+        });
+
+        modal.show();
+    }
+
+
+    // 提交表单（新增/编辑）
+    function submitRoleForm() {
+        const name = document.getElementById('roleName').value.trim();
+        if (!name) {
+            alert('角色名称不能为空');
+            return;
+        }
+
+        // 收集选中的权限ID
+        const permissionIds = [];
+        document.querySelectorAll('.permission-checkbox:checked').forEach(cb => {
+            permissionIds.push(parseInt(cb.value));
+        });
+
+        const roleId = document.getElementById('roleId').value;
+        const url = currentModalMode === 'add' ? '/config/role/add' : `/config/role/update/${roleId}`;
+        const method = currentModalMode === 'add' ? 'POST' : 'PUT';
+
+        // 获取CSRF令牌（假设在meta中）
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken || ''
+            },
+            body: JSON.stringify({
+                name: name,
+                description: document.getElementById('roleDescription').value.trim(),
+                permission_ids: permissionIds
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                modal.hide();
+                // 重新加载页面以显示更新后的数据（简单方案）
+                // 也可以动态更新表格行，这里为了简便，刷新页面
+                window.location.reload();
+            } else {
+                alert('保存失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('请求失败，请稍后重试');
+        });
+    }
+
+    // 删除角色
+    function deleteRole(roleId) {
+        if (!confirm('确定要删除该角色吗？此操作不可撤销。')) {
+            return;
+        }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch(`/config/role/delete/${roleId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 移除表格行
+                const row = document.querySelector(`tr[data-role-id="${roleId}"]`);
+                if (row) row.remove();
+                // 如果表格为空，显示占位消息
+                if (document.querySelectorAll('#role-table-body tr').length === 0) {
+                    document.getElementById('role-table-body').innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">暂无角色数据</td>
+                        </tr>
+                    `;
+                }
+            } else {
+                alert('删除失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('请求失败，请稍后重试');
+        });
+    }
+</script>
+{% endblock %}

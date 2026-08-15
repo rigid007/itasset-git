@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}服务目录{% endblock %}
+{% block page_title %}服务目录{% endblock %}
+{% block page_subtitle %}IT服务目录与交付标准管理{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3">
+                        <h4 class="text-primary mb-1">{{ catalogs|length }}</h4>
+                        <small>总服务数</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3">
+                        <h4 class="text-success mb-1">{{ catalogs|selectattr('enabled', 'equalto', true)|list|length }}</h4>
+                        <small>已启用</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-secondary text-center h-100">
+                    <div class="card-body py-3">
+                        {% set categories = catalogs|map(attribute='category')|unique|list %}
+                        <h4 class="text-secondary mb-1">{{ categories|length }}</h4>
+                        <small>服务分类</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+        {% if has_permission(current_user, 'report:sla') %}
+        <a href="{{ url_for('itsm_adv.sla_report') }}" class="btn btn-outline-info"><i class="fas fa-chart-line"></i> SLA报表</a>
+        {% endif %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServiceModal">
+            <i class="fas fa-plus"></i> 添加服务
+        </button>
+    </div>
+</div>
+
+<!-- Render services grouped by category -->
+{% set cat_list = catalogs|map(attribute='category')|unique|list %}
+{% for cat in cat_list %}
+{% set cat_services = catalogs|selectattr('category', 'equalto', cat)|list %}
+{% if cat_services or (loop.first and not cat) %}
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">{{ cat or '未分类' }}</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>服务名称</th><th>类型</th><th>预计履行</th><th>SLA策略</th><th>状态</th><th>关联设备</th><th>CSAT</th>{% if has_permission(current_user, 'maintenance:edit') %}<th>操作</th>{% endif %}</tr></thead>
+            <tbody>
+                {% for sc in cat_services %}
+                <tr>
+                    <td><strong>{{ sc.name }}</strong><br><small class="text-muted">{{ sc.description[:50] if sc.description else '' }}</small></td>
+                    <td><span class="badge bg-info">{{ sc.service_type }}</span></td>
+                    <td>{{ sc.estimated_fulfillment_time }}分钟</td>
+                    <td>{{ sc.sla_policy.name if sc.sla_policy else '<span class="text-muted">未配置</span>' }}</td>
+                    <td>
+                        {% if sc.enabled %}<span class="badge bg-success">启用</span>
+                        {% else %}<span class="badge bg-secondary">停用</span>{% endif %}
+                    </td>
+                    <td><span class="badge bg-secondary">{{ sc.mapped_devices.count() }}</span> 台
+                        {% if has_permission(current_user, 'maintenance:edit') %}
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openDeviceMap('{{ sc.id }}','{{ sc.name|e }}')" title="映射设备"><i class="fas fa-network-wired"></i></button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set c = csat_map.get(sc.id) %}
+                        {% if c and c.avg is not none %}<span class="badge bg-danger">{{ c.avg }}</span> <small class="text-muted">({{ c.count }})</small>
+                        {% else %}<span class="text-muted">-</span>{% endif %}
+                    </td>
+                    {% if has_permission(current_user, 'maintenance:edit') %}
+                    <td><button class="btn btn-sm btn-outline-primary" onclick="openEdit('{{ sc.id }}','{{ sc.name|e }}','{{ sc.description|e }}','{{ sc.category }}','{{ sc.service_type }}','{{ sc.estimated_fulfillment_time }}',{{ sc.sla_policy_id or 'null' }},{{ 'true' if sc.enabled else 'false' }})"><i class="fas fa-edit"></i></button></td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% else %}
+<div class="card"><div class="card-body text-center text-muted py-4">暂无服务目录</div></div>
+{% endfor %}
+
+<!-- Handle uncategorized services -->
+{% set uncat = catalogs|rejectattr('category')|list %}
+{% if uncat and cat_list %}
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">未分类</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>服务名称</th><th>类型</th><th>预计履行</th><th>SLA策略</th><th>状态</th><th>关联设备</th><th>CSAT</th>{% if has_permission(current_user, 'maintenance:edit') %}<th>操作</th>{% endif %}</tr></thead>
+            <tbody>
+                {% for sc in uncat %}
+                <tr>
+                    <td><strong>{{ sc.name }}</strong><br><small class="text-muted">{{ sc.description[:50] if sc.description else '' }}</small></td>
+                    <td><span class="badge bg-info">{{ sc.service_type }}</span></td>
+                    <td>{{ sc.estimated_fulfillment_time }}分钟</td>
+                    <td>{{ sc.sla_policy.name if sc.sla_policy else '<span class="text-muted">未配置</span>' }}</td>
+                    <td>
+                        {% if sc.enabled %}<span class="badge bg-success">启用</span>
+                        {% else %}<span class="badge bg-secondary">停用</span>{% endif %}
+                    </td>
+                    <td><span class="badge bg-secondary">{{ sc.mapped_devices.count() }}</span> 台
+                        {% if has_permission(current_user, 'maintenance:edit') %}
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openDeviceMap('{{ sc.id }}','{{ sc.name|e }}')" title="映射设备"><i class="fas fa-network-wired"></i></button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set c = csat_map.get(sc.id) %}
+                        {% if c and c.avg is not none %}<span class="badge bg-danger">{{ c.avg }}</span> <small class="text-muted">({{ c.count }})</small>
+                        {% else %}<span class="text-muted">-</span>{% endif %}
+                    </td>
+                    {% if has_permission(current_user, 'maintenance:edit') %}
+                    <td><button class="btn btn-sm btn-outline-primary" onclick="openEdit('{{ sc.id }}','{{ sc.name|e }}','{{ sc.description|e }}','{{ sc.category }}','{{ sc.service_type }}','{{ sc.estimated_fulfillment_time }}',{{ sc.sla_policy_id or 'null' }},{{ 'true' if sc.enabled else 'false' }})"><i class="fas fa-edit"></i></button></td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addServiceModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('maintenance_extra.service_catalog_add') }}">
+    <div class="modal-header"><h5 class="modal-title">添加服务</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">服务名称 <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">分类</label>
+                <select name="category" class="form-select">
+                    <option value="incident">事件</option>
+                    <option value="request" selected>服务请求</option>
+                    <option value="change">变更</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">服务类型</label>
+                <select name="service_type" class="form-select">
+                    <option value="request">服务请求</option>
+                    <option value="incident">事件</option>
+                    <option value="change">变更</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">描述</label><textarea name="description" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">预计履行时间(分钟)</label><input type="number" name="estimated_fulfillment_time" class="form-control" value="60"></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+
+<!-- 编辑模态框 -->
+<div class="modal fade" id="editServiceModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" id="editServiceForm" action="#">
+    <div class="modal-header"><h5 class="modal-title">编辑服务</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">服务名称</label><input type="text" name="name" id="es_name" class="form-control" required></div>
+        <div class="mb-3"><label class="form-label">描述</label><textarea name="description" id="es_desc" class="form-control" rows="2"></textarea></div>
+        <div class="row mb-3">
+            <div class="col"><label class="form-label">分类</label>
+                <select name="category" id="es_cat" class="form-select">
+                    <option value="incident">事件</option><option value="request">服务请求</option><option value="change">变更</option>
+                </select></div>
+            <div class="col"><label class="form-label">服务类型</label>
+                <select name="service_type" id="es_type" class="form-select">
+                    <option value="request">服务请求</option><option value="incident">事件</option><option value="change">变更</option>
+                </select></div>
+        </div>
+        <div class="mb-3"><label class="form-label">预计履行时间(分钟)</label><input type="number" name="estimated_fulfillment_time" id="es_ff" class="form-control"></div>
+        <div class="mb-3"><label class="form-label">SLA策略</label>
+            <select name="sla_policy_id" id="es_sla" class="form-select">
+                <option value="">未配置</option>
+                {% for p in sla_policies %}
+                <option value="{{ p.id }}">{{ p.name }} (响应{{ p.response_time or '-' }}/解决{{ p.resolution_time or '-' }})</option>
+                {% endfor %}
+            </select></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled" id="es_enabled" value="on"><label class="form-check-label">启用</label></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+
+<!-- 设备映射模态框 -->
+<div class="modal fade" id="deviceMapModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" id="deviceMapForm" action="#">
+    <div class="modal-header"><h5 class="modal-title">映射设备 - <span id="dm_name"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label">关联设备（用于真实可用率采集与服务级影响聚合）</label>
+        <select name="device_ids" id="dm_devices" class="form-select" multiple size="10">
+            {% for d in devices %}
+            <option value="{{ d.id }}">{{ d.name }} ({{ d.ip_address or '-' }})</option>
+            {% endfor %}
+        </select>
+        <small class="text-muted">按住 Ctrl/Cmd 多选。</small>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存映射</button></div>
+</form>
+</div></div></div>
+
+<script>
+function openEdit(id, name, desc, cat, type, ff, sla, enabled){
+    document.getElementById('editServiceForm').action = "{{ url_for('itsm_adv.service_catalog_edit', id=0) }}".replace('/0','/'+id);
+    document.getElementById('es_name').value = name;
+    document.getElementById('es_desc').value = desc;
+    document.getElementById('es_cat').value = cat;
+    document.getElementById('es_type').value = type;
+    document.getElementById('es_ff').value = ff;
+    document.getElementById('es_sla').value = (sla === null ? '' : sla);
+    document.getElementById('es_enabled').checked = enabled;
+    new bootstrap.Modal(document.getElementById('editServiceModal')).show();
+}
+const serviceDeviceMap = {
+  {% for sc in catalogs %}{{ sc.id }}: [{% for d in sc.mapped_devices %}{{ d.id }}{% if not loop.last %},{% endif %}{% endfor %}],
+  {% endfor %}
+};
+function openDeviceMap(id, name){
+    document.getElementById('deviceMapForm').action = "{{ url_for('itsm_adv.service_catalog_devices_edit', id=0) }}".replace('/0','/'+id);
+    document.getElementById('dm_name').textContent = name;
+    const sel = document.getElementById('dm_devices');
+    const cur = serviceDeviceMap[id] || [];
+    Array.from(sel.options).forEach(o => { o.selected = cur.includes(parseInt(o.value)); });
+    new bootstrap.Modal(document.getElementById('deviceMapModal')).show();
+}
+</script>
+{% endblock %}

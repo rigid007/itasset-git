@@ -1,0 +1,173 @@
+{# templates/monitoring/device_config_list.html #}
+{% extends "base.html" %}
+
+{% block title %}设备监控配置 - 监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-hdd-stack me-2"></i>设备监控配置
+                    </h5>
+                    <a href="{{ url_for('monitoring.device_config_create') }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg"></i> 新增配置
+                    </a>
+                </div>
+                <div class="card-body">
+                    <!-- 过滤表单 -->
+                    <form method="GET" action="{{ url_for('monitoring.device_config_list') }}" class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label for="device_name" class="form-label">设备名称</label>
+                            <input type="text" class="form-control form-control-sm" id="device_name" name="device_name" value="{{ device_name }}" placeholder="输入设备名称">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="device_type" class="form-label">设备类型</label>
+                            <select class="form-select form-select-sm" id="device_type" name="device_type">
+                                <option value="">全部</option>
+                                {% for t in device_types %}
+                                <option value="{{ t }}" {% if device_type == t %}selected{% endif %}>{{ t | default('未分类', true) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="enabled" class="form-label">状态</label>
+                            <select class="form-select form-select-sm" id="enabled" name="enabled">
+                                <option value="">全部</option>
+                                <option value="true" {% if enabled == 'true' %}selected{% endif %}>启用</option>
+                                <option value="false" {% if enabled == 'false' %}selected{% endif %}>禁用</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-sm btn-primary me-2">筛选</button>
+                            <a href="{{ url_for('monitoring.device_config_list') }}" class="btn btn-sm btn-secondary">重置</a>
+                        </div>
+                    </form>
+
+                    <!-- 配置列表表格 -->
+                    {% if configs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>设备名称</th>
+                                    <th>设备类型</th>
+                                    <th>Ping</th>
+                                    <th>SNMP</th>
+                                    <th>SSH</th>
+                                    <th>API</th>
+                                    <th>监控间隔</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cfg in configs %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ cfg.device.name if cfg.device else '未知设备' }}</strong>
+                                        {% if cfg.device and cfg.device.management_ip %}
+                                        <br><small class="text-muted">{{ cfg.device.management_ip }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ cfg.device.device_type if cfg.device else '-' }}</td>
+                                    <td>
+                                        {% if cfg.enable_ping %}
+                                            <span class="badge bg-success">启用</span>
+                                            <small>{{ cfg.ping_interval }}s</small>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if cfg.enable_snmp %}
+                                            <span class="badge bg-success">启用</span>
+                                            <small>v{{ cfg.snmp_version }}</small>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if cfg.enable_ssh and cfg.enable_ssh != 'no' %}
+                                            <span class="badge bg-success">启用</span>
+                                            <small>端口{{ cfg.ssh_port }}</small>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if cfg.enable_api %}
+                                            <span class="badge bg-success">启用</span>
+                                            <small>{{ cfg.api_method }}</small>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        Ping: {{ cfg.ping_interval }}s<br>
+                                        SNMP: {{ cfg.snmp_interval }}s<br>
+                                        SSH: {{ cfg.ssh_interval }}s<br>
+                                        API: {{ cfg.api_interval }}s
+                                    </td>
+                                    <td>
+                                        {% if cfg.enabled %}
+                                            <span class="badge bg-success">启用</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('monitoring.device_config_view', config_id=cfg.id) }}" class="btn btn-outline-primary" title="查看">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('monitoring.device_config_edit', config_id=cfg.id) }}" class="btn btn-outline-secondary" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            {% if cfg.enabled %}
+                                            <a href="{{ url_for('monitoring.device_config_toggle', config_id=cfg.id) }}" class="btn btn-outline-warning" title="禁用" onclick="return confirm('确定要禁用该设备的监控配置吗？')">
+                                                <i class="bi bi-pause-fill"></i>
+                                            </a>
+                                            {% else %}
+                                            <a href="{{ url_for('monitoring.device_config_toggle', config_id=cfg.id) }}" class="btn btn-outline-success" title="启用" onclick="return confirm('确定要启用该设备的监控配置吗？')">
+                                                <i class="bi bi-play-fill"></i>
+                                            </a>
+                                            {% endif %}
+                                            <a href="{{ url_for('monitoring.device_config_delete', config_id=cfg.id) }}" class="btn btn-outline-danger" title="删除" onclick="return confirm('确定要删除该监控配置吗？此操作不可撤销。')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-sliders2 fs-1 text-muted"></i>
+                        <p class="mt-3 text-muted">暂无设备监控配置，请新增配置。</p>
+                        <a href="{{ url_for('monitoring.device_config_create') }}" class="btn btn-primary">
+                            <i class="bi bi-plus-lg"></i> 新增配置
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 初始化 Bootstrap 工具提示（如果使用了 title 属性）
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+</script>
+{% endblock %}

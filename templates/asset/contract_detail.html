@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ contract.name }}{% endblock %}
+{% block page_title %}{{ contract.name }}{% endblock %}
+{% block page_subtitle %}合同编号: {{ contract.contract_no }}{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('asset_extra.contract_edit', id=contract.id) }}" class="btn btn-primary">
+    <i class="fas fa-edit"></i> 编辑
+</a>
+<a href="{{ url_for('asset_extra.contract_list') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> 返回列表
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 基本信息 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-file-contract"></i> 基本信息</h5></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><th style="width:120px">合同编号</th><td><code>{{ contract.contract_no }}</code></td></tr>
+                    <tr><th>合同类型</th>
+                        <td>
+                            {% if contract.contract_type == 'purchase' %}<span class="badge bg-info">采购合同</span>
+                            {% elif contract.contract_type == 'maintenance' %}<span class="badge bg-warning">维护合同</span>
+                            {% elif contract.contract_type == 'lease' %}<span class="badge bg-secondary">租赁合同</span>
+                            {% elif contract.contract_type == 'sla' %}<span class="badge bg-primary">SLA协议</span>
+                            {% else %}{{ contract.contract_type }}{% endif %}
+                        </td></tr>
+                    <tr><th>合同状态</th>
+                        <td>
+                            {% if contract.status == 'active' %}<span class="badge bg-success">生效中</span>
+                            {% elif contract.status == 'expired' %}<span class="badge bg-danger">已过期</span>
+                            {% elif contract.status == 'terminated' %}<span class="badge bg-secondary">已终止</span>
+                            {% elif contract.status == 'renewed' %}<span class="badge bg-info">已续约</span>
+                            {% endif %}
+                        </td></tr>
+                    <tr><th>供应商</th><td>{{ contract.supplier.name if contract.supplier else '-' }}</td></tr>
+                    <tr><th>合同金额</th><td><strong>¥{{ "%.2f"|format(contract.total_value or 0) }}</strong></td></tr>
+                    <tr><th>付款状态</th>
+                        <td>
+                            {% if contract.payment_status == 'paid' %}<span class="badge bg-success">已付款</span>
+                            {% elif contract.payment_status == 'partial' %}<span class="badge bg-warning">部分付款</span>
+                            {% else %}<span class="badge bg-secondary">待付款</span>{% endif %}
+                        </td></tr>
+                    <tr><th>付款条款</th><td>{{ contract.payment_terms or '-' }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 日期信息 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-calendar-alt"></i> 日期与提醒</h5></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><th style="width:120px">开始日期</th><td>{{ contract.start_date }}</td></tr>
+                    <tr><th>结束日期</th>
+                        <td>
+                            {{ contract.end_date }}
+                            {% set dr = contract.days_remaining() %}
+                            {% if dr is not none and dr >= 0 %}
+                                <span class="badge {% if dr <= contract.notification_days %}bg-warning{% else %}bg-success{% endif %} ms-2">剩余{{ dr }}天</span>
+                            {% elif dr is not none and dr < 0 %}
+                                <span class="badge bg-danger ms-2">已过期{{ -dr }}天</span>
+                            {% endif %}
+                        </td></tr>
+                    <tr><th>续约日期</th><td>{{ contract.renewal_date or '-' }}</td></tr>
+                    <tr><th>到期提醒天数</th><td>提前 {{ contract.notification_days }} 天</td></tr>
+                </table>
+                <div class="progress mt-2">
+                    {% if contract.start_date and contract.end_date %}
+                        {% set total_days = (contract.end_date - contract.start_date).days %}
+                        {% set elapsed = (datetime.utcnow().date() - contract.start_date).days %}
+                        {% set pct = (elapsed / total_days * 100) if total_days > 0 else 0 %}
+                        <div class="progress-bar {% if pct > 90 %}bg-danger{% elif pct > 75 %}bg-warning{% else %}bg-success{% endif %}"
+                             style="width: {{ pct }}%">
+                            {{ "%.0f"|format(pct) }}%
+                        </div>
+                    {% endif %}
+                </div>
+                <small class="text-muted">时间进度</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关联资产 -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-boxes"></i> 关联资产 ({{ contract.assets|length }})</h5></div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr><th>资产编号</th><th>资产名称</th><th>类型</th><th>状态</th><th>价值</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in contract.assets %}
+                        <tr>
+                            <td><code>{{ asset.asset_number or '' }}</code></td>
+                            <td>{{ asset.asset_name }}</td>
+                            <td>{{ asset.asset_type or '-' }}</td>
+                            <td>
+                                {% if asset.status == 'active' %}<span class="badge bg-success">使用中</span>
+                                {% elif asset.status == 'inactive' %}<span class="badge bg-secondary">闲置</span>
+                                {% elif asset.status == 'retired' %}<span class="badge bg-danger">已报废</span>
+                                {% else %}{{ asset.status }}{% endif %}
+                            </td>
+                            <td>¥{{ "%.2f"|format(asset.current_value or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">未关联资产</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 备注 -->
+    {% if contract.description %}
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-sticky-note"></i> 备注</h5></div>
+            <div class="card-body"><pre class="mb-0" style="white-space:pre-wrap">{{ contract.description }}</pre></div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

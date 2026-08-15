@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口调试 - 拓扑管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .debug-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .debug-title {
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-left: 3px solid transparent;
+        }
+        .log-success {
+            border-left-color: #28a745;
+            background-color: rgba(40, 167, 69, 0.1);
+        }
+        .log-error {
+            border-left-color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        .log-info {
+            border-left-color: #17a2b8;
+            background-color: rgba(23, 162, 184, 0.1);
+        }
+        .test-case {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <h1 class="mb-4"><i class="fas fa-bug text-warning me-2"></i>接口调试页面</h1>
+        
+        <!-- 数据库检查 -->
+        <div class="debug-section">
+            <h3 class="debug-title">1. 数据库检查</h3>
+            <button class="btn btn-primary mb-3" id="checkDbBtn">
+                <i class="fas fa-database me-2"></i>检查数据库连接和表结构
+            </button>
+            <div class="log-container" id="dbLog"></div>
+        </div>
+        
+        <!-- 设备选择 -->
+        <div class="debug-section">
+            <h3 class="debug-title">2. 设备选择</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="debugDevice" class="form-label">选择设备</label>
+                    <select id="debugDevice" class="form-select">
+                        <option value="">请选择设备</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}">{{ device.name }} (ID: {{ device.id }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <div class="mt-4">
+                        <button class="btn btn-info" id="checkDeviceInterfacesBtn">
+                            <i class="fas fa-list me-2"></i>检查设备接口
+                        </button>
+                        <button class="btn btn-danger ms-2" id="deleteAllInterfacesBtn">
+                            <i class="fas fa-trash me-2"></i>删除所有接口（慎用）
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="log-container mt-3" id="deviceLog"></div>
+        </div>
+        
+        <!-- 单个接口测试 -->
+        <div class="debug-section">
+            <h3 class="debug-title">3. 单个接口测试</h3>
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="interfaceName" class="form-label">接口名称</label>
+                    <input type="text" class="form-control" id="interfaceName" value="TestInterface1">
+                </div>
+                <div class="col-md-4">
+                    <div class="mt-4">
+                        <button class="btn btn-success" id="createSingleInterfaceBtn">
+                            <i class="fas fa-plus me-2"></i>创建单个接口
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="log-container mt-3" id="singleInterfaceLog"></div>
+        </div>
+        
+        <!-- 批量创建测试 -->
+        <div class="debug-section">
+            <h3 class="debug-title">4. 批量创建测试</h3>
+            <div class="row">
+                <div class="col-md-3">
+                    <label for="testPattern" class="form-label">接口模式</label>
+                    <input type="text" class="form-control" id="testPattern" value="TestPort_{slot}_{port}">
+                </div>
+                <div class="col-md-2">
+                    <label for="testSlot" class="form-label">槽位</label>
+                    <input type="number" class="form-control" id="testSlot" value="99">
+                </div>
+                <div class="col-md-2">
+                    <label for="testStart" class="form-label">起始端口</label>
+                    <input type="number" class="form-control" id="testStart" value="1">
+                </div>
+                <div class="col-md-2">
+                    <label for="testEnd" class="form-label">结束端口</label>
+                    <input type="number" class="form-control" id="testEnd" value="5">
+                </div>
+                <div class="col-md-3">
+                    <div class="mt-4">
+                        <button class="btn btn-warning" id="testBatchBtn">
+                            <i class="fas fa-vial me-2"></i>测试批量创建
+                        </button>
+                        <button class="btn btn-dark ms-2" id="testOriginalBatchBtn">
+                            <i class="fas fa-cogs me-2"></i>测试原始批量API
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="log-container mt-3" id="batchLog"></div>
+        </div>
+        
+        <!-- 日志 -->
+        <div class="debug-section">
+            <h3 class="debug-title">5. 调试日志</h3>
+            <button class="btn btn-secondary mb-3" id="clearLogsBtn">
+                <i class="fas fa-broom me-2"></i>清空所有日志
+            </button>
+            <div class="log-container" id="mainLog"></div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = '/topology';
+        
+        // 添加日志函数
+        function addLog(containerId, message, type = 'info') {
+            const container = $(`#${containerId}`);
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = $(`
+                <div class="log-entry log-${type}">
+                    <small class="text-muted">[${timestamp}]</small> ${message}
+                </div>
+            `);
+            container.append(entry);
+            container.scrollTop(container[0].scrollHeight);
+        }
+        
+        function addMainLog(message, type = 'info') {
+            addLog('mainLog', message, type);
+        }
+        
+        // 检查数据库
+        $('#checkDbBtn').click(function() {
+            $('#dbLog').empty();
+            addLog('dbLog', '正在检查数据库连接...', 'info');
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/check_db`,
+                method: 'GET',
+                success: function(response) {
+                    console.log('数据库检查响应:', response);
+                    if (response.success) {
+                        addLog('dbLog', '✓ 数据库连接正常', 'success');
+                        addLog('dbLog', `设备表记录数: ${response.device_count}`, 'info');
+                        addLog('dbLog', `接口表记录数: ${response.interface_count}`, 'info');
+                        addLog('dbLog', '接口表结构:', 'info');
+                        
+                        response.interface_columns.forEach(col => {
+                            addLog('dbLog', `  ${col.name}: ${col.type} (${col.nullable ? '可空' : '非空'})`, 'info');
+                        });
+                        
+                        addMainLog('数据库检查完成', 'success');
+                    } else {
+                        addLog('dbLog', `✗ 数据库连接错误: ${response.message}`, 'error');
+                        addMainLog(`数据库检查失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    addLog('dbLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`数据库检查请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 检查设备接口
+        $('#checkDeviceInterfacesBtn').click(function() {
+            const deviceId = $('#debugDevice').val();
+            if (!deviceId) {
+                alert('请先选择设备');
+                return;
+            }
+            
+            $('#deviceLog').empty();
+            addLog('deviceLog', `正在检查设备 ${deviceId} 的接口...`, 'info');
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/device/${deviceId}`,
+                method: 'GET',
+                success: function(response) {
+                    console.log('设备接口响应:', response);
+                    if (response.success) {
+                        addLog('deviceLog', `✓ 设备 ${response.device_name} 共有 ${response.interface_count} 个接口`, 'success');
+                        
+                        if (response.interfaces.length > 0) {
+                            response.interfaces.forEach(iface => {
+                                addLog('deviceLog', `  ${iface.name} (${iface.type}) - ${iface.admin_status}/${iface.oper_status}`, 'info');
+                            });
+                        } else {
+                            addLog('deviceLog', '  该设备没有接口', 'info');
+                        }
+                        
+                        addMainLog(`检查设备 ${deviceId} 的接口完成`, 'success');
+                    } else {
+                        addLog('deviceLog', `✗ 获取设备接口失败: ${response.message}`, 'error');
+                        addMainLog(`获取设备接口失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    addLog('deviceLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`检查设备接口请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 删除所有接口
+        $('#deleteAllInterfacesBtn').click(function() {
+            const deviceId = $('#debugDevice').val();
+            if (!deviceId) {
+                alert('请先选择设备');
+                return;
+            }
+            
+            if (!confirm(`确定要删除设备 ${deviceId} 的所有接口吗？此操作不可恢复！`)) {
+                return;
+            }
+            
+            $('#deviceLog').empty();
+            addLog('deviceLog', `正在删除设备 ${deviceId} 的所有接口...`, 'info');
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/delete_all/${deviceId}`,
+                method: 'POST',
+                success: function(response) {
+                    console.log('删除接口响应:', response);
+                    if (response.success) {
+                        addLog('deviceLog', `✓ 成功删除 ${response.deleted_count} 个接口`, 'success');
+                        addMainLog(`删除设备 ${deviceId} 的接口完成`, 'success');
+                    } else {
+                        addLog('deviceLog', `✗ 删除接口失败: ${response.message}`, 'error');
+                        addMainLog(`删除接口失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    addLog('deviceLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`删除接口请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 创建单个接口
+        $('#createSingleInterfaceBtn').click(function() {
+            const deviceId = $('#debugDevice').val();
+            const interfaceName = $('#interfaceName').val();
+            
+            if (!deviceId || !interfaceName) {
+                alert('请选择设备和输入接口名称');
+                return;
+            }
+            
+            $('#singleInterfaceLog').empty();
+            addLog('singleInterfaceLog', `正在创建接口 ${interfaceName}...`, 'info');
+            
+            const requestData = {
+                device_id: parseInt(deviceId),
+                interface_name: interfaceName
+            };
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/direct_create`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(response) {
+                    console.log('单个接口创建响应:', response);
+                    if (response.success) {
+                        addLog('singleInterfaceLog', `✓ 成功创建接口 ${response.interface_name} (ID: ${response.interface_id})`, 'success');
+                        addMainLog(`创建单个接口 ${interfaceName} 成功`, 'success');
+                    } else {
+                        addLog('singleInterfaceLog', `✗ 创建接口失败: ${response.message}`, 'error');
+                        addMainLog(`创建单个接口失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    addLog('singleInterfaceLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`创建单个接口请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 测试批量创建（使用简单API）
+        $('#testBatchBtn').click(function() {
+            const deviceId = $('#debugDevice').val();
+            const pattern = $('#testPattern').val();
+            const slot = parseInt($('#testSlot').val());
+            const start = parseInt($('#testStart').val());
+            const end = parseInt($('#testEnd').val());
+            
+            if (!deviceId || !pattern) {
+                alert('请选择设备和输入接口模式');
+                return;
+            }
+            
+            if (start > end) {
+                alert('起始端口不能大于结束端口');
+                return;
+            }
+            
+            $('#batchLog').empty();
+            addLog('batchLog', '正在测试批量创建...', 'info');
+            
+            const requestData = {
+                device_id: parseInt(deviceId),
+                pattern: pattern,
+                slot: slot,
+                start_port: start,
+                end_port: end,
+                default_status: 'down',
+                default_speed: 1000000000
+            };
+            
+            console.log('批量创建请求:', requestData);
+            addLog('batchLog', `请求数据: ${JSON.stringify(requestData)}`, 'info');
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/batch`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(response) {
+                    console.log('批量创建响应:', response);
+                    
+                    if (response.success) {
+                        addLog('batchLog', `✓ ${response.message}`, 'success');
+                        addLog('batchLog', `请求接口数: ${response.total_requested}`, 'info');
+                        addLog('batchLog', `创建接口数: ${response.created_count}`, 'info');
+                        addLog('batchLog', `跳过接口数: ${response.skipped_count}`, 'info');
+                        
+                        if (response.created_interfaces && response.created_interfaces.length > 0) {
+                            addLog('batchLog', `创建的接口: ${response.created_interfaces.join(', ')}`, 'info');
+                        }
+                        
+                        if (response.skipped_interfaces && response.skipped_interfaces.length > 0) {
+                            addLog('batchLog', `跳过的接口: ${response.skipped_interfaces.join(', ')}`, 'info');
+                        }
+                        
+                        addMainLog(`批量创建测试完成: 创建${response.created_count}个，跳过${response.skipped_count}个`, 'success');
+                    } else {
+                        addLog('batchLog', `✗ ${response.message}`, 'error');
+                        addMainLog(`批量创建测试失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('批量创建请求失败:', error);
+                    addLog('batchLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`批量创建请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 测试原始批量API
+        $('#testOriginalBatchBtn').click(function() {
+            const deviceId = $('#debugDevice').val();
+            const pattern = $('#testPattern').val();
+            const slot = parseInt($('#testSlot').val());
+            const start = parseInt($('#testStart').val());
+            const end = parseInt($('#testEnd').val());
+            
+            if (!deviceId || !pattern) {
+                alert('请选择设备和输入接口模式');
+                return;
+            }
+            
+            $('#batchLog').empty();
+            addLog('batchLog', '正在测试原始批量API...', 'info');
+            
+            // 使用原始的GigabitEthernet模式
+            const originalPattern = 'GigabitEthernet{slot}/{port}';
+            const requestData = {
+                device_id: parseInt(deviceId),
+                pattern: originalPattern,
+                slot: 0,  // 使用槽位0
+                start_port: 1,
+                end_port: 3,  // 只创建3个
+                default_status: 'down',
+                default_speed: 1000000000
+            };
+            
+            console.log('原始批量创建请求:', requestData);
+            addLog('batchLog', `请求数据: ${JSON.stringify(requestData)}`, 'info');
+            
+            $.ajax({
+                url: `${API_BASE}/api/interfaces/batch`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(response) {
+                    console.log('原始批量创建响应:', response);
+                    
+                    if (response.success) {
+                        addLog('batchLog', `✓ ${response.message}`, 'success');
+                        addLog('batchLog', `设备: ${response.device_name}`, 'info');
+                        addLog('batchLog', `模式: ${response.debug?.pattern_received || '未知'}`, 'info');
+                        addLog('batchLog', `槽位: ${response.debug?.slot_received || '未知'}`, 'info');
+                        addLog('batchLog', `原有接口数: ${response.debug?.existing_count_before || '未知'}`, 'info');
+                        addLog('batchLog', `创建接口数: ${response.created_count}`, 'info');
+                        addLog('batchLog', `跳过接口数: ${response.skipped_count}`, 'info');
+                        
+                        addMainLog(`原始批量API测试完成`, 'success');
+                    } else {
+                        addLog('batchLog', `✗ ${response.message}`, 'error');
+                        addMainLog(`原始批量API测试失败: ${response.message}`, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('原始批量创建请求失败:', error);
+                    addLog('batchLog', `✗ 请求失败: ${error}`, 'error');
+                    addMainLog(`原始批量API请求失败: ${error}`, 'error');
+                }
+            });
+        });
+        
+        // 清空日志
+        $('#clearLogsBtn').click(function() {
+            $('.log-container').empty();
+            addMainLog('所有日志已清空', 'info');
+        });
+        
+        // 页面加载完成后的初始化
+        $(document).ready(function() {
+            addMainLog('接口调试页面已加载', 'info');
+            addMainLog('请按顺序执行测试：1. 检查数据库 → 2. 选择设备 → 3. 测试单个接口 → 4. 测试批量创建', 'info');
+        });
+    </script>
+</body>
+</html>

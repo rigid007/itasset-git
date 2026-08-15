@@ -1,0 +1,1283 @@
+{% extends "base.html" %}
+
+{% block title %}集成配置 - 系统管理{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .integration-settings-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .integration-type-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+        display: inline-block;
+    }
+    
+    .type-ticketing {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .type-monitoring {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .type-cmdb {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+    
+    .type-chatops {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+    
+    .provider-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+        display: inline-block;
+        background-color: #f8f9fa;
+        color: #495057;
+        border: 1px solid #dee2e6;
+    }
+    
+    .status-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    .status-active {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .status-inactive {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+    
+    .sync-status-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    .sync-success {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .sync-failed {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+    
+    .sync-pending {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .sync-disabled {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+    
+    .integration-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid #e9ecef;
+    }
+    
+    .integration-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
+    }
+    
+    .integration-card-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-radius: 8px 8px 0 0;
+    }
+    
+    .integration-card-body {
+        padding: 20px;
+    }
+    
+    .integration-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #f5f5f5;
+    }
+    
+    .meta-item {
+        display: flex;
+        flex-direction: column;
+        min-width: 150px;
+    }
+    
+    .meta-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-bottom: 4px;
+    }
+    
+    .meta-value {
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+    
+    .config-preview {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 12px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 120px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        margin-bottom: 15px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 10px;
+    }
+    
+    .btn-icon i {
+        margin-right: 0;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #dee2e6;
+    }
+    
+    .form-section {
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .form-section-title {
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #495057;
+        font-size: 1.1rem;
+    }
+    
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+    }
+    
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+    
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+        background-color: #0d6efd;
+    }
+    
+    input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+    }
+    
+    .modal-lg {
+        max-width: 900px;
+    }
+    
+    .json-editor {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        min-height: 150px;
+    }
+    
+    .provider-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .jira-icon {
+        background-color: #0052CC;
+    }
+    
+    .servicenow-icon {
+        background-color: #81B5A1;
+    }
+    
+    .zabbix-icon {
+        background-color: #D40000;
+    }
+    
+    .prometheus-icon {
+        background-color: #E6522C;
+    }
+    
+    .slack-icon {
+        background-color: #4A154B;
+    }
+    
+    .sync-direction-badge {
+        font-size: 0.8rem;
+        padding: 3px 8px;
+        border-radius: 10px;
+        font-weight: 500;
+    }
+    
+    .direction-bidirectional {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .direction-inbound {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .direction-outbound {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+    
+    .integration-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .last-sync {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    .config-example {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 10px;
+        font-size: 0.85rem;
+        margin-top: 5px;
+    }
+    
+    .config-example-title {
+        font-weight: 500;
+        margin-bottom: 5px;
+        color: #495057;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="integration-settings-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">集成配置</h1>
+            <p class="text-muted">配置外部系统集成，包括工单系统、监控系统、CMDB和ChatOps</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary me-2" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+            <button class="btn btn-primary" id="createIntegrationBtn">
+                <i class="fas fa-plus me-1"></i> 添加集成
+            </button>
+        </div>
+    </div>
+    
+    {% if integrations %}
+    <div class="row" id="integrationsList">
+        {% for integration in integrations %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="integration-card">
+                <div class="integration-card-header">
+                    <div class="d-flex align-items-center">
+                        <div class="provider-icon {{ integration.provider }}-icon">
+                            {{ integration.provider[0]|upper }}
+                        </div>
+                        <div>
+                            <h5 class="mb-1">{{ integration.name }}</h5>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="integration-type-badge type-{{ integration.integration_type }}">
+                                    {% if integration.integration_type == 'ticketing' %}
+                                    工单系统
+                                    {% elif integration.integration_type == 'monitoring' %}
+                                    监控系统
+                                    {% elif integration.integration_type == 'cmdb' %}
+                                    CMDB
+                                    {% elif integration.integration_type == 'chatops' %}
+                                    ChatOps
+                                    {% else %}
+                                    {{ integration.integration_type }}
+                                    {% endif %}
+                                </span>
+                                <span class="provider-badge">{{ integration.provider|title }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="integration-status">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input toggle-integration" type="checkbox" 
+                                   data-integration-id="{{ integration.id }}"
+                                   {% if integration.enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="integration-card-body">
+                    <div class="integration-meta">
+                        <div class="meta-item">
+                            <div class="meta-label">同步状态</div>
+                            <div class="meta-value">
+                                {% if integration.sync_enabled %}
+                                    {% if integration.last_sync_status == 'success' %}
+                                    <span class="sync-status-badge sync-success">成功</span>
+                                    {% elif integration.last_sync_status == 'failed' %}
+                                    <span class="sync-status-badge sync-failed">失败</span>
+                                    {% else %}
+                                    <span class="sync-status-badge sync-pending">待同步</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="sync-status-badge sync-disabled">未启用</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="meta-item">
+                            <div class="meta-label">同步方向</div>
+                            <div class="meta-value">
+                                {% if integration.sync_direction == 'bidirectional' %}
+                                <span class="sync-direction-badge direction-bidirectional">双向</span>
+                                {% elif integration.sync_direction == 'inbound' %}
+                                <span class="sync-direction-badge direction-inbound">入站</span>
+                                {% elif integration.sync_direction == 'outbound' %}
+                                <span class="sync-direction-badge direction-outbound">出站</span>
+                                {% else %}
+                                {{ integration.sync_direction }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="meta-item">
+                            <div class="meta-label">同步间隔</div>
+                            <div class="meta-value">{{ integration.sync_interval // 60 }} 分钟</div>
+                        </div>
+                    </div>
+                    
+                    {% if integration.last_sync_at %}
+                    <div class="mb-3">
+                        <div class="meta-label">最后同步</div>
+                        <div class="last-sync">
+                            {{ integration.last_sync_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if integration.description %}
+                    <div class="mb-3">
+                        <div class="meta-label">描述</div>
+                        <div class="meta-value">{{ integration.description }}</div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <div class="meta-label">配置预览</div>
+                        <div class="config-preview">
+                            {% if integration.config %}
+                            {{ integration.config|tojson|safe }}
+                            {% else %}
+                            {}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-sm btn-outline-primary btn-icon test-integration-btn" 
+                                data-integration-id="{{ integration.id }}"
+                                title="测试连接">
+                            <i class="fas fa-plug"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary btn-icon sync-integration-btn" 
+                                data-integration-id="{{ integration.id }}"
+                                title="立即同步"
+                                {% if not integration.enabled or not integration.sync_enabled %}disabled{% endif %}>
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary btn-icon edit-integration-btn" 
+                                data-integration-id="{{ integration.id }}"
+                                title="编辑">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="empty-state">
+            <i class="fas fa-puzzle-piece"></i>
+            <h4 class="h5 mt-3">暂无集成配置</h4>
+            <p class="text-muted mb-4">您还没有配置任何系统集成，点击"添加集成"按钮开始</p>
+            <button class="btn btn-primary" id="createIntegrationBtnEmpty">
+                <i class="fas fa-plus me-1"></i> 添加集成
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 创建集成配置模态框 -->
+<div class="modal fade" id="createIntegrationModal" tabindex="-1" aria-labelledby="createIntegrationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createIntegrationModalLabel">添加集成配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createIntegrationForm">
+                    <div class="form-section">
+                        <div class="form-section-title">基本信息</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="integrationName" class="form-label">集成名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="integrationName" name="name" required>
+                                <div class="form-text">用于识别此集成的名称</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="integrationDescription" class="form-label">描述</label>
+                                <textarea class="form-control" id="integrationDescription" name="description" rows="2"></textarea>
+                                <div class="form-text">可选，描述此集成的用途和配置</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="integrationType" class="form-label">集成类型 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="integrationType" name="integration_type" required>
+                                    <option value="">选择集成类型</option>
+                                    <option value="ticketing">工单系统 (Ticketing)</option>
+                                    <option value="monitoring">监控系统 (Monitoring)</option>
+                                    <option value="cmdb">配置管理数据库 (CMDB)</option>
+                                    <option value="chatops">ChatOps</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="integrationProvider" class="form-label">提供商 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="integrationProvider" name="provider" required>
+                                    <option value="">选择提供商</option>
+                                    <option value="jira">Jira</option>
+                                    <option value="servicenow">ServiceNow</option>
+                                    <option value="zabbix">Zabbix</option>
+                                    <option value="prometheus">Prometheus</option>
+                                    <option value="slack">Slack</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="integrationEnabled" class="form-label d-block">启用状态</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="integrationEnabled" name="enabled" checked>
+                                    <label class="form-check-label" for="integrationEnabled">启用此集成</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">同步配置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="syncEnabled" class="form-label d-block">启用同步</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="syncEnabled" name="sync_enabled">
+                                    <label class="form-check-label" for="syncEnabled">启用自动同步</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="syncDirection" class="form-label">同步方向</label>
+                                <select class="form-select" id="syncDirection" name="sync_direction">
+                                    <option value="bidirectional">双向同步</option>
+                                    <option value="inbound">仅入站 (从外部系统拉取)</option>
+                                    <option value="outbound">仅出站 (推送数据到外部系统)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="syncInterval" class="form-label">同步间隔</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="syncInterval" name="sync_interval" value="300" min="60" max="86400">
+                                    <span class="input-group-text">秒</span>
+                                </div>
+                                <div class="form-text">自动同步的时间间隔（秒）</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">集成配置</div>
+                        
+                        <div class="mb-3">
+                            <label for="integrationConfig" class="form-label">配置参数 <span class="text-danger">*</span></label>
+                            <textarea class="form-control json-editor" id="integrationConfig" name="config" rows="8" required></textarea>
+                            <div class="form-text">JSON格式的集成配置，根据不同的集成类型和提供商，配置参数会有所不同</div>
+                            
+                            <div class="config-example mt-3">
+                                <div class="config-example-title">配置示例：</div>
+                                <div id="configExample">
+                                    <p>请先选择集成类型和提供商以查看示例配置</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveIntegrationBtn">创建集成</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑集成配置模态框 -->
+<div class="modal fade" id="editIntegrationModal" tabindex="-1" aria-labelledby="editIntegrationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editIntegrationModalLabel">编辑集成配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editIntegrationForm">
+                    <input type="hidden" id="editIntegrationId" name="id">
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">基本信息</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editIntegrationName" class="form-label">集成名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="editIntegrationName" name="name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editIntegrationDescription" class="form-label">描述</label>
+                                <textarea class="form-control" id="editIntegrationDescription" name="description" rows="2"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editIntegrationType" class="form-label">集成类型</label>
+                                <input type="text" class="form-control" id="editIntegrationType" readonly>
+                                <div class="form-text">集成类型创建后不可更改</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editIntegrationProvider" class="form-label">提供商</label>
+                                <input type="text" class="form-control" id="editIntegrationProvider" readonly>
+                                <div class="form-text">提供商创建后不可更改</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="editIntegrationEnabled" class="form-label d-block">启用状态</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="editIntegrationEnabled" name="enabled">
+                                    <label class="form-check-label" for="editIntegrationEnabled">启用此集成</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">同步配置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="editSyncEnabled" class="form-label d-block">启用同步</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="editSyncEnabled" name="sync_enabled">
+                                    <label class="form-check-label" for="editSyncEnabled">启用自动同步</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="editSyncDirection" class="form-label">同步方向</label>
+                                <select class="form-select" id="editSyncDirection" name="sync_direction">
+                                    <option value="bidirectional">双向同步</option>
+                                    <option value="inbound">仅入站 (从外部系统拉取)</option>
+                                    <option value="outbound">仅出站 (推送数据到外部系统)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="editSyncInterval" class="form-label">同步间隔</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="editSyncInterval" name="sync_interval" min="60" max="86400">
+                                    <span class="input-group-text">秒</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">集成配置</div>
+                        
+                        <div class="mb-3">
+                            <label for="editIntegrationConfig" class="form-label">配置参数 <span class="text-danger">*</span></label>
+                            <textarea class="form-control json-editor" id="editIntegrationConfig" name="config" rows="8" required></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="updateIntegrationBtn">保存更改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 测试连接结果模态框 -->
+<div class="modal fade" id="testResultModal" tabindex="-1" aria-labelledby="testResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="testResultModalLabel">测试连接结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="testResultIcon" class="mb-3" style="font-size: 3rem;"></div>
+                <h4 id="testResultTitle" class="mb-2"></h4>
+                <p id="testResultMessage"></p>
+                <div id="testResultDetails" class="mt-3" style="display: none;">
+                    <pre id="testResultDetailsContent" class="bg-light p-3 rounded text-start"></pre>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 刷新按钮
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // 创建集成按钮（页面顶部）
+        document.getElementById('createIntegrationBtn').addEventListener('click', showCreateModal);
+        
+        // 创建集成按钮（空状态）
+        const createIntegrationBtnEmpty = document.getElementById('createIntegrationBtnEmpty');
+        if (createIntegrationBtnEmpty) {
+            createIntegrationBtnEmpty.addEventListener('click', showCreateModal);
+        }
+        
+        // 保存集成按钮
+        document.getElementById('saveIntegrationBtn').addEventListener('click', createIntegration);
+        
+        // 更新集成按钮
+        document.getElementById('updateIntegrationBtn').addEventListener('click', updateIntegration);
+        
+        // 编辑集成按钮
+        document.querySelectorAll('.edit-integration-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const integrationId = this.getAttribute('data-integration-id');
+                loadIntegrationData(integrationId);
+            });
+        });
+        
+        // 测试连接按钮
+        document.querySelectorAll('.test-integration-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const integrationId = this.getAttribute('data-integration-id');
+                testIntegrationConnection(integrationId);
+            });
+        });
+        
+        // 立即同步按钮
+        document.querySelectorAll('.sync-integration-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const integrationId = this.getAttribute('data-integration-id');
+                triggerIntegrationSync(integrationId);
+            });
+        });
+        
+        // 切换集成状态
+        document.querySelectorAll('.toggle-integration').forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                const integrationId = this.getAttribute('data-integration-id');
+                const enabled = this.checked;
+                updateIntegrationStatus(integrationId, enabled);
+            });
+        });
+        
+        // 当集成类型或提供商改变时，更新配置示例
+        document.getElementById('integrationType').addEventListener('change', updateConfigExample);
+        document.getElementById('integrationProvider').addEventListener('change', updateConfigExample);
+        
+        // 显示创建模态框
+        function showCreateModal() {
+            // 重置表单
+            document.getElementById('createIntegrationForm').reset();
+            
+            // 设置默认值
+            document.getElementById('integrationEnabled').checked = true;
+            document.getElementById('syncEnabled').checked = false;
+            document.getElementById('syncInterval').value = 300;
+            
+            // 清空配置示例
+            document.getElementById('configExample').innerHTML = '<p>请先选择集成类型和提供商以查看示例配置</p>';
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('createIntegrationModal'));
+            modal.show();
+        }
+        
+        // 更新配置示例
+        function updateConfigExample() {
+            const type = document.getElementById('integrationType').value;
+            const provider = document.getElementById('integrationProvider').value;
+            const configExample = document.getElementById('configExample');
+            
+            if (!type || !provider) {
+                configExample.innerHTML = '<p>请先选择集成类型和提供商以查看示例配置</p>';
+                return;
+            }
+            
+            let example = '';
+            
+            // 根据集成类型和提供商提供不同的配置示例
+            if (type === 'ticketing' && provider === 'jira') {
+                example = `{
+  "url": "https://your-company.atlassian.net",
+  "username": "api@example.com",
+  "api_token": "your_api_token_here",
+  "project_key": "PROJ",
+  "issue_type": "Bug",
+  "priority_field": "priority",
+  "status_mapping": {
+    "open": "To Do",
+    "in_progress": "In Progress",
+    "resolved": "Done"
+  }
+}`;
+            } else if (type === 'ticketing' && provider === 'servicenow') {
+                example = `{
+  "instance": "your-instance.service-now.com",
+  "username": "admin",
+  "password": "your_password",
+  "table": "incident",
+  "assignment_group": "Your Group",
+  "category": "software",
+  "urgency": "3"
+}`;
+            } else if (type === 'monitoring' && provider === 'zabbix') {
+                example = `{
+  "url": "http://zabbix.example.com/zabbix",
+  "username": "Admin",
+  "password": "zabbix",
+  "trigger_severity_mapping": {
+    "disaster": "critical",
+    "high": "error",
+    "average": "warning",
+    "warning": "info",
+    "information": "info"
+  }
+}`;
+            } else if (type === 'monitoring' && provider === 'prometheus') {
+                example = `{
+  "url": "http://prometheus.example.com:9090",
+  "alertmanager_url": "http://alertmanager.example.com:9093",
+  "severity_label": "severity",
+  "group_by": ["alertname", "instance"],
+  "timeout": "30s"
+}`;
+            } else if (type === 'chatops' && provider === 'slack') {
+                example = `{
+  "token": "xoxb-your-bot-token",
+  "signing_secret": "your_signing_secret",
+  "channel": "#alerts",
+  "username": "System Bot",
+  "icon_emoji": ":robot_face:",
+  "notification_levels": ["critical", "error"]
+}`;
+            } else {
+                example = `{
+  "url": "https://example.com/api",
+  "api_key": "your_api_key_here",
+  "timeout": 30,
+  "verify_ssl": true
+}`;
+            }
+            
+            configExample.innerHTML = `<pre class="mb-0">${example}</pre>`;
+            
+            // 同时填充配置编辑器
+            document.getElementById('integrationConfig').value = example;
+        }
+        
+        // 创建集成配置
+        function createIntegration() {
+            // 收集表单数据
+            const formData = {
+                name: document.getElementById('integrationName').value,
+                description: document.getElementById('integrationDescription').value,
+                integration_type: document.getElementById('integrationType').value,
+                provider: document.getElementById('integrationProvider').value,
+                enabled: document.getElementById('integrationEnabled').checked,
+                sync_enabled: document.getElementById('syncEnabled').checked,
+                sync_direction: document.getElementById('syncDirection').value,
+                sync_interval: parseInt(document.getElementById('syncInterval').value)
+            };
+            
+            // 验证必填字段
+            if (!formData.name) {
+                alert('请填写集成名称');
+                return;
+            }
+            
+            if (!formData.integration_type) {
+                alert('请选择集成类型');
+                return;
+            }
+            
+            if (!formData.provider) {
+                alert('请选择提供商');
+                return;
+            }
+            
+            // 处理配置
+            const configText = document.getElementById('integrationConfig').value.trim();
+            if (!configText) {
+                alert('请填写配置参数');
+                return;
+            }
+            
+            try {
+                formData.config = JSON.parse(configText);
+            } catch (e) {
+                alert('配置参数格式错误，请输入有效的JSON格式');
+                return;
+            }
+            
+            // 显示加载状态
+            const saveBtn = document.getElementById('saveIntegrationBtn');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 创建中...';
+            saveBtn.disabled = true;
+            
+            // 发送创建请求（假设有创建路由）
+            fetch('/config/api/integration-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 关闭模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('createIntegrationModal'));
+                    modal.hide();
+                    
+                    // 显示成功消息
+                    showAlert('集成配置已成功创建', 'success');
+                    
+                    // 重新加载页面以获取最新数据
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert('创建失败: ' + (result.message || '未知错误'));
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('创建失败:', error);
+                alert('创建失败: ' + error.message);
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            });
+        }
+        
+        // 加载集成数据到编辑模态框
+        function loadIntegrationData(integrationId) {
+            // 获取集成数据（假设有获取单个集成的路由）
+            fetch(`/config/api/integration-settings/${integrationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // 填充表单
+                    document.getElementById('editIntegrationId').value = data.id;
+                    document.getElementById('editIntegrationName').value = data.name;
+                    document.getElementById('editIntegrationDescription').value = data.description || '';
+                    document.getElementById('editIntegrationType').value = getIntegrationTypeDisplayName(data.integration_type);
+                    document.getElementById('editIntegrationProvider').value = data.provider;
+                    document.getElementById('editIntegrationEnabled').checked = data.enabled;
+                    document.getElementById('editSyncEnabled').checked = data.sync_enabled;
+                    document.getElementById('editSyncDirection').value = data.sync_direction;
+                    document.getElementById('editSyncInterval').value = data.sync_interval;
+                    
+                    // 格式化配置JSON
+                    if (data.config) {
+                        document.getElementById('editIntegrationConfig').value = JSON.stringify(data.config, null, 2);
+                    } else {
+                        document.getElementById('editIntegrationConfig').value = '{}';
+                    }
+                    
+                    // 显示模态框
+                    const modal = new bootstrap.Modal(document.getElementById('editIntegrationModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('获取集成数据失败:', error);
+                    alert('获取集成数据失败: ' + error.message);
+                });
+        }
+        
+        // 获取集成类型的显示名称
+        function getIntegrationTypeDisplayName(type) {
+            const typeMap = {
+                'ticketing': '工单系统',
+                'monitoring': '监控系统',
+                'cmdb': '配置管理数据库',
+                'chatops': 'ChatOps'
+            };
+            return typeMap[type] || type;
+        }
+        
+        // 更新集成配置
+        function updateIntegration() {
+            const integrationId = document.getElementById('editIntegrationId').value;
+            
+            // 收集表单数据
+            const formData = {
+                name: document.getElementById('editIntegrationName').value,
+                description: document.getElementById('editIntegrationDescription').value,
+                enabled: document.getElementById('editIntegrationEnabled').checked,
+                sync_enabled: document.getElementById('editSyncEnabled').checked,
+                sync_direction: document.getElementById('editSyncDirection').value,
+                sync_interval: parseInt(document.getElementById('editSyncInterval').value)
+            };
+            
+            // 验证必填字段
+            if (!formData.name) {
+                alert('请填写集成名称');
+                return;
+            }
+            
+            // 处理配置
+            const configText = document.getElementById('editIntegrationConfig').value.trim();
+            if (!configText) {
+                alert('请填写配置参数');
+                return;
+            }
+            
+            try {
+                formData.config = JSON.parse(configText);
+            } catch (e) {
+                alert('配置参数格式错误，请输入有效的JSON格式');
+                return;
+            }
+            
+            // 显示加载状态
+            const updateBtn = document.getElementById('updateIntegrationBtn');
+            const originalText = updateBtn.innerHTML;
+            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 保存中...';
+            updateBtn.disabled = true;
+            
+            // 发送更新请求（假设有更新路由）
+            fetch(`/config/api/integration-settings/${integrationId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 关闭模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editIntegrationModal'));
+                    modal.hide();
+                    
+                    // 显示成功消息
+                    showAlert('集成配置已成功更新', 'success');
+                    
+                    // 重新加载页面以获取最新数据
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert('更新失败: ' + (result.message || '未知错误'));
+                    updateBtn.innerHTML = originalText;
+                    updateBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('更新失败:', error);
+                alert('更新失败: ' + error.message);
+                updateBtn.innerHTML = originalText;
+                updateBtn.disabled = false;
+            });
+        }
+        
+        // 测试集成连接
+        function testIntegrationConnection(integrationId) {
+            // 显示加载状态
+            const testBtn = document.querySelector(`.test-integration-btn[data-integration-id="${integrationId}"]`);
+            const originalIcon = testBtn.innerHTML;
+            testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            testBtn.disabled = true;
+            
+            // 发送测试请求（假设有测试路由）
+            fetch(`/config/api/integration-settings/${integrationId}/test`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                // 恢复按钮状态
+                testBtn.innerHTML = originalIcon;
+                testBtn.disabled = false;
+                
+                // 显示测试结果
+                const modal = new bootstrap.Modal(document.getElementById('testResultModal'));
+                const iconEl = document.getElementById('testResultIcon');
+                const titleEl = document.getElementById('testResultTitle');
+                const messageEl = document.getElementById('testResultMessage');
+                const detailsEl = document.getElementById('testResultDetails');
+                const detailsContentEl = document.getElementById('testResultDetailsContent');
+                
+                if (result.success) {
+                    iconEl.innerHTML = '<i class="fas fa-check-circle text-success"></i>';
+                    titleEl.textContent = '连接成功';
+                    messageEl.textContent = result.message || '集成连接测试成功';
+                    detailsEl.style.display = 'none';
+                } else {
+                    iconEl.innerHTML = '<i class="fas fa-times-circle text-danger"></i>';
+                    titleEl.textContent = '连接失败';
+                    messageEl.textContent = result.message || '集成连接测试失败';
+                    
+                    if (result.details) {
+                        detailsEl.style.display = 'block';
+                        detailsContentEl.textContent = JSON.stringify(result.details, null, 2);
+                    } else {
+                        detailsEl.style.display = 'none';
+                    }
+                }
+                
+                modal.show();
+            })
+            .catch(error => {
+                console.error('测试连接失败:', error);
+                
+                // 恢复按钮状态
+                testBtn.innerHTML = originalIcon;
+                testBtn.disabled = false;
+                
+                // 显示错误
+                const modal = new bootstrap.Modal(document.getElementById('testResultModal'));
+                document.getElementById('testResultIcon').innerHTML = '<i class="fas fa-times-circle text-danger"></i>';
+                document.getElementById('testResultTitle').textContent = '连接失败';
+                document.getElementById('testResultMessage').textContent = '测试连接时发生错误: ' + error.message;
+                document.getElementById('testResultDetails').style.display = 'none';
+                
+                modal.show();
+            });
+        }
+        
+        // 触发集成同步
+        function triggerIntegrationSync(integrationId) {
+            // 显示加载状态
+            const syncBtn = document.querySelector(`.sync-integration-btn[data-integration-id="${integrationId}"]`);
+            const originalIcon = syncBtn.innerHTML;
+            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            syncBtn.disabled = true;
+            
+            // 发送同步请求（假设有同步路由）
+            fetch(`/config/api/integration-settings/${integrationId}/sync`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                // 恢复按钮状态
+                syncBtn.innerHTML = originalIcon;
+                syncBtn.disabled = false;
+                
+                if (result.success) {
+                    showAlert('同步已触发成功', 'success');
+                    // 可以重新加载页面或更新状态
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    showAlert('同步失败: ' + (result.message || '未知错误'), 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('触发同步失败:', error);
+                syncBtn.innerHTML = originalIcon;
+                syncBtn.disabled = false;
+                showAlert('触发同步失败: ' + error.message, 'danger');
+            });
+        }
+        
+        // 更新集成状态
+        function updateIntegrationStatus(integrationId, enabled) {
+            fetch(`/config/api/integration-settings/${integrationId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ enabled: enabled })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(`集成已${enabled ? '启用' : '禁用'}`, 'success');
+                } else {
+                    alert('操作失败: ' + (result.message || '未知错误'));
+                    // 恢复切换状态
+                    const toggle = document.querySelector(`.toggle-integration[data-integration-id="${integrationId}"]`);
+                    if (toggle) {
+                        toggle.checked = !enabled;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('操作失败:', error);
+                alert('操作失败: ' + error.message);
+                // 恢复切换状态
+                const toggle = document.querySelector(`.toggle-integration[data-integration-id="${integrationId}"]`);
+                if (toggle) {
+                    toggle.checked = !enabled;
+                }
+            });
+        }
+        
+        // 显示提示消息
+        function showAlert(message, type) {
+            // 移除现有的提示
+            const existingAlert = document.querySelector('.alert-dismissible');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+            
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', alertHtml);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                const alert = document.querySelector('.alert-dismissible');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

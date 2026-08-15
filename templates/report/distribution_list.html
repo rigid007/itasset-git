@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}报表分发{% endblock %}
+{% block page_title %}报表分发{% endblock %}
+{% block page_subtitle %}自动报表分发任务管理{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-primary mb-1">{{ distributions|length }}</h4><small>分发任务</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-success mb-1">{{ distributions|selectattr('enabled', 'equalto', true)|list|length }}</h4><small>已启用</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-secondary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-secondary mb-1">{{ distributions|rejectattr('enabled', 'equalto', true)|list|length }}</h4><small>已禁用</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                {% set channels = distributions|map(attribute='delivery_channel')|unique|list %}
+                <div class="card border-info text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-info mb-1">{{ channels|length }}</h4><small>分发渠道</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDistModal"><i class="fas fa-plus"></i> 新建分发任务</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>任务名称</th><th>报表类型</th><th>格式</th><th>渠道</th><th>Cron</th><th>上次发送</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+                {% for d in distributions %}
+                <tr>
+                    <td><strong>{{ d.name }}</strong></td>
+                    <td><span class="badge bg-info">{{ d.report_type }}</span></td>
+                    <td>{{ d.format }}</td>
+                    <td>{{ d.delivery_channel }}</td>
+                    <td><code>{{ d.schedule_cron or '-' }}</code></td>
+                    <td><small>{{ d.last_sent_at.strftime('%Y-%m-%d %H:%M') if d.last_sent_at else '从未' }}</small></td>
+                    <td>
+                        {% if d.enabled %}<span class="badge bg-success">启用</span>
+                        {% else %}<span class="badge bg-secondary">禁用</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1">
+                        <form method="POST" action="{{ url_for('report_extra.distribution_toggle', id=d.id) }}" style="display:inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if d.enabled else 'success' }}">
+                                <i class="fas fa-{{ 'pause' if d.enabled else 'play' }}"></i>
+                            </button>
+                        </form>
+                        {% if has_permission(current_user, 'report:edit') %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" title="编辑"
+                                data-bs-toggle="modal" data-bs-target="#editDistModal"
+                                data-id="{{ d.id }}"
+                                data-name="{{ d.name }}"
+                                data-report_type="{{ d.report_type }}"
+                                data-format="{{ d.format }}"
+                                data-delivery_channel="{{ d.delivery_channel }}"
+                                data-schedule_cron="{{ d.schedule_cron or '' }}"
+                                data-recipients="{{ d.recipients or '[]' }}"
+                                data-enabled="{{ 'true' if d.enabled else 'false' }}"
+                                data-retry_on_fail="{{ 'true' if d.retry_on_fail else 'false' }}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('report_extra.distribution_delete', id=d.id) }}" style="display:inline"
+                              onsubmit="return confirm('确定要删除分发任务「{{ d.name }}」吗？')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" title="删除"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">暂无分发任务</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addDistModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('report_extra.distribution_add') }}">
+    <div class="modal-header"><h5 class="modal-title">新建分发任务</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">任务名称 <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">报表类型</label>
+                <select name="report_type" class="form-select">
+                    <option value="device_status">设备状态</option>
+                    <option value="alert_summary">告警汇总</option>
+                    <option value="performance">性能报表</option>
+                    <option value="compliance">合规报表</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">格式</label>
+                <select name="format" class="form-select">
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel</option>
+                    <option value="html">HTML</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">分发渠道</label>
+                <select name="delivery_channel" class="form-select">
+                    <option value="email">邮件</option>
+                    <option value="slack">Slack</option>
+                    <option value="webhook">Webhook</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">Cron表达式</label>
+                <input type="text" name="schedule_cron" class="form-control" placeholder="0 8 * * 1">
+                <div class="form-text">留空表示手动触发</div>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">收件人 (JSON)</label>
+            <textarea name="recipients" class="form-control" rows="3" placeholder='[{"email":"admin@example.com"}, {"email":"ops@example.com"}]'>[]</textarea>
+            <div class="form-text">示例: [{"email":"admin@example.com"}, {"email":"ops@example.com"}]。JSON数组，每项包含email/slack/webhook地址。</div>
+        </div>
+        <div class="form-check mb-2">
+            <input type="checkbox" name="enabled" class="form-check-input" id="dist_enabled" checked>
+            <label class="form-check-label" for="dist_enabled">启用</label>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" name="retry_on_fail" class="form-check-input" id="dist_retry" checked>
+            <label class="form-check-label" for="dist_retry">失败重试</label>
+        </div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+
+<!-- 编辑模态框 -->
+<div class="modal fade" id="editDistModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><h5 class="modal-title">编辑分发任务</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <div class="mb-3"><label class="form-label">任务名称 <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">报表类型</label>
+                <select name="report_type" class="form-select">
+                    <option value="device_status">设备状态</option>
+                    <option value="alert_summary">告警汇总</option>
+                    <option value="performance">性能报表</option>
+                    <option value="compliance">合规报表</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">格式</label>
+                <select name="format" class="form-select">
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel</option>
+                    <option value="html">HTML</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">分发渠道</label>
+                <select name="delivery_channel" class="form-select">
+                    <option value="email">邮件</option>
+                    <option value="slack">Slack</option>
+                    <option value="webhook">Webhook</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">Cron表达式</label>
+                <input type="text" name="schedule_cron" class="form-control" placeholder="0 8 * * 1">
+                <div class="form-text">留空表示手动触发，修改后需重启调度器生效</div>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">收件人 (JSON)</label>
+            <textarea name="recipients" class="form-control" rows="3" placeholder='[{"email":"admin@example.com"}]'>[]</textarea>
+            <div class="form-text">示例: [{"email":"admin@example.com"}, {"email":"ops@example.com"}]</div>
+        </div>
+        <div class="form-check mb-2">
+            <input type="checkbox" name="enabled" class="form-check-input" id="edit_dist_enabled" checked>
+            <label class="form-check-label" for="edit_dist_enabled">启用</label>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" name="retry_on_fail" class="form-check-input" id="edit_dist_retry" checked>
+            <label class="form-check-label" for="edit_dist_retry">失败重试</label>
+        </div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存修改</button></div>
+</form>
+</div></div></div>
+{% endblock %}

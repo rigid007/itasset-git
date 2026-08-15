@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}异常检测{% endblock %}
+{% block page_title %}异常检测规则{% endblock %}
+{% block page_subtitle %}基于基线的性能异常自动检测{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-primary mb-1">{{ rules|length }}</h4><small>规则总数</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-success mb-1">{{ rules|selectattr('enabled', 'equalto', true)|list|length }}</h4><small>已启用</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-info text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-info mb-1">{{ rules|map(attribute='metric_name')|unique|list|length }}</h4><small>指标类型</small></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-secondary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-secondary mb-1">{{ rules|selectattr('enabled', 'equalto', false)|list|length }}</h4><small>已禁用</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRuleModal"><i class="fas fa-plus"></i> 添加规则</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>设备</th><th>指标</th><th>方法</th><th>灵敏度</th><th>偏差阈值</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for r in rules %}
+                <tr>
+                    <td>{{ r.device.name if r.device else '全部设备' }}</td>
+                    <td><span class="badge bg-info">{{ r.metric_name }}</span></td>
+                    <td><small>{{ r.method }}</small></td>
+                    <td>
+                        {% if r.sensitivity == 'high' %}<span class="badge bg-danger">高</span>
+                        {% elif r.sensitivity == 'medium' %}<span class="badge bg-warning">中</span>
+                        {% else %}<span class="badge bg-success">低</span>{% endif %}
+                    </td>
+                    <td>{{ r.deviation_threshold }}σ</td>
+                    <td>{% if r.enabled %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无异常检测规则</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addRuleModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('monitoring_extra.anomaly_detection_add') }}">
+    <div class="modal-header"><h5 class="modal-title">添加异常检测规则</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">设备</label>
+                <select name="device_id" class="form-select">
+                    <option value="">全部设备</option>
+                    {% for d in devices %}
+                    <option value="{{ d.id }}">{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">指标 <span class="text-danger">*</span></label>
+                <select name="metric_name" class="form-select" required>
+                    <option value="cpu">CPU使用率</option>
+                    <option value="memory">内存使用率</option>
+                    <option value="disk">磁盘使用率</option>
+                    <option value="network">网络流量</option>
+                    <option value="temperature">温度</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">检测方法</label>
+                <select name="method" class="form-select">
+                    <option value="statistical_deviation">标准差法</option>
+                    <option value="moving_average">移动平均法</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">灵敏度</label>
+                <select name="sensitivity" class="form-select">
+                    <option value="high">高</option>
+                    <option value="medium" selected>中</option>
+                    <option value="low">低</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">偏差阈值(σ)</label><input type="number" name="deviation_threshold" class="form-control" value="2.0" step="0.1" min="0.5"></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+{% endblock %}

@@ -1,0 +1,586 @@
+{% extends "base.html" %}
+
+{% block title %}变更详情 - {{ change.change_number }} - 运维管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('maintenance.change_requests') }}">变更管理</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('maintenance.change_approval') }}">变更审批</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ change.change_number }}</li>
+        </ol>
+    </nav>
+
+    <!-- 页面标题与状态 -->
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-clipboard-list me-2 text-primary"></i>变更详情
+                <small class="text-muted fs-5">{{ change.change_number }}</small>
+            </h2>
+            <div class="mt-1">
+                <span class="badge bg-{{ 'success' if change.status == 'approved' else 'warning' if change.status == 'pending' else 'secondary' }} fs-6 me-2">
+                    {{ change.status }}
+                </span>
+                {% if change.change_type == 'emergency' %}
+                    <span class="badge bg-danger fs-6">紧急</span>
+                {% elif change.change_type == 'standard' %}
+                    <span class="badge bg-success fs-6">标准</span>
+                {% elif change.change_type == 'normal' %}
+                    <span class="badge bg-info fs-6">常规</span>
+                {% endif %}
+                {% if change.cab_review_required %}
+                    <span class="badge bg-warning text-dark fs-6">需CAB评审</span>
+                {% endif %}
+            </div>
+        </div>
+        <a href="{{ url_for('maintenance.change_requests') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>返回列表
+        </a>
+    </div>
+
+    <!-- 基本信息卡片 -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>基本信息</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">变更标题</dt>
+                        <dd class="col-sm-9">{{ change.title }}</dd>
+
+                        <dt class="col-sm-3">变更描述</dt>
+                        <dd class="col-sm-9">{{ change.description or '无'|safe }}</dd>
+
+                        <dt class="col-sm-3">变更类别</dt>
+                        <dd class="col-sm-9">{{ change.category or '未分类' }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>计划时间</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">计划日期</dt>
+                        <dd class="col-sm-7">{{ change.scheduled_date.strftime('%Y-%m-%d') if change.scheduled_date else '未排期' }}</dd>
+
+                        <dt class="col-sm-5">开始时间</dt>
+                        <dd class="col-sm-7">{{ change.scheduled_start_time or '待定' }}</dd>
+
+                        <dt class="col-sm-5">结束时间</dt>
+                        <dd class="col-sm-7">{{ change.scheduled_end_time or '待定' }}</dd>
+
+                        <dt class="col-sm-5">预估时长</dt>
+                        <dd class="col-sm-7">{{ change.estimated_duration_hours|default('未填写', true) }} 小时</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 第二行：影响与风险 + 关联人 -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>影响与风险</h5>
+                    {% if has_permission(current_user, 'change:impact') %}
+                    <a href="{{ url_for('itsm_adv.change_impact', change_id=change.id) }}" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-project-diagram"></i> 影响模拟
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">影响级别</dt>
+                        <dd class="col-sm-8">
+                            {% if change.impact_level == 'high' %}
+                                <span class="badge bg-danger">高</span>
+                            {% elif change.impact_level == 'medium' %}
+                                <span class="badge bg-warning text-dark">中</span>
+                            {% elif change.impact_level == 'low' %}
+                                <span class="badge bg-success">低</span>
+                            {% else %}
+                                {{ change.impact_level or '未指定' }}
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-4">风险级别</dt>
+                        <dd class="col-sm-8">
+                            {% if change.risk_level == 'high' %}
+                                <span class="badge bg-danger">高</span>
+                            {% elif change.risk_level == 'medium' %}
+                                <span class="badge bg-warning text-dark">中</span>
+                            {% elif change.risk_level == 'low' %}
+                                <span class="badge bg-success">低</span>
+                            {% else %}
+                                {{ change.risk_level or '未指定' }}
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-4">影响描述</dt>
+                        <dd class="col-sm-9">{{ change.impact_description or '无' }}</dd>
+
+                        <dt class="col-sm-4">风险描述</dt>
+                        <dd class="col-sm-9">{{ change.risk_description or '无' }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>关联人</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">请求人</dt>
+                        <dd class="col-sm-8">{{ change.requester_name or '未知' }}</dd>
+
+                        <dt class="col-sm-4">实施人</dt>
+                        <dd class="col-sm-8">{{ change.implementer_name or '未指派' }}</dd>
+
+                        <dt class="col-sm-4">创建人</dt>
+                        <dd class="col-sm-8">{{ change.created_by or '未知' }}</dd>
+
+                        <dt class="col-sm-4">创建时间</dt>
+                        <dd class="col-sm-8">{{ change.created_at.strftime('%Y-%m-%d %H:%M') }}</dd>
+
+                        <dt class="col-sm-4">最后更新</dt>
+                        <dd class="col-sm-8">{{ change.updated_at.strftime('%Y-%m-%d %H:%M') }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 变更对象卡片 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-server me-2"></i>变更对象</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-2">关联CMDB设备</dt>
+                <dd class="col-sm-10">
+                    {% set links = change.affected_device_links.all() %}
+                    {% if links %}
+                        {% for link in links %}
+                        <a href="{{ url_for('device.device_detail', id=link.device.id) }}" class="badge bg-info text-decoration-none me-1 mb-1">
+                            {{ link.device.name }} ({{ link.device.ip_address or '-' }})
+                        </a>{% if link.note %} <small class="text-muted">{{ link.note }}</small>{% endif %}
+                        {% endfor %}
+                    {% elif change.affected_devices %}
+                        {{ change.affected_devices }}
+                    {% else %}
+                        无
+                    {% endif %}
+                </dd>
+
+                <dt class="col-sm-2">受影响的服务</dt>
+                <dd class="col-sm-10">{{ change.affected_services or '无' }}</dd>
+
+                <dt class="col-sm-2">受影响的用户</dt>
+                <dd class="col-sm-10">{{ change.affected_users or '无' }}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <!-- 详细计划卡片（三列） -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-tasks me-2"></i>实施计划</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ change.implementation_plan or '未填写'|safe }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-undo-alt me-2"></i>回滚计划</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ change.rollback_plan or '未填写'|safe }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-vial me-2"></i>测试计划</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ change.test_plan or '未填写'|safe }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 审批信息卡片 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i>审批信息</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-2">审批状态</dt>
+                <dd class="col-sm-4">{{ change.approval_status or '未审批' }}</dd>
+
+                <dt class="col-sm-2">审批人</dt>
+                <dd class="col-sm-4">{{ change.approver_name or '无' }}</dd>
+
+                <dt class="col-sm-2">审批日期</dt>
+                <dd class="col-sm-4">{{ change.approval_date.strftime('%Y-%m-%d %H:%M') if change.approval_date else '未审批' }}</dd>
+
+                <dt class="col-sm-2">审批意见</dt>
+                <dd class="col-sm-10">{{ change.approval_notes or '无' }}</dd>
+        </dl>
+    </div>
+</div>
+
+    <!-- 审批链（CAB）卡片 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-users-cog me-2"></i>审批链（CAB）</h5>
+        </div>
+        <div class="card-body">
+            {% set chain = change.approval_chain.all() %}
+            {% if chain %}
+            <div class="timeline">
+            {% for ca in chain|sort(attribute='stage') %}
+                <div class="d-flex align-items-center border-bottom py-2 {% if ca.stage == active_stage %}bg-warning bg-opacity-10{% endif %}">
+                    <div style="width:90px;">
+                        <span class="badge bg-secondary">阶段 {{ ca.stage }}</span>
+                    </div>
+                    <div style="width:150px;">{{ ca.stage_name or '-' }}</div>
+                    <div style="width:170px;">
+                        {% if ca.approver_id %}
+                            {{ ca.approver_name or ('审批人#' + ca.approver_id|string) }}
+                        {% else %}
+                            <span class="text-muted">任意CAB审批者</span>
+                        {% endif %}
+                    </div>
+                    <div style="width:110px;">
+                        {% if ca.status == 'approved' %}<span class="badge bg-success">已通过</span>
+                        {% elif ca.status == 'rejected' %}<span class="badge bg-danger">已拒绝</span>
+                        {% elif ca.stage == active_stage %}<span class="badge bg-warning text-dark">待审批</span>
+                        {% else %}<span class="badge bg-light text-dark">等待中</span>{% endif %}
+                    </div>
+                    <div class="flex-grow-1">
+                        {% if ca.comment %}<small class="text-muted">意见：{{ ca.comment }}</small>{% endif %}
+                    </div>
+                    <div class="text-nowrap">
+                        {% if ca.status == 'pending' and ca.stage == active_stage and has_permission(current_user, 'change:cab:approve') and (ca.approver_id is none or ca.approver_id == current_user.id) %}
+                        <form action="{{ url_for('maintenance.approve_change_stage', approval_id=ca.id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="text" name="notes" class="form-control form-control-sm d-inline" style="width:150px;" placeholder="审批意见(可选)">
+                            <button class="btn btn-sm btn-success" title="通过"><i class="fas fa-check"></i></button>
+                        </form>
+                        <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectCa{{ ca.id }}" title="拒绝"><i class="fas fa-times"></i></button>
+                        <div class="modal fade" id="rejectCa{{ ca.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-sm">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('maintenance.reject_change_stage', approval_id=ca.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="modal-header"><h6 class="modal-title">拒绝阶段：{{ ca.stage_name }}</h6>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                        <div class="modal-body">
+                                            <textarea name="notes" class="form-control" rows="3" required placeholder="请填写拒绝意见..."></textarea>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                                            <button type="submit" class="btn btn-danger btn-sm">确认拒绝</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">本变更使用单人审批（未生成审批链）。可在页面底部直接批准/拒绝。</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- CAB评审卡片（如果需要） -->
+    {% if change.cab_review_required %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-users-cog me-2"></i>CAB评审</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-2">评审日期</dt>
+                <dd class="col-sm-4">{{ change.cab_review_date.strftime('%Y-%m-%d %H:%M') if change.cab_review_date else '未评审' }}</dd>
+
+                <dt class="col-sm-2">CAB成员</dt>
+                <dd class="col-sm-4">{{ change.cab_members or '无' }}</dd>
+
+                <dt class="col-sm-2">评审意见</dt>
+                <dd class="col-sm-10">{{ change.cab_review_notes or '无' }}</dd>
+            </dl>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 实施结果卡片（当变更已实施时显示） -->
+    {% if change.status in ['in_progress', 'completed'] or change.actual_start_date %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>实施结果</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-2">实际开始</dt>
+                <dd class="col-sm-4">{{ change.actual_start_date.strftime('%Y-%m-%d %H:%M') if change.actual_start_date else '未开始' }}</dd>
+
+                <dt class="col-sm-2">实际结束</dt>
+                <dd class="col-sm-4">{{ change.actual_end_date.strftime('%Y-%m-%d %H:%M') if change.actual_end_date else '未结束' }}</dd>
+
+                <dt class="col-sm-2">实际时长</dt>
+                <dd class="col-sm-4">{{ change.actual_duration_hours|default('未记录', true) }} 小时</dd>
+
+                <dt class="col-sm-2">实施结果</dt>
+                <dd class="col-sm-10">{{ change.implementation_result or '无' }}</dd>
+
+                <dt class="col-sm-2">遇到的问题</dt>
+                <dd class="col-sm-10">{{ change.issues_encountered or '无' }}</dd>
+            </dl>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 关闭与评估卡片（当变更已关闭时显示） -->
+    {% if change.status in ['completed', 'cancelled'] %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-door-closed me-2"></i>关闭信息</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">关闭人</dt>
+                        <dd class="col-sm-8">{{ change.closed_by or '无' }}</dd>
+
+                        <dt class="col-sm-4">关闭日期</dt>
+                        <dd class="col-sm-8">{{ change.closed_date.strftime('%Y-%m-%d %H:%M') if change.closed_date else '无' }}</dd>
+
+                        <dt class="col-sm-4">关闭说明</dt>
+                        <dd class="col-sm-8">{{ change.closure_notes or '无' }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-clipboard-check me-2"></i>评估</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">实施后评审</dt>
+                        <dd class="col-sm-8">{{ change.post_implementation_review or '无' }}</dd>
+
+                        <dt class="col-sm-4">成功标准达成</dt>
+                        <dd class="col-sm-8">
+                            {% if change.success_criteria_met is true %}
+                                <span class="badge bg-success">是</span>
+                            {% elif change.success_criteria_met is false %}
+                                <span class="badge bg-danger">否</span>
+                            {% else %}
+                                未评估
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-4">经验教训</dt>
+                        <dd class="col-sm-8">{{ change.lessons_learned or '无' }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 排期冲突检测卡片 -->
+    {% if conflicts %}
+    <div class="card shadow-sm mb-4 border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>排期冲突检测（{{ conflicts|length }}）</h5>
+        </div>
+        <div class="card-body">
+            <p class="mb-2">检测到以下未关闭变更与本变更在<strong>相同设备</strong>且<strong>排期时间窗口重叠</strong>，请评估冲突风险：</p>
+            <ul class="mb-0">
+            {% for c in conflicts %}
+                <li class="mb-1">
+                    <a href="{{ url_for('maintenance.change_detail', change_id=c.change_id) }}" class="text-decoration-none">{{ c.change_number }} {{ c.title }}</a>
+                    <span class="badge bg-secondary">{{ c.status }}</span>
+                    <small class="text-muted">{{ c.scheduled_date }} {{ c.start or '?' }}-{{ c.end or '?' }}</small>
+                    <br><small class="text-muted">共用设备：</small>
+                    {% for d in c.shared_devices %}<span class="badge bg-warning text-dark me-1">{{ d }}</span>{% endfor %}
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 操作按钮区域（根据状态和权限显示） -->
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <!-- 返回列表按钮已在上方，这里放置编辑/审批等操作 -->
+        {% if change.status == 'draft' %}
+            <a href="{{ url_for('maintenance.edit_change', change_id=change.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit me-1"></i>编辑
+            </a>
+            <a href="{{ url_for('maintenance.submit_change', change_id=change.id) }}" class="btn btn-success">
+                <i class="fas fa-paper-plane me-1"></i>提交审批
+            </a>
+            <button type="button" class="btn btn-danger" onclick="confirmDelete('{{ change.change_number }}')">
+                <i class="fas fa-trash me-1"></i>删除
+            </button>
+        {% endif %}
+
+        {% if change.status in ['pending', 'submitted'] and change.approval_chain.count() == 0 %}
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="fas fa-check me-1"></i>批准
+            </button>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                <i class="fas fa-times me-1"></i>拒绝
+            </button>
+        {% endif %}
+
+        {% if change.status == 'approved' and not change.scheduled_date %}
+            <a href="{{ url_for('maintenance.schedule_change', change_id=change.id) }}" class="btn btn-warning">
+                <i class="fas fa-calendar-plus me-1"></i>排期
+            </a>
+        {% endif %}
+
+        {% if change.status == 'scheduled' %}
+            <a href="{{ url_for('maintenance.start_change', change_id=change.id) }}" class="btn btn-primary">
+                <i class="fas fa-play me-1"></i>开始实施
+            </a>
+        {% endif %}
+
+        {% if change.status == 'in_progress' %}
+            <a href="{{ url_for('maintenance.complete_change', change_id=change.id) }}" class="btn btn-success">
+                <i class="fas fa-check-circle me-1"></i>完成实施
+            </a>
+        {% endif %}
+
+        {% if change.status in ['completed', 'cancelled'] %}
+            <a href="{{ url_for('maintenance.print_change', change_id=change.id) }}" class="btn btn-info" target="_blank">
+                <i class="fas fa-print me-1"></i>打印报告
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 批准模态框（仅无审批链时启用） -->
+{% if change.approval_chain.count() == 0 %}
+<div class="modal fade" id="approveModal" tabindex="-1" aria-labelledby="approveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('maintenance.approve_change', change_id=change.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="approveModalLabel">批准变更 {{ change.change_number }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="approveNotes" class="form-label">审批意见（可选）</label>
+                        <textarea class="form-control" id="approveNotes" name="notes" rows="3" placeholder="可填写批准备注..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-success">确认批准</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 拒绝模态框 -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('maintenance.reject_change', change_id=change.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="rejectModalLabel">拒绝变更 {{ change.change_number }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="rejectNotes" class="form-label">拒绝意见 <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="rejectNotes" name="notes" rows="3" required placeholder="请填写拒绝原因..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-danger">确认拒绝</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 删除确认脚本（需要实现删除路由） -->
+<script>
+
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .card {
+        border-radius: 0.5rem;
+    }
+    .card-header {
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+    }
+    dl.row {
+        margin-bottom: 0;
+    }
+    dt {
+        font-weight: 500;
+        color: #495057;
+    }
+    dd {
+        margin-bottom: 0.5rem;
+    }
+    dd:last-child {
+        margin-bottom: 0;
+    }
+    .badge.fs-6 {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.7rem;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Bootstrap 5 JS 用于模态框 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

@@ -1,0 +1,2423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+{% extends "base.html" %}
+
+{% block title %}接口视图 - 拓扑管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    /* 原有样式保持不变，为节省篇幅此处省略，实际使用时保留原样 */
+    .interface-card { border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); transition: all 0.3s ease; }
+    .interface-card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+    .status-up { color: #28a745; }
+    .status-down { color: #dc3545; }
+    .status-testing { color: #ffc107; }
+    .utilization-low { color: #28a745; }
+    .utilization-medium { color: #ffc107; }
+    .utilization-high { color: #dc3545; font-weight: bold; }
+    .interface-badge { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
+    .filter-card { background-color: #f8f9fa; border-radius: 8px; }
+    .modal-lg-custom { max-width: 900px; }
+    .speed-badge { background-color: #e9ecef; color: #495057; font-family: monospace; }
+    .progress-thin { height: 6px; width: 80px; }
+    .empty-table-message { padding: 3rem !important; text-align: center; }
+    .empty-table-message i { font-size: 3rem; margin-bottom: 1rem; color: #6c757d; }
+    .table-container { overflow-x: auto; }
+    .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 10px; }
+    .page-btn { min-width: 40px; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { background-color: #f1f3f5; }
+    .sort-arrow { margin-left: 5px; font-size: 0.8em; opacity: 0.6; }
+    .snmp-debug { font-family: monospace; font-size: 0.85rem; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; max-height: 300px; overflow-y: auto; }
+    .checkbox-col { width: 40px; text-align: center; }
+    .btn-group-sm .btn { padding: 0.25rem 0.5rem; }
+    .tooltip-inner { max-width: 300px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 调试信息 -->
+    {% if devices|length == 0 %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <strong>警告：</strong>未找到任何设备。请先在设备管理中添加设备。
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <!-- 页面标题和操作按钮 -->
+
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-network-wired text-primary me-2"></i>接口视图</h1>
+            <p class="text-muted mb-0">查看和管理所有网络设备的接口状态和统计信息</p>
+        </div>
+        <div>
+            <button class="btn btn-primary me-2" id="refreshBtn">
+                <i class="fas fa-sync-alt me-1"></i> 刷新
+            </button>
+            {% if devices|length > 0 %}
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addInterfaceModal">
+                <i class="fas fa-plus me-1"></i> 添加接口
+            </button>
+            {% else %}
+            <a href="{{ url_for('device.device_list') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> 先添加设备
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2 interface-stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                总接口数</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalInterfaces">{{ interfaces|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-plug fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2 interface-stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                UP接口</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="upInterfaces">
+                                {% set up_count = 0 %}
+                                {% for interface in interfaces %}
+                                    {% if interface.status == 'up' %}
+                                        {% set up_count = up_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ up_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2 interface-stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                DOWN接口</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="downInterfaces">
+                                {% set down_count = 0 %}
+                                {% for interface in interfaces %}
+                                    {% if interface.status == 'down' %}
+                                        {% set down_count = down_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ down_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2 interface-stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                高利用率接口</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="highUtilInterfaces">
+                                {% set high_util_count = 0 %}
+                                {% for interface in interfaces %}
+                                    {% if interface.in_utilization and interface.in_utilization > 80 or interface.out_utilization and interface.out_utilization > 80 %}
+                                        {% set high_util_count = high_util_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ high_util_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤和搜索 -->
+    <div class="card filter-card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label for="deviceFilter" class="form-label">设备筛选</label>
+                    <select id="deviceFilter" class="form-select">
+                        <option value="">所有设备</option>
+                        {% for device in devices %}
+                        <option value="{{ device.name }}">
+                            {{ device.name }} 
+                            {% if device.ip_address %}
+                                ({{ device.ip_address }})
+                            {% elif device.management_ip %}
+                                ({{ device.management_ip }})
+                            {% else %}
+                                (无IP)
+                            {% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="statusFilter" class="form-label">状态筛选</label>
+                    <select id="statusFilter" class="form-select">
+                        <option value="">所有状态</option>
+                        <option value="up">UP</option>
+                        <option value="down">DOWN</option>
+                        <option value="testing">测试中</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="typeFilter" class="form-label">类型筛选</label>
+                    <select id="typeFilter" class="form-select">
+                        <option value="">所有类型</option>
+                        <option value="Ethernet">以太网</option>
+                        <option value="GigabitEthernet">千兆以太网</option>
+                        <option value="TenGigabitEthernet">万兆以太网</option>
+                        <option value="Loopback">环回</option>
+                        <option value="VLAN">VLAN</option>
+                        <option value="Port-channel">端口通道</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="utilizationFilter" class="form-label">利用率筛选</label>
+                    <select id="utilizationFilter" class="form-select">
+                        <option value="">所有利用率</option>
+                        <option value="high">高利用率 (>80%)</option>
+                        <option value="medium">中利用率 (50-80%)</option>
+                        <option value="low">低利用率 (<50%)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="searchInput" class="form-label">搜索接口</label>
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索接口名称、IP、MAC地址...">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="vlanFilter" class="form-label">VLAN筛选</label>
+                    <input type="text" class="form-control" id="vlanFilter" placeholder="输入VLAN ID...">
+                </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" id="clearFiltersBtn">
+                        <i class="fas fa-filter-circle-xmark me-1"></i> 清除筛选
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SNMP调试信息面板 -->
+    <div class="alert alert-info d-none" id="snmpDebugInfo">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-bug me-2"></i>SNMP调试信息</h6>
+            <button type="button" class="btn btn-sm btn-outline-info" id="clearDebugBtn">
+                <i class="fas fa-trash-alt"></i> 清除
+            </button>
+        </div>
+        <div class="snmp-debug mt-2" id="debugOutput"></div>
+    </div>
+
+    <!-- 批量操作按钮 -->
+    <div class="batch-actions d-flex justify-content-end mb-2">
+        <button class="btn btn-danger btn-sm" id="batchDeleteBtn" disabled><i class="fas fa-trash-alt me-1"></i> 批量删除</button>
+    </div>
+
+    <!-- 接口表格 （只保留表头，表体由JS动态渲染） -->
+
+    <div class="card interface-card">
+        <div class="card-header bg-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">接口列表</h5>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
+                    <label class="form-check-label" for="autoRefreshSwitch"><small>自动刷新 (30秒)</small></label>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table table-hover mb-0" id="interfaceTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="checkbox-col"><input type="checkbox" id="selectAll" title="全选/取消全选"></th>
+                            <th class="sortable" data-sort="index"># <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="device_name">设备 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="name">接口名称 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="type">类型 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="status">状态 <span class="sort-arrow"></span></th>
+                            <th>IP地址</th>
+                            <th>MAC地址</th>
+                            <th class="sortable" data-sort="speed">速率 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="in_utilization">入口利用率 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="out_utilization">出口利用率 <span class="sort-arrow"></span></th>
+                            <th class="sortable" data-sort="vlan">VLAN <span class="sort-arrow"></span></th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="interfaceTableBody">
+                        <!-- 完全由JavaScript动态渲染，此处不再放置静态行 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card-footer bg-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted">
+                    显示 <span id="shownCount">0</span> / <span id="totalCount">0</span> 个接口
+                </div>
+                <div class="pagination-controls">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm page-btn" id="prevPageBtn" disabled>
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="btn btn-outline-secondary btn-sm disabled" id="pageInfo">第 1 页</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm page-btn" id="nextPageBtn" disabled>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <select class="form-select form-select-sm" id="pageSizeSelect" style="width: auto;">
+                        <option value="10">10条/页</option>
+                        <option value="25">25条/页</option>
+                        <option value="50">50条/页</option>
+                        <option value="100">100条/页</option>
+                        <option value="-1">全部</option>
+                    </select>
+                    <button class="btn btn-outline-secondary btn-sm" id="exportBtn">
+                        <i class="fas fa-download me-1"></i> 导出CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- 添加接口模态框 -->
+<div class="modal fade" id="addInterfaceModal" tabindex="-1" aria-labelledby="addInterfaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg-custom">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addInterfaceModalLabel">添加接口</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="addInterfaceTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual" type="button" role="tab">
+                            <i class="fas fa-keyboard me-1"></i> 手动添加
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="snmp-tab" data-bs-toggle="tab" data-bs-target="#snmp" type="button" role="tab">
+                            <i class="fas fa-satellite-dish me-1"></i> SNMP发现
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch" type="button" role="tab">
+                            <i class="fas fa-layer-group me-1"></i> 批量生成
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content p-3" id="addInterfaceTabContent">
+                    <!-- 手动添加 -->
+                    <div class="tab-pane fade show active" id="manual" role="tabpanel">
+                        <form id="manualForm">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="manualDevice" class="form-label required">选择设备</label>
+                                    <select id="manualDevice" class="form-select" required>
+                                        <option value="">请选择设备</option>
+                                        {% for device in devices %}
+                                        <option value="{{ device.id }}">
+                                            {{ device.name }} 
+                                            {% if device.ip_address %}
+                                                ({{ device.ip_address }})
+                                            {% elif device.management_ip %}
+                                                ({{ device.management_ip }})
+                                            {% else %}
+                                                (无IP)
+                                            {% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="interfaceName" class="form-label required">接口名称</label>
+                                    <input type="text" class="form-control" id="interfaceName" 
+                                           placeholder="例如: GigabitEthernet0/1" required>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="interfaceType" class="form-label">接口类型</label>
+                                    <select id="interfaceType" class="form-select">
+                                        <option value="GigabitEthernet">千兆以太网</option>
+                                        <option value="Ethernet">以太网</option>
+                                        <option value="TenGigabitEthernet">万兆以太网</option>
+                                        <option value="FastEthernet">快速以太网</option>
+                                        <option value="Loopback">环回接口</option>
+                                        <option value="VLAN">VLAN接口</option>
+                                        <option value="Port-channel">端口通道</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="interfaceStatus" class="form-label">接口状态</label>
+                                    <select id="interfaceStatus" class="form-select">
+                                        <option value="up">UP</option>
+                                        <option value="down">DOWN</option>
+                                        <option value="testing">测试中</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="ipAddress" class="form-label">IP地址</label>
+                                    <input type="text" class="form-control" id="ipAddress" placeholder="例如: 192.168.1.1">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="subnetMask" class="form-label">子网掩码</label>
+                                    <input type="text" class="form-control" id="subnetMask" placeholder="例如: 255.255.255.0">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="macAddress" class="form-label">MAC地址</label>
+                                    <input type="text" class="form-control" id="macAddress" placeholder="例如: 00:11:22:33:44:55">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="vlanId" class="form-label">VLAN ID</label>
+                                    <input type="number" class="form-control" id="vlanId" min="1" max="4094" placeholder="1-4094">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label for="description" class="form-label">描述</label>
+                                    <textarea class="form-control" id="description" rows="2" placeholder="接口描述..."></textarea>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- SNMP发现 -->
+                    <div class="tab-pane fade" id="snmp" role="tabpanel">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-1"></i>
+                            通过SNMP协议自动发现设备的接口信息
+                        </div>
+                        <form id="snmpForm">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="snmpDevice" class="form-label required">选择设备</label>
+                                    <select id="snmpDevice" class="form-select" required>
+                                        <option value="">请选择设备</option>
+                                        {% for device in devices %}
+                                        <option value="{{ device.id }}" 
+                                                data-ip="{{ device.ip_address or device.management_ip or '' }}" 
+                                                data-community="{{ device.snmp_community or 'public' }}"
+                                                data-version="{{ device.snmp_version or '2c' }}"
+                                                data-port="{{ device.snmp_port or '161' }}">
+                                            {{ device.name }} 
+                                            {% if device.ip_address %}
+                                                ({{ device.ip_address }})
+                                            {% elif device.management_ip %}
+                                                ({{ device.management_ip }})
+                                            {% else %}
+                                                (无IP)
+                                            {% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="snmpCommunity" class="form-label required">SNMP Community</label>
+                                    <input type="text" class="form-control" id="snmpCommunity" value="public" required>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="snmpVersion" class="form-label">SNMP版本</label>
+                                    <select id="snmpVersion" class="form-select">
+                                        <option value="2c">SNMP v2c</option>
+                                        <option value="1">SNMP v1</option>
+                                        <option value="3">SNMP v3</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="snmpPort" class="form-label">SNMP端口</label>
+                                    <input type="number" class="form-control" id="snmpPort" value="161" min="1" max="65535">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includeDetails" checked>
+                                        <label class="form-check-label" for="includeDetails">
+                                            包含接口详细信息（速率、MAC地址等）
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="autoSave" checked>
+                                        <label class="form-check-label" for="autoSave">
+                                            自动保存发现的接口
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-grid">
+                                <button type="button" class="btn btn-primary" id="startDiscoveryBtn">
+                                    <i class="fas fa-search me-1"></i> 开始发现
+                                </button>
+                            </div>
+                            <div id="discoveryProgress" class="mt-3 d-none">
+                                <div class="progress mb-2">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <div class="text-center" id="discoveryStatus">准备开始...</div>
+                                <div id="discoveryResults" class="mt-3"></div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- 批量生成 -->
+                    <div class="tab-pane fade" id="batch" role="tabpanel">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            批量生成接口：输入接口范围，系统自动生成多个接口
+                        </div>
+                        <form id="batchForm">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="batchDevice" class="form-label required">选择设备</label>
+                                    <select id="batchDevice" class="form-select" required>
+                                        <option value="">请选择设备</option>
+                                        {% for device in devices %}
+                                        <option value="{{ device.id }}">
+                                            {{ device.name }} 
+                                            {% if device.ip_address %}
+                                                ({{ device.ip_address }})
+                                            {% elif device.management_ip %}
+                                                ({{ device.management_ip }})
+                                            {% else %}
+                                                (无IP)
+                                            {% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="interfacePattern" class="form-label">接口名称模式</label>
+                                    <select id="interfacePattern" class="form-select">
+                                        <option value="GigabitEthernet{slot}/{port}">GigabitEthernet{slot}/{port}</option>
+                                        <option value="Ethernet{slot}/{port}">Ethernet{slot}/{port}</option>
+                                        <option value="FastEthernet{slot}/{port}">FastEthernet{slot}/{port}</option>
+                                        <option value="TenGigabitEthernet{slot}/{port}">TenGigabitEthernet{slot}/{port}</option>
+                                        <option value="G{slot}/{port}">G{slot}/{port} (简写)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="slotNumber" class="form-label">槽位号</label>
+                                    <input type="number" class="form-control" id="slotNumber" value="0" min="0" max="10">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="startPort" class="form-label">起始端口</label>
+                                    <input type="number" class="form-control" id="startPort" value="1" min="1" max="48">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="endPort" class="form-label">结束端口</label>
+                                    <input type="number" class="form-control" id="endPort" value="48" min="1" max="48">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="defaultStatus" class="form-label">默认状态</label>
+                                    <select id="defaultStatus" class="form-select">
+                                        <option value="down">DOWN</option>
+                                        <option value="up">UP</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="defaultSpeed" class="form-label">默认速率 (Mbps)</label>
+                                    <select id="defaultSpeed" class="form-select">
+                                        <option value="1000">1000 (1G)</option>
+                                        <option value="100">100</option>
+                                        <option value="10">10</option>
+                                        <option value="10000">10000 (10G)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label for="previewInterfaces" class="form-label">接口预览</label>
+                                    <div class="border rounded p-2 bg-light" id="previewInterfaces" style="max-height: 150px; overflow-y: auto;">
+                                        <span class="text-muted">选择设备并设置参数后预览</span>
+                                    </div>
+                                    <small class="form-text text-muted">将生成 <span id="interfaceCount">0</span> 个接口</small>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveManualBtn" style="display: none;">保存接口</button>
+                <button type="button" class="btn btn-primary" id="saveBatchBtn" style="display: none;">批量生成</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 接口详情模态框 -->
+<div class="modal fade" id="interfaceDetailModal" tabindex="-1" aria-labelledby="interfaceDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="interfaceDetailModalLabel">接口详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="interfaceDetailContent">
+                <!-- 动态加载内容 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-warning" id="refreshInterfaceBtn">
+                    <i class="fas fa-sync-alt me-1"></i> 刷新数据
+                </button>
+                <button type="button" class="btn btn-primary" id="editInterfaceBtn">编辑</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑接口模态框 -->
+<div class="modal fade" id="editInterfaceModal" tabindex="-1" aria-labelledby="editInterfaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editInterfaceModalLabel">编辑接口 <span id="editInterfaceName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm">
+                    <input type="hidden" id="editInterfaceId">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="editInterfaceNameInput" class="form-label">接口名称</label>
+                            <input type="text" class="form-control" id="editInterfaceNameInput" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editInterfaceType" class="form-label">接口类型</label>
+                            <select id="editInterfaceType" class="form-select">
+                                <option value="GigabitEthernet">千兆以太网</option>
+                                <option value="Ethernet">以太网</option>
+                                <option value="TenGigabitEthernet">万兆以太网</option>
+                                <option value="FastEthernet">快速以太网</option>
+                                <option value="Loopback">环回接口</option>
+                                <option value="VLAN">VLAN接口</option>
+                                <option value="Port-channel">端口通道</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="editInterfaceStatus" class="form-label">接口状态</label>
+                            <select id="editInterfaceStatus" class="form-select">
+                                <option value="up">UP</option>
+                                <option value="down">DOWN</option>
+                                <option value="testing">测试中</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editSpeed" class="form-label">速率 (bps)</label>
+                            <input type="number" class="form-control" id="editSpeed" step="1000000">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="editIpAddress" class="form-label">IP地址</label>
+                            <input type="text" class="form-control" id="editIpAddress">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editSubnetMask" class="form-label">子网掩码</label>
+                            <input type="text" class="form-control" id="editSubnetMask">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="editMacAddress" class="form-label">MAC地址</label>
+                            <input type="text" class="form-control" id="editMacAddress">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editVlanId" class="form-label">VLAN ID</label>
+                            <input type="number" class="form-control" id="editVlanId" min="1" max="4094">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="editDescription" class="form-label">描述</label>
+                            <textarea class="form-control" id="editDescription" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveEditBtn">保存更改</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 存储接口数据和表格状态
+let interfacesData = {{ interfaces|tojson|safe }};
+let currentPage = 1;
+let pageSize = 10;
+let sortColumn = 'index';
+let sortDirection = 'asc';
+let filteredData = [];
+let isRefreshing = false;
+let autoRefreshInterval = null;
+let currentDetailInterfaceId = null;
+
+// API基础URL - 使用/topology前缀，因为蓝图在/topology下
+const API_BASE = '/topology';
+
+// CSRF令牌（如果存在）
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+$(document).ready(function() {
+    console.log("接口数据:", interfacesData.length, "条");
+    
+    // 初始化数据
+    filteredData = [...interfacesData];
+    
+    // 如果设备列表为空，禁用添加接口按钮
+    if ($('#manualDevice option').length <= 1) {
+        $('#addInterfaceModal').removeAttr('data-bs-toggle');
+        $('[data-bs-target="#addInterfaceModal"]').click(function(e) {
+            e.preventDefault();
+            alert('请先添加设备才能创建接口');
+        });
+    }
+    
+    // 初始化工具提示
+    initTooltips();
+    
+    // 初始化表格
+    initTable();
+    
+    // 刷新按钮
+    $('#refreshBtn').click(function() {
+        if (!isRefreshing) {
+            fetchRealTimeStats();   // 改为局部刷新
+        }
+    });
+
+    // 导出按钮
+    $('#exportBtn').click(function() {
+        exportToCSV();
+    });
+
+    // 筛选功能
+    $('#deviceFilter, #statusFilter, #typeFilter, #utilizationFilter').on('change', applyFilters);
+    $('#searchInput, #vlanFilter').on('keyup', debounce(applyFilters, 300));
+    $('#clearFiltersBtn').click(clearFilters);
+    
+    // 分页控件
+    $('#prevPageBtn').click(function() {
+        if (currentPage > 1) {
+            currentPage--;
+            renderTable();
+        }
+    });
+    
+    $('#nextPageBtn').click(function() {
+        const totalPages = Math.ceil(filteredData.length / pageSize);
+        if (currentPage < totalPages) {
+            currentPage++;
+            renderTable();
+        }
+    });
+    
+    $('#pageSizeSelect').change(function() {
+        pageSize = parseInt($(this).val());
+        if (pageSize === -1) {
+            pageSize = filteredData.length;
+        }
+        currentPage = 1;
+        renderTable();
+    });
+    
+    // 排序功能
+    $('.sortable').click(function() {
+        const column = $(this).data('sort');
+        
+        // 更新排序箭头
+        $('.sortable .sort-arrow').html('');
+        if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+        }
+        
+        // 设置箭头
+        const arrow = sortDirection === 'asc' ? '↑' : '↓';
+        $(this).find('.sort-arrow').html(arrow);
+        
+        // 排序数据并重新渲染
+        sortData();
+        renderTable();
+    });
+
+    // 批量生成预览
+    $('#interfacePattern, #slotNumber, #startPort, #endPort').on('change input', updateBatchPreview);
+    $('#batchDevice').on('change', function() {
+        updateBatchPreview();
+        $('#saveBatchBtn').show();
+        $('#saveManualBtn').hide();
+    });
+
+    // 手动添加表单
+    $('#manualDevice').on('change', function() {
+        $('#saveManualBtn').show();
+        $('#saveBatchBtn').hide();
+    });
+
+    // SNMP发现
+    $('#snmpDevice').on('change', function() {
+        const selected = $(this).find(':selected');
+        $('#snmpCommunity').val(selected.data('community') || 'public');
+        $('#snmpVersion').val(selected.data('version') || '2c');
+        $('#snmpPort').val(selected.data('port') || '161');
+    });
+
+    // 开始SNMP发现
+    $('#startDiscoveryBtn').click(startSNMPDiscovery);
+
+    // 保存手动添加的接口
+    $('#saveManualBtn').click(saveManualInterface);
+
+    // 保存批量生成的接口
+    $('#saveBatchBtn').click(saveBatchInterfaces);
+    
+    // 查看详情按钮（事件委托）
+    $(document).on('click', '.view-detail-btn', function() {
+        const index = $(this).data('index');
+        showInterfaceDetail(index);
+    });
+    
+    // 刷新单个接口按钮（事件委托）
+    $(document).on('click', '.edit-interface-btn', function() {
+        const index = $(this).data('index');
+        const iface = interfacesData[index];
+        if (iface && iface.id) {
+            fillEditForm(iface);
+            $('#editInterfaceModal').modal('show');
+        } else {
+            console.error('编辑失败: 接口数据无效', iface);
+            showErrorToast('无法获取接口信息');
+        }
+    });
+
+    // 删除按钮
+    $(document).on('click', '.delete-interface-btn', function() {
+        const index = $(this).data('index');
+        const iface = interfacesData[index];
+        if (!iface || !iface.id) {
+            showErrorToast('无效的接口数据');
+            return;
+        }
+        if (confirm(`确定要删除接口 "${iface.interface_name}" 吗？`)) {
+            deleteInterface(iface.id, index);
+        }
+    });
+   // 全选/取消全选
+    $('#selectAll').change(function() {
+        const checked = $(this).prop('checked');
+        $('.interface-row-select').prop('checked', checked);
+        updateBatchDeleteButton();
+    });
+    $(document).on('change', '.interface-row-select', function() {
+        updateBatchDeleteButton();
+        const total = $('.interface-row-select').length;
+        const checked = $('.interface-row-select:checked').length;
+        $('#selectAll').prop('checked', total === checked && total > 0);
+    });
+    // 批量删除
+    $('#batchDeleteBtn').click(function() {
+        const selectedIds = [];
+        $('.interface-row-select:checked').each(function() {
+            const index = $(this).data('index');
+            const iface = interfacesData[index];
+            if (iface && iface.id) selectedIds.push(iface.id);
+        });
+        if (selectedIds.length === 0) {
+            showErrorToast('请至少选择一个接口');
+            return;
+        }
+        if (confirm(`确定要删除选中的 ${selectedIds.length} 个接口吗？`)) {
+            batchDeleteInterfaces(selectedIds);
+        }
+    });
+
+
+    // 编辑接口按钮
+    // 修改编辑接口按钮
+    $('#editInterfaceBtn').click(function() {
+        if (!currentDetailInterfaceId) return;
+        
+        // 查找当前接口数据
+        const iface = interfacesData.find(i => i.id === currentDetailInterfaceId);
+        if (!iface) return;
+        
+        // 填充表单
+        $('#editInterfaceId').val(iface.id);
+        $('#editInterfaceNameInput').val(iface.interface_name);
+        $('#editInterfaceType').val(iface.interface_type || 'GigabitEthernet');
+        $('#editInterfaceStatus').val(iface.status || 'down');
+        $('#editSpeed').val(iface.speed || 1000000000);
+        $('#editIpAddress').val(iface.ip_address || '');
+        $('#editSubnetMask').val(iface.subnet_mask || '');
+        $('#editMacAddress').val(iface.mac_address || '');
+        $('#editVlanId').val(iface.vlan || '');
+        $('#editDescription').val(iface.description || '');
+        
+        $('#editInterfaceName').text(iface.interface_name);
+        
+        // 关闭详情模态框，打开编辑模态框
+        $('#interfaceDetailModal').modal('hide');
+        $('#editInterfaceModal').modal('show');
+    });
+
+    // 保存编辑
+    $('#saveEditBtn').click(saveEditInterface);
+
+    // 刷新详情中的接口数据
+    $('#refreshInterfaceBtn').click(function() {
+        if (currentDetailInterfaceId) {
+            refreshSingleInterfaceDetail(currentDetailInterfaceId);
+        }
+    });
+
+    // 标签页切换事件
+    document.getElementById('manual-tab').addEventListener('shown.bs.tab', function() {
+        $('#saveManualBtn').show();
+        $('#saveBatchBtn').hide();
+    });
+
+    document.getElementById('batch-tab').addEventListener('shown.bs.tab', function() {
+        updateBatchPreview();
+        $('#saveManualBtn').hide();
+        $('#saveBatchBtn').show();
+    });
+
+    document.getElementById('snmp-tab').addEventListener('shown.bs.tab', function() {
+        $('#saveManualBtn').hide();
+        $('#saveBatchBtn').hide();
+    });
+    
+    // 自动刷新开关
+    $('#autoRefreshSwitch').change(function() {
+        $(this).is(':checked') ? startAutoRefresh() : stopAutoRefresh();
+    });
+    if (localStorage.getItem('interfaceAutoRefresh') === 'true') {
+        $('#autoRefreshSwitch').prop('checked', true);
+        startAutoRefresh();
+    }
+    
+    // 清除调试信息
+    $('#clearDebugBtn').click(function() { $('#debugOutput').text(''); });
+
+    // 页面加载完成后立即获取实时数据
+    fetchRealTimeStats();
+});
+
+
+// 初始化工具提示
+function initTooltips() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+
+// 防抖函数
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 初始化表格
+function initTable() {
+    // 初始排序
+    sortData();
+    
+    // 渲染表格
+    renderTable();
+}
+
+// 排序数据
+function sortData() {
+    if (sortColumn === 'index') {
+        // 索引排序
+        filteredData.sort((a, b) => {
+            const indexA = interfacesData.indexOf(a);
+            const indexB = interfacesData.indexOf(b);
+            return sortDirection === 'asc' ? indexA - indexB : indexB - indexA;
+        });
+    } else {
+        // 其他列排序
+        filteredData.sort((a, b) => {
+            let valA = a[sortColumn];
+            let valB = b[sortColumn];
+            
+            // 处理空值
+            if (valA === null || valA === undefined) valA = '';
+            if (valB === null || valB === undefined) valB = '';
+            
+            // 数字类型特殊处理
+            if (['speed', 'in_utilization', 'out_utilization'].includes(sortColumn)) {
+                valA = parseFloat(valA) || 0;
+                valB = parseFloat(valB) || 0;
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            
+            // 字符串比较
+            if (typeof valA === 'string' && typeof valB === 'string') {
+                return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            }
+            
+            return sortDirection === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        });
+    }
+}
+
+// 渲染表格（已修改利用率显示）
+function renderTable() {
+    const tbody = $('#interfaceTableBody');
+    tbody.empty();
+    
+    if (filteredData.length === 0) {
+        tbody.append(`<tr><td colspan="13" class="empty-table-message"><i class="fas fa-info-circle"></i><p class="mb-1">没有找到接口数据</p><p class="small text-muted">请调整筛选条件或添加接口</p><button class="btn btn-sm btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addInterfaceModal"><i class="fas fa-plus me-1"></i> 添加接口</button></td></tr>`);
+    } else {
+        const totalItems = filteredData.length;
+        const totalPages = Math.ceil(totalItems / pageSize);
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = Math.min(startIndex + pageSize, totalItems);
+        const pageData = filteredData.slice(startIndex, endIndex);
+        
+        pageData.forEach((iface, idx) => {
+            const globalIndex = interfacesData.indexOf(iface);
+            const rowIndex = startIndex + idx + 1;
+            
+            // 状态徽章
+            let statusBadge = '';
+            if (iface.status === 'up') statusBadge = `<span class="badge bg-success-subtle text-success"><i class="fas fa-circle status-up me-1"></i> UP</span>`;
+            else if (iface.status === 'down') statusBadge = `<span class="badge bg-danger-subtle text-danger"><i class="fas fa-circle status-down me-1"></i> DOWN</span>`;
+            else if (iface.status === 'testing') statusBadge = `<span class="badge bg-warning-subtle text-warning"><i class="fas fa-circle status-testing me-1"></i> 测试中</span>`;
+            else statusBadge = `<span class="badge bg-secondary-subtle text-secondary"><i class="fas fa-circle me-1"></i> ${iface.status || '未知'}</span>`;
+            
+            // 速率显示
+            let speedDisplay = '<span class="text-muted">N/A</span>';
+            if (iface.speed && iface.speed > 0) {
+                const speedMbps = iface.speed / 1000000;
+                if (speedMbps >= 10000) speedDisplay = `<span class="badge speed-badge">${(speedMbps/1000).toFixed(0)}G</span>`;
+                else if (speedMbps >= 1000) speedDisplay = `<span class="badge speed-badge">${(speedMbps/1000).toFixed(1)}G</span>`;
+                else speedDisplay = `<span class="badge speed-badge">${speedMbps.toFixed(0)}M</span>`;
+            }
+            
+            // 入口利用率（修改部分）
+            let inUtilDisplay = '<span class="text-muted">N/A</span>';
+            if (iface.in_utilization !== null && iface.in_utilization !== undefined) {
+                const inUtil = parseFloat(iface.in_utilization);
+                let utilText;
+                if (inUtil < 0.01) {
+                    utilText = '<0.01%';
+                } else {
+                    utilText = inUtil.toFixed(2) + '%';
+                }
+                const utilClass = inUtil > 80 ? 'utilization-high' : inUtil > 50 ? 'utilization-medium' : 'utilization-low';
+                const barClass = inUtil > 80 ? 'bg-danger' : inUtil > 50 ? 'bg-warning' : 'bg-success';
+                const barWidth = inUtil < 2 ? 2 : inUtil; // 进度条最小宽度2%，保证可见
+                inUtilDisplay = `
+                    <div class="progress progress-thin">
+                        <div class="progress-bar ${barClass}" role="progressbar" style="width: ${barWidth}%"></div>
+                    </div>
+                    <small class="${utilClass}">${utilText}</small>
+                `;
+            }
+            
+            // 出口利用率（修改部分）
+            let outUtilDisplay = '<span class="text-muted">N/A</span>';
+            if (iface.out_utilization !== null && iface.out_utilization !== undefined) {
+                const outUtil = parseFloat(iface.out_utilization);
+                let utilText;
+                if (outUtil < 0.01) {
+                    utilText = '<0.01%';
+                } else {
+                    utilText = outUtil.toFixed(2) + '%';
+                }
+                const utilClass = outUtil > 80 ? 'utilization-high' : outUtil > 50 ? 'utilization-medium' : 'utilization-low';
+                const barClass = outUtil > 80 ? 'bg-danger' : outUtil > 50 ? 'bg-warning' : 'bg-success';
+                const barWidth = outUtil < 2 ? 2 : outUtil;
+                outUtilDisplay = `
+                    <div class="progress progress-thin">
+                        <div class="progress-bar ${barClass}" role="progressbar" style="width: ${barWidth}%"></div>
+                    </div>
+                    <small class="${utilClass}">${utilText}</small>
+                `;
+            }
+            
+            // 构建行
+            const row = `
+                <tr data-index="${globalIndex}">
+                    <td class="checkbox-col"><input type="checkbox" class="interface-row-select" data-index="${globalIndex}"></td>
+                    <td>${rowIndex}</td>
+                    <td><div class="fw-bold">${iface.device_name || ''}</div><small class="text-muted">${iface.device_ip || ''}</small></td>
+                    <td><span class="fw-bold">${iface.interface_name  || ''}</span>${iface.description ? `<br><small class="text-muted">${iface.description.substring(0,20)}...</small>` : ''}</td>
+                    <td><span class="badge bg-secondary-subtle text-secondary">${iface.interface_type  || ''}</span></td>
+                    <td>${statusBadge}</td>
+                    <td>${iface.ip_address ? `<code>${iface.ip_address}</code>` : '<span class="text-muted">N/A</span>'}</td>
+                    <td>${iface.mac_address ? `<code>${iface.mac_address}</code>` : '<span class="text-muted">N/A</span>'}</td>
+                    <td>${speedDisplay}</td>
+                    <td>${inUtilDisplay}</td>
+                    <td>${outUtilDisplay}</td>
+                    <td>${iface.vlan ? `<span class="badge bg-info-subtle text-info">${iface.vlan}</span>` : '<span class="text-muted">N/A</span>'}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-primary view-detail-btn" data-index="${globalIndex}" title="查看详情"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-outline-warning edit-interface-btn" data-index="${globalIndex}" title="编辑接口"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-outline-danger delete-interface-btn" data-index="${globalIndex}" title="删除接口"><i class="fas fa-trash-alt"></i></button>
+                            <button class="btn btn-outline-secondary refresh-interface-btn" data-index="${globalIndex}" title="刷新接口数据"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+        initTooltips();
+    }
+    updatePagination();
+    $('#selectAll').prop('checked', false);
+    updateCounts();
+    updateBatchDeleteButton();
+}
+
+// 新增：获取实时统计数据并更新 interfacesData
+async function fetchRealTimeStats() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    $('#refreshBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> 刷新中...');
+
+    try {
+        // 收集所有设备 ID（去重）
+        const deviceIds = [...new Set(interfacesData.map(iface => iface.device_id).filter(id => id != null))];
+        if (deviceIds.length === 0) {
+            console.warn('没有设备 ID，无法获取实时数据');
+            return;
+        }
+
+        // 并发请求每个设备的接口最新统计
+        const promises = deviceIds.map(deviceId =>
+            fetch(`/monitoring/api/devices/${deviceId}/interfaces/latest`)
+                .then(res => res.ok ? res.json() : Promise.reject(`设备 ${deviceId} 请求失败`))
+        );
+        const results = await Promise.allSettled(promises);
+
+        // 构建接口 ID 到统计数据的映射
+        const statsMap = new Map();
+        results.forEach(result => {
+            if (result.status === 'fulfilled') {
+                const statsList = result.value;
+                statsList.forEach(stat => {
+                    statsMap.set(stat.interface_id, stat);
+                });
+            } else {
+                console.error('获取设备接口统计失败:', result.reason);
+            }
+        });
+
+        // 更新 interfacesData 中的字段
+        interfacesData.forEach(iface => {
+            const stat = statsMap.get(iface.id);
+            if (stat) {
+                // 更新运行状态（使用 oper_status）
+                iface.status = stat.oper_status || iface.status;
+                // 更新接口速度（带宽）
+                if (stat.speed != null) iface.speed = stat.speed;
+                // 计算利用率（需要接口带宽 speed > 0）
+                if (iface.speed && iface.speed > 0) {
+                    iface.in_utilization = stat.speed_in != null ? (stat.speed_in / iface.speed) * 100 : null;
+                    iface.out_utilization = stat.speed_out != null ? (stat.speed_out / iface.speed) * 100 : null;
+                } else {
+                    iface.in_utilization = null;
+                    iface.out_utilization = null;
+                }
+                // 可选：记录最后更新时间
+                iface.last_updated = stat.last_updated || iface.last_updated;
+            }
+        });
+
+        // 重新应用筛选和排序（会重置到第一页），并重新渲染表格
+        applyFilters();
+        showSuccessToast('接口数据已更新');
+    } catch (error) {
+        console.error('获取实时数据失败:', error);
+        showErrorToast('获取实时数据失败');
+    } finally {
+        isRefreshing = false;
+        $('#refreshBtn').prop('disabled', false).html('<i class="fas fa-sync-alt me-1"></i> 刷新');
+    }
+}
+
+// 更新批量删除按钮状态
+function updateBatchDeleteButton() {
+    const checkedCount = $('.interface-row-select:checked').length;
+    $('#batchDeleteBtn').prop('disabled', checkedCount === 0);
+}
+
+
+// 填充编辑表单（复用）
+
+function fillEditForm(iface) {
+    $('#editInterfaceId').val(iface.id);
+    $('#editInterfaceNameInput').val(iface.interface_name || '');
+    $('#editInterfaceType').val(iface.interface_type || 'GigabitEthernet');
+    $('#editInterfaceStatus').val(iface.status || 'down');
+    $('#editSpeed').val(iface.speed || 1000000000);
+    $('#editIpAddress').val(iface.ip_address || '');
+    $('#editSubnetMask').val(iface.subnet_mask || '');
+    $('#editMacAddress').val(iface.mac_address || '');
+    $('#editVlanId').val(iface.vlan || '');
+    $('#editDescription').val(iface.description || '');
+    $('#editInterfaceName').text(iface.interface_name || '');
+}
+// 保存编辑
+function saveEditInterface() {
+    const interfaceId = $('#editInterfaceId').val();
+    if (!interfaceId) return;
+    const requestData = {
+        name: $('#editInterfaceNameInput').val(),
+        type: $('#editInterfaceType').val(),
+        status: $('#editInterfaceStatus').val(),
+        speed: parseInt($('#editSpeed').val()) || 1000000000,
+        ip_address: $('#editIpAddress').val() || null,
+        subnet_mask: $('#editSubnetMask').val() || null,
+        mac_address: $('#editMacAddress').val() || null,
+        vlan: $('#editVlanId').val() ? parseInt($('#editVlanId').val()) : null,
+        description: $('#editDescription').val() || ''
+    };
+    if (!requestData.name) { showErrorToast('接口名称不能为空'); return; }
+    showLoadingToast('正在更新接口...');
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/${interfaceId}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(requestData),
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast('接口更新成功');
+                $('#editInterfaceModal').modal('hide');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showErrorToast(response.message || '更新失败');
+            }
+        },
+        error: function(xhr, status, error) { showErrorToast(`更新失败: ${error}`); }
+    });
+}
+
+// 删除单个接口
+function deleteInterface(interfaceId, index) {
+    showLoadingToast('正在删除接口...');
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/${interfaceId}`,
+        method: 'DELETE',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast('接口删除成功');
+                // 从本地数据移除
+                interfacesData.splice(index, 1);
+                filteredData = [...interfacesData];
+                sortData();
+                renderTable();
+            } else {
+                showErrorToast(response.message || '删除失败');
+            }
+        },
+        error: function(xhr, status, error) { showErrorToast(`删除失败: ${error}`); }
+    });
+}
+
+// 批量删除接口
+function batchDeleteInterfaces(ids) {
+    showLoadingToast('正在批量删除接口...');
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/batch`,
+        method: 'DELETE',
+        contentType: 'application/json',
+        data: JSON.stringify({ interface_ids: ids }),
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast(`成功删除 ${response.deleted_count} 个接口`);
+                // 重新加载数据（或从本地移除）
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showErrorToast(response.message || '批量删除失败');
+            }
+        },
+        error: function(xhr, status, error) { showErrorToast(`批量删除失败: ${error}`); }
+    });
+}
+
+// 更新分页信息
+function updatePagination() {
+    const totalItems = filteredData.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    
+    // 更新页码信息
+    $('#pageInfo').text(`第 ${currentPage} 页 / 共 ${totalPages} 页`);
+    
+    // 更新按钮状态
+    $('#prevPageBtn').prop('disabled', currentPage <= 1);
+    $('#nextPageBtn').prop('disabled', currentPage >= totalPages || totalPages === 0);
+    
+    // 更新显示计数
+    const startIndex = (currentPage - 1) * pageSize + 1;
+    const endIndex = Math.min(startIndex + pageSize - 1, totalItems);
+    const shownCount = totalItems > 0 ? `${startIndex}-${endIndex}` : '0';
+    $('#shownCount').text(shownCount);
+    $('#totalCount').text(totalItems);
+}
+
+// 更新计数
+function updateCounts() {
+    // 更新统计卡片
+    const total = filteredData.length;
+    const up = filteredData.filter(i => i.status === 'up').length;
+    const down = filteredData.filter(i => i.status === 'down').length;
+    const highUtil = filteredData.filter(i => 
+        (i.in_utilization && i.in_utilization > 80) || 
+        (i.out_utilization && i.out_utilization > 80)
+    ).length;
+    
+    $('#totalInterfaces').text(total);
+    $('#upInterfaces').text(up);
+    $('#downInterfaces').text(down);
+    $('#highUtilInterfaces').text(highUtil);
+}
+
+// 应用筛选
+function applyFilters() {
+    const deviceFilter = $('#deviceFilter').val();
+    const statusFilter = $('#statusFilter').val();
+    const typeFilter = $('#typeFilter').val();
+    const utilFilter = $('#utilizationFilter').val();
+    const searchText = $('#searchInput').val().toLowerCase();
+    const vlanFilter = $('#vlanFilter').val();
+    
+    // 重置到第一页
+    currentPage = 1;
+    
+    // 应用筛选
+    filteredData = interfacesData.filter(interface => {
+        // 设备筛选
+        if (deviceFilter && interface.device_name !== deviceFilter) {
+            return false;
+        }
+        
+        // 状态筛选
+        if (statusFilter && interface.status !== statusFilter) {
+            return false;
+        }
+        
+        // 类型筛选
+        if (typeFilter && interface.interface_type !== typeFilter) {
+            return false;
+        }
+        
+        // 利用率筛选
+        if (utilFilter) {
+            const inUtil = interface.in_utilization || 0;
+            const outUtil = interface.out_utilization || 0;
+            const maxUtil = Math.max(inUtil, outUtil);
+            
+            if (utilFilter === 'high' && maxUtil <= 80) return false;
+            if (utilFilter === 'medium' && (maxUtil <= 50 || maxUtil > 80)) return false;
+            if (utilFilter === 'low' && maxUtil > 50) return false;
+        }
+        
+        // VLAN筛选
+        if (vlanFilter) {
+            const vlanStr = interface.vlan ? interface.vlan.toString() : '';
+            if (vlanStr !== vlanFilter) {
+                return false;
+            }
+        }
+        
+        // 搜索
+        if (searchText) {
+            const searchFields = [
+                interface.device_name || '',
+                interface.device_ip || '',
+                interface.interface_name || '',
+                interface.description || '',
+                interface.ip_address || '',
+                interface.mac_address || ''
+            ].join(' ').toLowerCase();
+            
+            if (!searchFields.includes(searchText)) {
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    // 重新排序和渲染
+    sortData();
+    renderTable();
+}
+
+// 清除筛选
+function clearFilters() {
+    $('#deviceFilter, #statusFilter, #typeFilter, #utilizationFilter').val('');
+    $('#searchInput, #vlanFilter').val('');
+    
+    // 重置数据
+    filteredData = [...interfacesData];
+    currentPage = 1;
+    
+    // 重新排序和渲染
+    sortData();
+    renderTable();
+}
+
+// 刷新接口数据（原重载逻辑，现改为实时刷新）
+function refreshInterfaces() {
+    fetchRealTimeStats();   // 局部更新，不重载
+}
+
+// 刷新单个接口
+function refreshSingleInterface(index) {
+    const iface = interfacesData[index];
+    if (!iface || !iface.id) return;
+    
+    const button = $(`.refresh-interface-btn[data-index="${index}"]`);
+    button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+    
+    showLoadingToast('正在刷新接口数据...');
+    
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/${iface.id}/refresh`,
+        method: 'POST',
+        contentType: 'application/json',
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast('接口数据刷新成功');
+                // 更新本地数据
+                if (response.interface) {
+                    interfacesData[index] = response.interface;
+                    // 重新渲染表格
+                    sortData();
+                    renderTable();
+                }
+            } else {
+                showErrorToast(response.message || '刷新接口数据失败');
+            }
+        },
+        error: function(xhr, status, error) {
+            showErrorToast(`刷新失败: ${error}`);
+        },
+        complete: function() {
+            button.prop('disabled', false).html('<i class="fas fa-sync-alt"></i>');
+        }
+    });
+}
+
+// 开始自动刷新（修改为调用 fetchRealTimeStats）
+function startAutoRefresh() {
+    localStorage.setItem('interfaceAutoRefresh', 'true');
+    autoRefreshInterval = setInterval(() => {
+        if (!isRefreshing) {
+            fetchRealTimeStats();
+        }
+    }, 30000); // 30秒刷新一次
+    
+    showInfoToast('已启用自动刷新（30秒/次）');
+}
+
+// 停止自动刷新
+function stopAutoRefresh() {
+    localStorage.setItem('interfaceAutoRefresh', 'false');
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    showInfoToast('已禁用自动刷新');
+}
+
+// 显示调试信息
+function showDebugInfo(message) {
+    $('#snmpDebugInfo').removeClass('d-none');
+    const now = new Date().toLocaleTimeString();
+    const debugOutput = $('#debugOutput');
+    const currentContent = debugOutput.text();
+    debugOutput.text(`${currentContent}[${now}] ${message}\n`);
+    
+    // 自动滚动到底部
+    debugOutput.scrollTop(debugOutput[0].scrollHeight);
+}
+
+// 开始SNMP发现
+async function startSNMPDiscovery() {
+    const deviceId = $('#snmpDevice').val();
+    const community = $('#snmpCommunity').val();
+    const version = $('#snmpVersion').val();
+    const port = $('#snmpPort').val();
+    const includeDetails = $('#includeDetails').is(':checked');
+    const autoSave = $('#autoSave').is(':checked');
+    
+    if (!deviceId) {
+        showErrorToast('请选择设备');
+        return;
+    }
+    
+    if (!community) {
+        showErrorToast('请输入SNMP Community');
+        return;
+    }
+    
+    // 获取设备IP
+    const deviceIp = $('#snmpDevice').find(':selected').data('ip');
+    if (!deviceIp) {
+        showErrorToast('所选设备没有IP地址，无法进行SNMP发现');
+        return;
+    }
+    
+    // 显示调试信息
+    showDebugInfo(`开始SNMP发现: 设备ID=${deviceId}, IP=${deviceIp}, Community=${community}, 版本=${version}, 端口=${port}`);
+    
+    // 显示进度条
+    $('#discoveryProgress').removeClass('d-none');
+    const progressBar = $('#discoveryProgress .progress-bar');
+    const statusText = $('#discoveryStatus');
+    const resultsDiv = $('#discoveryResults');
+    
+    // 重置进度条和结果
+    progressBar.css('width', '0%');
+    statusText.text('正在测试SNMP连接...');
+    resultsDiv.empty();
+    
+    // 禁用按钮
+    $('#startDiscoveryBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> 测试连接...');
+    
+    try {
+        // 1. 测试SNMP连接
+        showDebugInfo('正在测试SNMP连接...');
+        const testResult = await testSNMPConnection(deviceId, community, version, port);
+        
+        if (testResult.success) {
+            showDebugInfo(`SNMP连接测试成功: ${testResult.message}`);
+            progressBar.css('width', '30%');
+            statusText.text('连接测试成功，开始发现接口...');
+            
+            // 2. 开始SNMP发现
+            $('#startDiscoveryBtn').html('<i class="fas fa-spinner fa-spin me-1"></i> 发现接口...');
+            showDebugInfo('开始发现接口...');
+            
+            const discoveryResult = await discoverSNMPInterfaces(deviceId, community, version, port, includeDetails, autoSave);
+            
+            if (discoveryResult.success) {
+                progressBar.css('width', '100%');
+                statusText.text('发现完成！');
+                
+                // 显示发现结果
+                displayDiscoveryResults(discoveryResult, autoSave);
+                
+                showSuccessToast(`SNMP发现完成，共发现 ${discoveryResult.discovered_count || 0} 个接口`);
+                
+                // 如果自动保存成功，提示刷新页面
+                if (autoSave && discoveryResult.saved_count > 0) {
+                    setTimeout(() => {
+                        if (confirm('接口已自动保存，是否立即刷新页面查看新接口？')) {
+                            location.reload();
+                        }
+                    }, 1500);
+                }
+            } else {
+                progressBar.css('width', '0%');
+                statusText.text('发现失败');
+                resultsDiv.html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-1"></i>
+                        ${discoveryResult.message || 'SNMP发现失败'}
+                    </div>
+                `);
+                showErrorToast(discoveryResult.message || 'SNMP发现失败');
+                showDebugInfo(`发现失败: ${discoveryResult.message}`);
+            }
+        } else {
+            progressBar.css('width', '0%');
+            statusText.text('连接测试失败');
+            resultsDiv.html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    ${testResult.message || 'SNMP连接测试失败'}
+                </div>
+            `);
+            showErrorToast(testResult.message || 'SNMP连接测试失败');
+            showDebugInfo(`连接测试失败: ${testResult.message}`);
+        }
+    } catch (error) {
+        progressBar.css('width', '0%');
+        statusText.text('请求失败');
+        resultsDiv.html(`
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle me-1"></i>
+                请求失败: ${error.error || error.status || error}
+            </div>
+        `);
+        showErrorToast(`请求失败: ${error.error || error.status || error}`);
+        showDebugInfo(`请求异常: ${error.error || error.status || error}`);
+    } finally {
+        // 恢复按钮状态
+        $('#startDiscoveryBtn').prop('disabled', false).html('<i class="fas fa-search me-1"></i> 开始发现');
+    }
+}
+
+// 测试SNMP连接
+function testSNMPConnection(deviceId, community, version, port) {
+    return new Promise((resolve, reject) => {
+        const testData = {
+            device_id: parseInt(deviceId),
+            snmp_community: community,
+            snmp_version: version,
+            snmp_port: parseInt(port) || 161,
+            test_only: true
+        };
+        
+        $.ajax({
+            url: `${API_BASE}/api/interfaces/snmp_discover`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(testData),
+            dataType: 'json',
+            success: function(response) {
+                resolve(response);
+            },
+            error: function(xhr, status, error) {
+                reject({ xhr, status, error });
+            }
+        });
+    });
+}
+
+// 发现SNMP接口
+function discoverSNMPInterfaces(deviceId, community, version, port, includeDetails, autoSave) {
+    return new Promise((resolve, reject) => {
+        const discoveryData = {
+            device_id: parseInt(deviceId),
+            snmp_community: community,
+            snmp_version: version,
+            snmp_port: parseInt(port) || 161,
+            include_details: includeDetails,
+            auto_save: autoSave
+        };
+        
+        $.ajax({
+            url: `${API_BASE}/api/interfaces/snmp_discover`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(discoveryData),
+            dataType: 'json',
+            success: function(response) {
+                resolve(response);
+            },
+            error: function(xhr, status, error) {
+                reject({ xhr, status, error });
+            }
+        });
+    });
+}
+
+// 显示发现结果
+function displayDiscoveryResults(result, autoSave) {
+    const resultsDiv = $('#discoveryResults');
+    let resultsHtml = '';
+    
+    // 显示摘要信息
+    resultsHtml += `
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle me-1"></i>
+            ${result.message || 'SNMP发现完成'}
+        </div>
+        
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">发现摘要</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>设备名称:</span>
+                                <span class="fw-bold">${result.device_name || '未知'}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>目标IP:</span>
+                                <span>${result.target_ip || '未知'}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>发现接口数:</span>
+                                <span class="badge bg-primary">${result.discovered_count || 0}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>自动保存:</span>
+                                <span class="badge ${autoSave ? 'bg-success' : 'bg-secondary'}">
+                                    ${autoSave ? '已启用' : '未启用'}
+                                </span>
+                            </li>
+                            ${autoSave ? `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>保存接口数:</span>
+                                <span class="badge bg-success">${result.saved_count || 0}</span>
+                            </li>
+                            ` : ''}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>发现时间:</span>
+                                <span>${new Date().toLocaleTimeString()}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 显示接口列表（最多显示20个）
+    if (result.interfaces && result.interfaces.length > 0) {
+        const displayCount = Math.min(result.interfaces.length, 20);
+        resultsHtml += `
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">发现的接口 (${displayCount}/${result.interfaces.length})</h6>
+                    <small class="text-muted">${result.interfaces.length > 20 ? '仅显示前20个接口' : ''}</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>接口名称</th>
+                                    <th>描述</th>
+                                    <th>状态</th>
+                                    <th>速率</th>
+                                    <th>MAC地址</th>
+                                    <th>VLAN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+        
+        result.interfaces.slice(0, 20).forEach(iface => {
+            const speedMbps = iface.speed ? (iface.speed / 1000000).toFixed(0) : 'N/A';
+            const speedDisplay = speedMbps >= 1000 ? 
+                `${(speedMbps / 1000).toFixed(1)}G` : `${speedMbps}M`;
+            
+            resultsHtml += `
+                <tr>
+                    <td><code>${iface.name || 'N/A'}</code></td>
+                    <td>${iface.description || '-'}</td>
+                    <td>
+                        <span class="badge ${iface.admin_status === 'up' ? 'bg-success' : 'bg-danger'}">
+                            ${iface.admin_status || 'unknown'}
+                        </span>
+                    </td>
+                    <td>${speedDisplay}</td>
+                    <td><small>${iface.mac_address || '-'}</small></td>
+                    <td>${iface.vlan || '-'}</td>
+                </tr>
+            `;
+        });
+        
+        resultsHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 显示已保存的接口（如果启用了自动保存）
+    if (autoSave && result.saved_interfaces && result.saved_interfaces.length > 0) {
+        resultsHtml += `
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">已保存的接口 (${result.saved_interfaces.length})</h6>
+                </div>
+                <div class="card-body">
+                    <div class="border rounded p-2 bg-light">
+                        ${result.saved_interfaces.map(name => 
+                            `<span class="badge bg-success me-1 mb-1">${name}</span>`
+                        ).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 添加操作按钮
+    resultsHtml += `
+        <div class="d-grid gap-2">
+            ${!autoSave && result.interfaces && result.interfaces.length > 0 ? `
+                <button class="btn btn-success" id="saveAllDiscoveredBtn">
+                    <i class="fas fa-save me-1"></i> 保存所有发现的接口 (${result.interfaces.length}个)
+                </button>
+            ` : ''}
+            <button class="btn btn-outline-secondary" id="closeDiscoveryBtn">
+                <i class="fas fa-times me-1"></i> 关闭
+            </button>
+        </div>
+    `;
+    
+    resultsDiv.html(resultsHtml);
+    
+    // 绑定保存按钮事件
+    if (!autoSave && result.interfaces && result.interfaces.length > 0) {
+        $('#saveAllDiscoveredBtn').click(function() {
+            saveDiscoveredInterfaces(result.interfaces, $('#snmpDevice').val());
+        });
+    }
+    
+    // 绑定关闭按钮事件
+    $('#closeDiscoveryBtn').click(function() {
+        $('#addInterfaceModal').modal('hide');
+        if (result.saved_count > 0) {
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        }
+    });
+}
+
+// 保存发现的接口
+function saveDiscoveredInterfaces(interfaces, deviceId) {
+    if (!interfaces || interfaces.length === 0) {
+        showErrorToast('没有接口可以保存');
+        return;
+    }
+    
+    showLoadingToast('正在保存发现的接口...');
+    
+    const saveData = {
+        device_id: parseInt(deviceId),
+        interfaces: interfaces,
+        auto_save: true
+    };
+    
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/snmp_discover`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(saveData),
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast(`成功保存 ${response.saved_count} 个接口`);
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                showErrorToast(response.message || '保存接口失败');
+            }
+        },
+        error: function(xhr, status, error) {
+            showErrorToast(`保存接口失败: ${error}`);
+        }
+    });
+}
+
+// 更新批量生成预览
+function updateBatchPreview() {
+    const pattern = $('#interfacePattern').val();
+    const slot = $('#slotNumber').val();
+    const start = parseInt($('#startPort').val());
+    const end = parseInt($('#endPort').val());
+    
+    if (start > end) {
+        $('#endPort').val(start);
+        return;
+    }
+    
+    const count = end - start + 1;
+    $('#interfaceCount').text(count);
+    
+    let previewHtml = '';
+    for (let i = start; i <= end; i++) {
+        const ifaceName = pattern.replace('{slot}', slot).replace('{port}', i);
+        previewHtml += `<span class="badge bg-light text-dark me-1 mb-1">${ifaceName}</span>`;
+    }
+    
+    $('#previewInterfaces').html(previewHtml || '<span class="text-muted">选择设备并设置参数后预览</span>');
+}
+
+// 保存手动添加的接口
+function saveManualInterface() {
+    const deviceId = $('#manualDevice').val();
+    const name = $('#interfaceName').val();
+    const type = $('#interfaceType').val();
+    const status = $('#interfaceStatus').val();
+    const ipAddress = $('#ipAddress').val();
+    const subnetMask = $('#subnetMask').val();
+    const macAddress = $('#macAddress').val();
+    const vlanId = $('#vlanId').val();
+    const description = $('#description').val();
+    
+    if (!deviceId || !name) {
+        showErrorToast('请填写设备选择和接口名称');
+        return;
+    }
+    
+    // 验证IP地址格式
+    if (ipAddress && !isValidIP(ipAddress)) {
+        showErrorToast('IP地址格式不正确');
+        return;
+    }
+    
+    // 验证MAC地址格式
+    if (macAddress && !isValidMAC(macAddress)) {
+        showErrorToast('MAC地址格式不正确（格式: 00:11:22:33:44:55）');
+        return;
+    }
+    
+    // 准备请求数据
+    const requestData = {
+        device_id: parseInt(deviceId),
+        name: name,
+        type: type,
+        status: status,
+        ip_address: ipAddress || null,
+        subnet_mask: subnetMask || null,
+        mac_address: macAddress || null,
+        vlan: vlanId || null,
+        description: description || '',
+        speed: 1000000000,  // 默认1Gbps
+        mtu: 1500  // 默认MTU
+    };
+    
+    showLoadingToast('正在创建接口...');
+    
+    // 调用手工添加接口API
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/manual`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(requestData),
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast(response.message);
+                $('#manualForm')[0].reset();
+                $('#addInterfaceModal').modal('hide');
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                showErrorToast(response.message || '创建接口失败');
+            }
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = `请求失败: ${error}`;
+            try {
+                if (xhr.responseText) {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    if (errorResponse.message) {
+                        errorMessage = errorResponse.message;
+                    }
+                }
+            } catch (e) {
+                if (xhr.responseText && xhr.responseText.length < 100) {
+                    errorMessage = `服务器错误: ${xhr.responseText}`;
+                }
+            }
+            showErrorToast(errorMessage);
+        }
+    });
+}
+
+// 保存批量生成的接口
+function saveBatchInterfaces() {
+    const deviceId = $('#batchDevice').val();
+    const pattern = $('#interfacePattern').val();
+    const slot = parseInt($('#slotNumber').val()) || 0;
+    const start = parseInt($('#startPort').val()) || 1;
+    const end = parseInt($('#endPort').val()) || 48;
+    const defaultStatus = $('#defaultStatus').val();
+    const defaultSpeed = parseInt($('#defaultSpeed').val()) || 1000;
+    
+    if (!deviceId) {
+        showErrorToast('请选择设备');
+        return;
+    }
+    
+    if (!pattern.includes('{slot}') || !pattern.includes('{port}')) {
+        showErrorToast('接口模式必须包含{slot}和{port}占位符');
+        return;
+    }
+    
+    const count = end - start + 1;
+    if (count <= 0) {
+        showErrorToast('端口范围无效');
+        return;
+    }
+    
+    if (!confirm(`确定要批量生成 ${count} 个接口吗？`)) {
+        return;
+    }
+    
+    // 准备请求数据
+    const requestData = {
+        device_id: parseInt(deviceId),
+        pattern: pattern,
+        slot: slot,
+        start_port: start,
+        end_port: end,
+        default_status: defaultStatus,
+        default_speed: defaultSpeed * 1000000
+    };
+    
+    showLoadingToast('正在批量生成接口...');
+    
+    // 调用批量创建接口API
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/batch`,
+        method: 'POST',
+        contentType: 'application/json; charset=utf-8',
+        data: JSON.stringify(requestData),
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                let message = response.message;
+                
+                if (response.created_count > 0) {
+                    message += `\n成功创建: ${response.created_count} 个接口`;
+                    showSuccessToast(message);
+                } 
+                
+                if (response.skipped_count > 0) {
+                    message += `\n跳过（已存在）: ${response.skipped_count} 个接口`;
+                    if (response.created_count === 0) {
+                        showInfoToast(message);
+                    }
+                }
+                
+                $('#addInterfaceModal').modal('hide');
+                
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                showErrorToast(response.message || '批量生成接口失败');
+            }
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = `请求失败: ${error}`;
+            try {
+                if (xhr.responseText) {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    if (errorResponse.message) {
+                        errorMessage = errorResponse.message;
+                    }
+                }
+            } catch (e) {
+                if (xhr.responseText && xhr.responseText.length < 100) {
+                    errorMessage = `服务器错误: ${xhr.responseText}`;
+                }
+            }
+            showErrorToast(errorMessage);
+        }
+    });
+}
+
+// 显示接口详情
+function showInterfaceDetail(index) {
+    const iface = interfacesData[index];
+    if (!iface) return;
+    
+    currentDetailInterfaceId = iface.id;
+    
+    let detailHtml = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-info-circle me-2"></i>基本信息</h6>
+                <table class="table table-sm">
+                    <tr>
+                        <th width="40%">设备名称:</th>
+                        <td>${iface.device_name}</td>
+                    </tr>
+                    <tr>
+                        <th>设备IP:</th>
+                        <td>${iface.device_ip || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th>接口名称:</th>
+                        <td><code>${iface.interface_name}</code></td>
+                    </tr>
+                    <tr>
+                        <th>接口类型:</th>
+                        <td>${iface.interface_type || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th>状态:</th>
+                        <td>
+                            ${iface.status === 'up' ? 
+                                '<span class="badge bg-success">UP</span>' : 
+                                iface.status === 'down' ? 
+                                '<span class="badge bg-danger">DOWN</span>' : 
+                                '<span class="badge bg-warning">' + (iface.status || 'N/A') + '</span>'}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>描述:</th>
+                        <td>${iface.description || 'N/A'}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-network-wired me-2"></i>网络信息</h6>
+                <table class="table table-sm">
+                    <tr>
+                        <th width="40%">IP地址:</th>
+                        <td>${iface.ip_address || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th>子网掩码:</th>
+                        <td>${iface.subnet_mask || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th>MAC地址:</th>
+                        <td><code>${iface.mac_address || 'N/A'}</code></td>
+                    </tr>
+                    <tr>
+                        <th>VLAN:</th>
+                        <td>${iface.vlan || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th>MTU:</th>
+                        <td>${iface.mtu || '1500'}</td>
+                    </tr>
+                    <tr>
+                        <th>最后更新时间:</th>
+                        <td>${iface.last_updated || iface.last_seen || 'N/A'}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-12">
+                <h6><i class="fas fa-chart-line me-2"></i>性能统计</h6>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>入口</th>
+                            <th>出口</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <th>利用率</th>
+                            <td>
+                                ${iface.in_utilization !== null && iface.in_utilization !== undefined ? 
+                                    `<div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                            <div class="progress-bar ${iface.in_utilization > 80 ? 'bg-danger' : iface.in_utilization > 50 ? 'bg-warning' : 'bg-success'}" 
+                                                 style="width: ${iface.in_utilization}%"></div>
+                                        </div>
+                                        <span>${iface.in_utilization.toFixed(1)}%</span>
+                                    </div>` : 
+                                    'N/A'}
+                            </td>
+                            <td>
+                                ${iface.out_utilization !== null && iface.out_utilization !== undefined ? 
+                                    `<div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                            <div class="progress-bar ${iface.out_utilization > 80 ? 'bg-danger' : iface.out_utilization > 50 ? 'bg-warning' : 'bg-success'}" 
+                                                 style="width: ${iface.out_utilization}%"></div>
+                                        </div>
+                                        <span>${iface.out_utilization.toFixed(1)}%</span>
+                                    </div>` : 
+                                    'N/A'}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>速率</th>
+                            <td colspan="2">
+                                ${iface.speed ? 
+                                    (iface.speed >= 1000000000 ? 
+                                        `${(iface.speed / 1000000000).toFixed(1)} Gbps` : 
+                                        `${(iface.speed / 1000000).toFixed(0)} Mbps`) : 
+                                    'N/A'}
+                            </td>
+                        </tr>
+                        ${iface.in_bytes !== undefined || iface.out_bytes !== undefined ? `
+                        <tr>
+                            <th>字节计数</th>
+                            <td>${iface.in_bytes ? formatBytes(iface.in_bytes) : 'N/A'}</td>
+                            <td>${iface.out_bytes ? formatBytes(iface.out_bytes) : 'N/A'}</td>
+                        </tr>
+                        ` : ''}
+                        ${iface.in_packets !== undefined || iface.out_packets !== undefined ? `
+                        <tr>
+                            <th>数据包计数</th>
+                            <td>${iface.in_packets ? formatNumber(iface.in_packets) : 'N/A'}</td>
+                            <td>${iface.out_packets ? formatNumber(iface.out_packets) : 'N/A'}</td>
+                        </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    // 如果有错误信息，显示出来
+    if (iface.error_message) {
+        detailHtml += `
+            <div class="row mt-3">
+                <div class="col-md-12">
+                    <div class="alert alert-warning">
+                        <h6><i class="fas fa-exclamation-triangle me-2"></i>错误信息</h6>
+                        <p class="mb-0">${iface.error_message}</p>
+                        ${iface.last_error_time ? `<small class="text-muted">发生时间: ${iface.last_error_time}</small>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    $('#interfaceDetailContent').html(detailHtml);
+    $('#interfaceDetailModal').modal('show');
+}
+
+// 刷新单个接口详情
+function refreshSingleInterfaceDetail(interfaceId) {
+    $('#refreshInterfaceBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i> 刷新中...');
+    
+    $.ajax({
+        url: `${API_BASE}/api/interfaces/${interfaceId}/refresh`,
+        method: 'POST',
+        contentType: 'application/json',
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                showSuccessToast('接口数据刷新成功');
+                // 关闭模态框并重新打开
+                $('#interfaceDetailModal').modal('hide');
+                // 找到对应的接口索引并重新显示详情
+                const index = interfacesData.findIndex(i => i.id === interfaceId);
+                if (index !== -1 && response.interface) {
+                    interfacesData[index] = response.interface;
+                    setTimeout(() => {
+                        showInterfaceDetail(index);
+                    }, 500);
+                }
+            } else {
+                showErrorToast(response.message || '刷新接口数据失败');
+                $('#refreshInterfaceBtn').prop('disabled', false).html('<i class="fas fa-sync-alt me-1"></i> 刷新数据');
+            }
+        },
+        error: function(xhr, status, error) {
+            showErrorToast(`刷新失败: ${error}`);
+            $('#refreshInterfaceBtn').prop('disabled', false).html('<i class="fas fa-sync-alt me-1"></i> 刷新数据');
+        }
+    });
+}
+
+// 编辑接口
+function editInterface(interfaceId) {
+    // 这里可以跳转到编辑页面或打开编辑模态框
+    // 暂时简单实现
+    alert(`编辑接口ID: ${interfaceId} - 编辑功能待实现`);
+}
+
+// 验证IP地址
+function isValidIP(ip) {
+    const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    return ipPattern.test(ip);
+}
+
+// 验证MAC地址
+function isValidMAC(mac) {
+    const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+    return macPattern.test(mac);
+}
+
+// 格式化字节数
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 格式化数字
+function formatNumber(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// 导出为CSV
+function exportToCSV() {
+    let csvContent = "设备名称,设备IP,接口名称,接口类型,状态,IP地址,子网掩码,MAC地址,速率(Mbps),入口利用率(%),出口利用率(%),VLAN,描述\n";
+    
+    filteredData.forEach(iface => {
+        const speedMbps = iface.speed ? (iface.speed / 1000000).toFixed(0) : '';
+        const row = [
+            `"${iface.device_name}"`,
+            `"${iface.device_ip || ''}"`,
+            `"${iface.interface_name}"`,
+            `"${iface.interface_type || ''}"`,
+            `"${iface.status || ''}"`,
+            `"${iface.ip_address || ''}"`,
+            `"${iface.subnet_mask || ''}"`,
+            `"${iface.mac_address || ''}"`,
+            `"${speedMbps}"`,
+            `"${iface.in_utilization || ''}"`,
+            `"${iface.out_utilization || ''}"`,
+            `"${iface.vlan || ''}"`,
+            `"${(iface.description || '').replace(/"/g, '""')}"`
+        ].join(',');
+        
+        csvContent += row + "\n";
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `接口列表_${new Date().toISOString().slice(0,10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccessToast('CSV导出成功');
+}
+
+// Toast通知函数
+function showLoadingToast(message) {
+    showToast('loading', message, 'primary');
+}
+
+function showSuccessToast(message) {
+    showToast('success', message, 'success');
+}
+
+function showErrorToast(message) {
+    showToast('error', message, 'danger');
+}
+
+function showInfoToast(message) {
+    showToast('info', message, 'info');
+}
+
+function showToast(type, message, bgColor) {
+    // 移除现有的同类型toast
+    $(`.${type}-toast`).remove();
+    
+    const icon = type === 'loading' ? 'fa-spinner fa-spin' : 
+                 type === 'success' ? 'fa-check-circle' : 
+                 type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+    
+    const toastHtml = `
+        <div class="${type}-toast position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index: 9999;">
+            <div class="toast align-items-center text-white bg-${bgColor} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas ${icon} me-2"></i> ${message}
+                    </div>
+                    ${type !== 'loading' ? 
+                    '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>' : 
+                    ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('body').append(toastHtml);
+    const toast = $(`.${type}-toast .toast`);
+    toast.toast('show');
+    
+    // 自动隐藏（loading toast不自动隐藏）
+    if (type !== 'loading') {
+        setTimeout(() => {
+            toast.toast('hide');
+        }, type === 'error' ? 5000 : 3000);
+    }
+}
+
+// 页面卸载时清理
+$(window).on('beforeunload', function() {
+    stopAutoRefresh();
+});
+</script>
+{% endblock %}
+</html>

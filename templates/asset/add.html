@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}新增资产 - 资产管理{% endblock %}
+
+{% block page_title %}新增资产{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">填写资产信息，带 <span class="text-danger">*</span> 为必填项</p>
+{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group" role="group">
+    <button type="submit" form="assetForm" class="btn btn-primary">
+        <i class="fas fa-save"></i> 保存
+    </button>
+    <a href="{{ url_for('asset.asset_inventory') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-times"></i> 取消
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="assetTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab">基本信息</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="location-tab" data-bs-toggle="tab" data-bs-target="#location" type="button" role="tab">位置信息</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="financial-tab" data-bs-toggle="tab" data-bs-target="#financial" type="button" role="tab">财务信息</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="owner-tab" data-bs-toggle="tab" data-bs-target="#owner" type="button" role="tab">责任人/供应商</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance" type="button" role="tab">维护信息</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="other-tab" data-bs-toggle="tab" data-bs-target="#other" type="button" role="tab">其他</button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <form id="assetForm" method="POST" action="{{ url_for('asset.asset_add') }}">
+                    {{ form.hidden_tag() }}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="tab-content" id="assetTabsContent">
+                        <!-- 基本信息 -->
+                        <div class="tab-pane fade show active" id="basic" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.asset_number.label(class="form-label") }} <span class="text-danger">*</span>
+                                        {{ form.asset_number(class="form-control", placeholder="唯一标识，如 AST-2024001") }}
+                                        <div class="form-text">唯一标识，如 AST-2024001</div>
+                                        {% if form.asset_number.errors %}
+                                            <div class="text-danger">{{ form.asset_number.errors[0] }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.asset_name.label(class="form-label") }} <span class="text-danger">*</span>
+                                        {{ form.asset_name(class="form-control") }}
+                                        {% if form.asset_name.errors %}
+                                            <div class="text-danger">{{ form.asset_name.errors[0] }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.asset_type.label(class="form-label") }} <span class="text-danger">*</span>
+                                        {{ form.asset_type(class="form-select") }}
+                                        {% if form.asset_type.errors %}
+                                            <div class="text-danger">{{ form.asset_type.errors[0] }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.asset_subtype.label(class="form-label") }}
+                                        {{ form.asset_subtype(class="form-control", placeholder="如：机架服务器、交换机") }}
+                                        <div class="form-text">如：机架服务器、交换机</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.brand.label(class="form-label") }}
+                                        {{ form.brand(class="form-control") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.model.label(class="form-label") }}
+                                        {{ form.model(class="form-control") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.serial_number.label(class="form-label") }}
+                                        {{ form.serial_number(class="form-control") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                {{ form.specification.label(class="form-label") }}
+                                {{ form.specification(class="form-control", rows=2, placeholder="CPU、内存、硬盘等配置信息") }}
+                                <div class="form-text">CPU、内存、硬盘等配置信息</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.status.label(class="form-label") }} <span class="text-danger">*</span>
+                                        {{ form.status(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.condition.label(class="form-label") }}
+                                        {{ form.condition(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">{{ form.in_use.label.text }}</label>
+                                        <div class="form-check">
+                                            {{ form.in_use(class="form-check-input") }}
+                                            <label class="form-check-label" for="in_use">是</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 位置信息 -->
+                        <div class="tab-pane fade" id="location" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.location_id.label(class="form-label") }}
+                                        {{ form.location_id(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.cabinet_id.label(class="form-label") }}
+                                        {{ form.cabinet_id(class="form-select") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                {{ form.position.label(class="form-label") }}
+                                {{ form.position(class="form-control", placeholder="如：A01机柜第10单元") }}
+                            </div>
+                        </div>
+
+                        <!-- 财务信息 -->
+                        <div class="tab-pane fade" id="financial" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.purchase_date.label(class="form-label") }}
+                                        {{ form.purchase_date(class="form-control", type="date") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.purchase_price.label(class="form-label") }}
+                                        {{ form.purchase_price(class="form-control", step="0.01", placeholder="购买价格 (¥)") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.warranty_expiry.label(class="form-label") }}
+                                        {{ form.warranty_expiry(class="form-control", type="date") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.depreciation_rate.label(class="form-label") }}
+                                        {{ form.depreciation_rate(class="form-control", step="0.1", min="0", max="100", placeholder="年折旧率 (%)") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">当前价值 (自动计算)</label>
+                                <input type="text" class="form-control" id="current_value" disabled placeholder="保存后系统自动计算">
+                            </div>
+                        </div>
+
+                        <!-- 责任人/供应商 -->
+                        <div class="tab-pane fade" id="owner" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.responsible_user_id.label(class="form-label") }}
+                                        {{ form.responsible_user_id(class="form-select") }}
+                                        <div class="form-text">选择用户后，其部门和联系方式将自动保存到资产记录中</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.supplier_id.label(class="form-label") }}
+                                        {{ form.supplier_id(class="form-select") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 预览区域（可选，由JS控制） -->
+                            <div class="row mb-3" id="responsibleUserDetail" style="display: none;">
+                                <div class="col-md-4">
+                                    <label class="form-label">所属部门</label>
+                                    <input type="text" class="form-control" id="preview_department" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">责任人姓名</label>
+                                    <input type="text" class="form-control" id="preview_person" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">联系方式</label>
+                                    <input type="text" class="form-control" id="preview_contact" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 维护信息 -->
+                        <div class="tab-pane fade" id="maintenance" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.maintenance_schedule.label(class="form-label") }}
+                                        {{ form.maintenance_schedule(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.last_maintenance.label(class="form-label") }}
+                                        {{ form.last_maintenance(class="form-control", type="date") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        {{ form.next_maintenance.label(class="form-label") }}
+                                        {{ form.next_maintenance(class="form-control", type="date") }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 其他 -->
+                        <div class="tab-pane fade" id="other" role="tabpanel">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.device_id.label(class="form-label") }}
+                                        {{ form.device_id(class="form-control", placeholder="如有设备记录可关联") }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        {{ form.tags.label(class="form-label") }}
+                                        {{ form.tags(class="form-control", placeholder="用逗号分隔") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                {{ form.usage_description.label(class="form-label") }}
+                                {{ form.usage_description(class="form-control", rows=2, placeholder="使用说明") }}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.notes.label(class="form-label") }}
+                                {{ form.notes(class="form-control", rows=3, placeholder="备注") }}
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    {{ form.is_active(class="form-check-input") }}
+                                    {{ form.is_active.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-end">
+                <button type="submit" form="assetForm" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 保存资产
+                </button>
+                <a href="{{ url_for('asset.asset_inventory') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 返回列表
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    (function() {
+        // 根据资产类型动态调整子类型placeholder
+        const typeSelect = document.getElementById('asset_type');
+        const subtypeInput = document.getElementById('asset_subtype');
+
+        if (typeSelect) {
+            typeSelect.addEventListener('change', function() {
+                const type = this.value;
+                if (type === '服务器') {
+                    subtypeInput.placeholder = '如：机架式、刀片式';
+                } else if (type === '网络设备') {
+                    subtypeInput.placeholder = '如：交换机、路由器';
+                } else if (type === '软件') {
+                    subtypeInput.placeholder = '如：操作系统、数据库';
+                } else {
+                    subtypeInput.placeholder = '';
+                }
+            });
+            // 触发一次初始化placeholder
+            typeSelect.dispatchEvent(new Event('change'));
+        }
+
+        // 维护日期自动计算下次维护日期
+        const lastMaintenance = document.getElementById('last_maintenance');
+        const nextMaintenance = document.getElementById('next_maintenance');
+        const maintenanceSchedule = document.getElementById('maintenance_schedule');
+
+        if (lastMaintenance && nextMaintenance && maintenanceSchedule) {
+            function updateNextMaintenance() {
+                const lastDate = lastMaintenance.value;
+                const schedule = maintenanceSchedule.value;
+                if (lastDate && schedule) {
+                    const date = new Date(lastDate);
+                    if (schedule === '每月') {
+                        date.setMonth(date.getMonth() + 1);
+                    } else if (schedule === '每季度') {
+                        date.setMonth(date.getMonth() + 3);
+                    } else if (schedule === '每半年') {
+                        date.setMonth(date.getMonth() + 6);
+                    } else if (schedule === '每年') {
+                        date.setFullYear(date.getFullYear() + 1);
+                    }
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    nextMaintenance.value = `${year}-${month}-${day}`;
+                }
+            }
+
+            lastMaintenance.addEventListener('change', updateNextMaintenance);
+            maintenanceSchedule.addEventListener('change', updateNextMaintenance);
+        }
+
+        // 责任人选择预览（可选，需要配合后端API）
+        const userSelect = document.getElementById('responsible_user_id');
+        const detailDiv = document.getElementById('responsibleUserDetail');
+        const previewDept = document.getElementById('preview_department');
+        const previewPerson = document.getElementById('preview_person');
+        const previewContact = document.getElementById('preview_contact');
+
+        if (userSelect && detailDiv && previewDept && previewPerson && previewContact) {
+            userSelect.addEventListener('change', function() {
+                const userId = this.value;
+                if (userId && userId !== '0') {
+                    fetch(`{{ url_for('asset.api_user_detail', user_id=0) }}`.replace('0', userId))
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                previewDept.value = data.department || '';
+                                previewPerson.value = data.username || '';
+                                previewContact.value = data.phone || '';
+                                detailDiv.style.display = 'flex';
+                            } else {
+                                detailDiv.style.display = 'none';
+                            }
+                        })
+                        .catch(() => detailDiv.style.display = 'none');
+                } else {
+                    detailDiv.style.display = 'none';
+                }
+            });
+        }
+    })();
+</script>
+{% endblock %}

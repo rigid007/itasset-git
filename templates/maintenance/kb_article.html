@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }} - 知识库{% endblock %}
+{% block page_title %}{{ article.title }}{% endblock %}
+{% block page_subtitle %}
+    {% if article.category %}<span class="badge bg-info me-1">{{ article.category }}</span>{% endif %}
+    {% if article.tags %}
+        {% for tag in article.tags.split(',') %}
+        <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+{% block header_actions %}
+{% if has_permission(current_user, 'maintenance:edit') %}
+<a href="{{ url_for('maintenance_extra.kb_edit', id=article.id) }}" class="btn btn-primary">
+    <i class="fas fa-edit"></i> 编辑
+</a>
+<form method="POST" action="{{ url_for('maintenance_extra.kb_delete', id=article.id) }}" style="display:inline"
+      onsubmit="return confirm('确定要删除文章「{{ article.title }}」吗？')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-danger"><i class="fas fa-trash"></i> 删除</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-body">
+                {% if article.is_featured %}<span class="badge bg-warning mb-2">推荐</span>{% endif %}
+                <div class="mb-4">
+                    {% if article.content %}
+                    <div style="line-height:1.8;">{{ article.content|sanitize_html }}</div>
+                    {% else %}
+                    <p class="text-muted">暂无内容</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <!-- 元信息 -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">文章信息</h5></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <th style="width:40%">状态</th>
+                        <td>
+                            {% if article.status == 'published' %}<span class="badge bg-success">已发布</span>
+                            {% elif article.status == 'draft' %}<span class="badge bg-warning text-dark">草稿</span>
+                            {% else %}<span class="badge bg-secondary">归档</span>{% endif %}
+                        </td>
+                    </tr>
+                    <tr><th>阅读次数</th><td>{{ article.view_count or 0 }}</td></tr>
+                    <tr><th>有帮助</th><td>{{ article.helpful_count or 0 }}</td></tr>
+                    <tr><th>创建时间</th><td>{{ article.created_at.strftime('%Y-%m-%d %H:%M') if article.created_at else '-' }}</td></tr>
+                    <tr><th>更新时间</th><td>{{ article.updated_at.strftime('%Y-%m-%d %H:%M') if article.updated_at else '-' }}</td></tr>
+                    {% if article.published_at %}
+                    <tr><th>发布时间</th><td>{{ article.published_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        <!-- 设备信息 -->
+        {% if article.device_type or article.vendor or article.model %}
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">适用设备</h5></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    {% if article.device_type %}<tr><th style="width:40%">设备类型</th><td>{{ article.device_type }}</td></tr>{% endif %}
+                    {% if article.vendor %}<tr><th>厂商</th><td>{{ article.vendor }}</td></tr>{% endif %}
+                    {% if article.model %}<tr><th>型号</th><td>{{ article.model }}</td></tr>{% endif %}
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('maintenance_extra.knowledge_base') }}" class="btn btn-secondary flex-fill"><i class="fas fa-arrow-left"></i> 返回知识库</a>
+            {% if has_permission(current_user, 'maintenance:edit') %}
+            <a href="{{ url_for('maintenance_extra.kb_manage') }}" class="btn btn-outline-secondary"><i class="fas fa-cog"></i> 管理</a>
+            {% endif %}
+        </div>
+
+        <!-- 关联已知错误(KEDB) -->
+        {% if article.known_errors %}
+        <div class="card mb-4 border-danger">
+            <div class="card-header bg-danger text-white"><h5 class="mb-0"><i class="fas fa-bug"></i> 关联已知错误(KEDB)</h5></div>
+            <div class="card-body">
+                {% for ke in article.known_errors %}
+                <div class="mb-2">
+                    <code>{{ ke.ke_number }}</code> <strong>{{ ke.title }}</strong>
+                    {% if ke.linked_problem %}· <a href="{{ url_for('maintenance_extra.problem_detail', id=ke.linked_problem.id) }}">来源问题#{{ ke.linked_problem.id }}</a>{% endif %}
+                    <span class="badge {% if ke.status=='active' %}bg-danger{% else %}bg-success{% endif %}">{{ '活跃' if ke.status=='active' else '已解决' }}</span>
+                </div>
+                {% endfor %}
+                <p class="text-muted small mb-0">该文章由已知错误沉淀而来，可直接用于事件/工单处置参考。</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

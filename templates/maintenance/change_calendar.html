@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}变更日历 - 运维管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题与时间范围切换 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-calendar-alt me-2"></i>变更日历</h2>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('maintenance.change_calendar', range='week') }}"
+               class="btn btn-outline-primary {{ 'active' if time_range == 'week' else '' }}">周视图</a>
+            <a href="{{ url_for('maintenance.change_calendar', range='month') }}"
+               class="btn btn-outline-primary {{ 'active' if time_range == 'month' else '' }}">月视图</a>
+            <a href="{{ url_for('maintenance.change_calendar', range='year') }}"
+               class="btn btn-outline-primary {{ 'active' if time_range == 'year' else '' }}">年视图</a>
+        </div>
+    </div>
+
+    <!-- 当前显示的时间范围提示 -->
+    <div class="alert alert-info d-flex align-items-center mb-4 py-2" role="alert">
+        <i class="fas fa-clock me-2"></i>
+        <span>显示从 <strong>{{ start_date.strftime('%Y年%m月%d日') }}</strong> 至 <strong>{{ end_date.strftime('%Y年%m月%d日') }}</strong> 的已排期变更</span>
+    </div>
+
+    <!-- 调试信息（仅当 URL 包含 ?debug=1 时显示） -->
+    {% if request.args.get('debug') == '1' %}
+    <div class="alert alert-secondary small mb-4">
+        <strong>🔍 调试信息：</strong><br>
+        - 时间范围: {{ start_date }} 至 {{ end_date }}<br>
+        - 变更分组键数量: {{ changes_by_date|length }}<br>
+        - 变更键列表: {{ changes_by_date.keys()|list }}<br>
+        - 总变更数（去重后）: 
+        {% set total = 0 %}
+        {% for date, changes in changes_by_date.items() %}
+            {% set total = total + changes|length %}
+        {% endfor %}
+        {{ total }}
+    </div>
+    {% endif %}
+
+    <!-- 日历主体：按日期分组展示变更 -->
+    {% if changes_by_date %}
+        {% for date_str, changes in changes_by_date|dictsort %}
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-day me-2 text-primary"></i>
+                        {{ date_str }} 
+                        <small class="text-muted ms-2">
+                            (共 {{ changes|length }} 项变更)
+                        </small>
+                    </h5>
+                    <span class="badge bg-secondary">{{ changes|length }} 项</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for change in changes %}
+                            <a href="{{ url_for('maintenance.change_detail', change_id=change.id) }}" 
+                               class="list-group-item list-group-item-action d-flex flex-wrap align-items-center">
+                                <!-- 变更编号与标题 -->
+                                <div class="col-12 col-md-4 col-lg-5 mb-2 mb-md-0">
+                                    <strong>{{ change.change_number }}</strong>
+                                    <span class="text-truncate d-inline-block" style="max-width: 300px;">{{ change.title }}</span>
+                                </div>
+                                <!-- 类型标签 -->
+                                <div class="col-6 col-md-2 col-lg-2">
+                                    {% if change.change_type == 'emergency' %}
+                                        <span class="badge bg-danger">紧急</span>
+                                    {% elif change.change_type == 'standard' %}
+                                        <span class="badge bg-success">标准</span>
+                                    {% elif change.change_type == 'normal' %}
+                                        <span class="badge bg-info">常规</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ change.change_type }}</span>
+                                    {% endif %}
+                                </div>
+                                <!-- 状态标签 -->
+                                <div class="col-6 col-md-2 col-lg-2">
+                                    {% if change.status == 'scheduled' %}
+                                        <span class="badge bg-primary">已排期</span>
+                                    {% elif change.status == 'approved' %}
+                                        <span class="badge bg-warning text-dark">已批准</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ change.status }}</span>
+                                    {% endif %}
+                                </div>
+                                <!-- 计划时间 -->
+                                <div class="col-12 col-md-2 col-lg-2 text-muted small">
+                                    <i class="far fa-clock me-1"></i>
+                                    {{ change.scheduled_start_time or '待定' }} - {{ change.scheduled_end_time or '待定' }}
+                                </div>
+                                <!-- 实施人 -->
+                                <div class="col-12 col-md-2 col-lg-1 text-muted small text-truncate">
+                                    {% if change.implementer_name %}
+                                        <i class="fas fa-user-cog me-1"></i>{{ change.implementer_name }}
+                                    {% else %}
+                                        <i class="fas fa-user-cog me-1"></i>未指派
+                                    {% endif %}
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <!-- 无变更数据提示，增加查看所有变更的入口（修正端点名称） -->
+        <div class="alert alert-warning text-center py-5">
+            <i class="fas fa-calendar-times fa-3x mb-3"></i>
+            <h4>暂无已排期的变更</h4>
+            <p>在所选择的时间范围内，没有找到“已批准”或“已排期”状态的变更请求。</p>
+            <div class="mt-3">
+                <a href="{{ url_for('maintenance.create_change_request') }}" class="btn btn-primary me-2">
+                    <i class="fas fa-plus me-1"></i>新建变更
+                </a>
+                <a href="{{ url_for('maintenance.change_requests') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-list me-1"></i>查看所有变更
+                </a>
+            </div>
+            <p class="text-muted small mt-3">
+                <i class="fas fa-info-circle"></i> 如果确认存在变更，请检查它们的状态是否为“已批准”或“已排期”，且计划日期在所选范围内。
+            </p>
+        </div>
+    {% endif %}
+
+    <!-- 图例说明 -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body py-2">
+                    <span class="me-3"><i class="fas fa-circle text-danger me-1"></i> 紧急变更</span>
+                    <span class="me-3"><i class="fas fa-circle text-success me-1"></i> 标准变更</span>
+                    <span class="me-3"><i class="fas fa-circle text-info me-1"></i> 常规变更</span>
+                    <span class="me-3"><i class="fas fa-circle text-primary me-1"></i> 已排期</span>
+                    <span class="me-3"><i class="fas fa-circle text-warning me-1"></i> 已批准</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* 针对日历卡片的微调 */
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+    .list-group-item .badge {
+        font-size: 0.85rem;
+        padding: 0.35rem 0.65rem;
+    }
+    /* 时间范围切换按钮激活状态 */
+    .btn-group .btn-outline-primary.active {
+        background-color: #0d6efd;
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 可选：如果需要动态格式化日期或时间，可以加入 moment.js 但此处暂不引入 -->
+{% endblock %}

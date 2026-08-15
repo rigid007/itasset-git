@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}创建日巡检模板{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">创建日巡检模板</h3>
+                </div>
+                <div class="card-body">
+                    <!-- 闪现消息 -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" action="{{ url_for('maintenance.daily_inspection_template') }}">
+                        {{ form.hidden_tag() }}
+
+                        <div class="form-group">
+                            {{ form.name.label(class="form-label") }}
+                            {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
+                            {% if form.name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.name.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=3) }}
+                            {% if form.description.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.description.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.items.label(class="form-label") }}
+                            {{ form.items(class="form-control" + (" is-invalid" if form.items.errors else ""), rows=10, placeholder="每行一个检查项目，例如：\n检查设备指示灯状态\n听设备运行声音是否正常\n记录温度湿度数值") }}
+                            {% if form.items.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.items.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">每行输入一个检查项目，系统会自动统计项目数量。</small>
+                        </div>
+
+                        <!-- 如果后续需要添加预计时间字段，请先在表单类中添加，然后取消注释以下代码 -->
+                            {#
+                            <div class="form-group">
+                                {{ form.estimated_time_minutes.label(class="form-label") }}
+                                {{ form.estimated_time_minutes(class="form-control") }}
+                            </div>
+                            #}
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">保存模板</button>
+                            <a href="{{ url_for('maintenance.inspection_templates') }}" class="btn btn-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 可选：实时统计项目数量（仅用于演示）
+    document.addEventListener('DOMContentLoaded', function() {
+        const itemsField = document.getElementById('{{ form.items.id }}');
+        if (itemsField) {
+            itemsField.addEventListener('input', function() {
+                const items = this.value.split('\n').filter(line => line.trim() !== '');
+                // 可以显示计数，但不强制
+            });
+        }
+    });
+</script>
+{% endblock %}

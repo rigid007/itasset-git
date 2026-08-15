@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}资产台账 - 资产管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>资产台账</h2>
+        </div>
+        <div class="col text-right">
+            <!-- 可添加导出按钮等 -->
+        </div>
+    </div>
+
+    <!-- 搜索框 -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('asset.asset_ledger') }}" class="form-inline">
+                <div class="input-group w-100">
+                    <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="搜索资产编号、资产名称或类别...">
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" type="submit">搜索</button>
+                        {% if search %}
+                            <a href="{{ url_for('asset.asset_ledger') }}" class="btn btn-secondary">清除</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 台账列表表格 -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>交易日期</th>
+                            <th>资产编号</th>
+                            <th>资产名称</th>
+                            <th>交易类型</th>
+                            <th>借方金额</th>
+                            <th>贷方金额</th>
+                            <th>余额</th>
+                            <th>数量变化</th>
+                            <th>数量余额</th>
+                            <th>状态(前→后)</th>
+                            <th>位置(前→后)</th>
+                            <th>责任人(前→后)</th>
+                            <th>部门(前→后)</th>
+                            <th>描述</th>
+                            <th>参考单号</th>
+                            <th>凭证号</th>
+                            <th>操作人</th>
+                            <th>审批状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ledger in ledgers.items %}
+                        <tr>
+                            <td>{{ ledger.transaction_date }}</td>
+                            <td>{{ ledger.asset_code }}</td>
+                            <td>{{ ledger.asset_name }}</td>
+                            <td>
+                                {% if ledger.transaction_type == 'purchase' %}采购
+                                {% elif ledger.transaction_type == 'depreciation' %}折旧
+                                {% elif ledger.transaction_type == 'transfer' %}转移
+                                {% elif ledger.transaction_type == 'maintenance' %}维修
+                                {% elif ledger.transaction_type == 'disposal' %}处置
+                                {% elif ledger.transaction_type == 'revaluation' %}重估
+                                {% elif ledger.transaction_type == 'inventory_adjustment' %}盘点调整
+                                {% elif ledger.transaction_type == 'scrap' %}报废
+                                {% elif ledger.transaction_type == 'loan' %}借用
+                                {% elif ledger.transaction_type == 'return' %}归还
+                                {% elif ledger.transaction_type == 'other' %}其他
+                                {% else %}{{ ledger.transaction_type }}{% endif %}
+                            </td>
+                            <td class="text-right">{{ ledger.debit_amount | round(2) }}</td>
+                            <td class="text-right">{{ ledger.credit_amount | round(2) }}</td>
+                            <td class="text-right">{{ ledger.balance_amount | round(2) }}</td>
+                            <td class="text-right">{{ ledger.quantity_change }}</td>
+                            <td class="text-right">{{ ledger.quantity_balance }}</td>
+                            <td>
+                                {% if ledger.status_before %}
+                                    {{ ledger.status_before }} → {{ ledger.status_after }}
+                                {% else %}
+                                    {{ ledger.status_after }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ledger.location_before %}
+                                    {{ ledger.location_before }} → {{ ledger.location_after }}
+                                {% elif ledger.location_after %}
+                                    → {{ ledger.location_after }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ledger.responsible_person_before %}
+                                    {{ ledger.responsible_person_before }} → {{ ledger.responsible_person_after }}
+                                {% elif ledger.responsible_person_after %}
+                                    → {{ ledger.responsible_person_after }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ledger.department_before %}
+                                    {{ ledger.department_before }} → {{ ledger.department_after }}
+                                {% elif ledger.department_after %}
+                                    → {{ ledger.department_after }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td>{{ ledger.description | truncate(20) }}</td>
+                            <td>{{ ledger.reference_number or '—' }}</td>
+                            <td>{{ ledger.document_number or '—' }}</td>
+                            <td>{{ ledger.operator_name or '—' }}</td>
+                            <td>
+                                {% if ledger.approval_status == 'approved' %}
+                                    <span class="badge badge-success">已审批</span>
+                                {% elif ledger.approval_status == 'pending' %}
+                                    <span class="badge badge-warning">待审批</span>
+                                {% elif ledger.approval_status == 'rejected' %}
+                                    <span class="badge badge-danger">已拒绝</span>
+                                {% else %}
+                                    {{ ledger.approval_status }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="18" class="text-center">暂无台账记录</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- 分页 -->
+        {% if ledgers.pages > 1 %}
+        <div class="card-footer">
+            <nav aria-label="台账分页">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if ledgers.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('asset.asset_ledger', page=ledgers.prev_num, search=search) }}" aria-label="上一页">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-hidden="true">&laquo;</span>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in ledgers.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                            {% if page_num == ledgers.page %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('asset.asset_ledger', page=page_num, search=search) }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if ledgers.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('asset.asset_ledger', page=ledgers.next_num, search=search) }}" aria-label="下一页">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-hidden="true">&raquo;</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table th, .table td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .table td {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .badge {
+        font-size: 0.9em;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 可选：为长内容添加提示框
+    $(document).ready(function() {
+        $('[data-toggle="tooltip"]').tooltip();
+    });
+</script>
+{% endblock %}

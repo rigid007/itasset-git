@@ -1,0 +1,766 @@
+{% extends "base.html" %}
+
+{% block title %}系统日志 - 配置管理{% endblock %}
+
+{% block head %}
+<style>
+    .log-level-debug { color: #6c757d; }
+    .log-level-info { color: #0d6efd; }
+    .log-level-warning { color: #ffc107; }
+    .log-level-error { color: #dc3545; font-weight: 500; }
+    .log-level-critical { color: #dc3545; font-weight: 700; }
+    
+    .log-table tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+    }
+    
+    .log-details {
+        background-color: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+    
+    .log-details.expanded {
+        max-height: 500px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    .log-filter-card {
+        margin-bottom: 20px;
+    }
+    
+    .pagination-container {
+        margin-top: 20px;
+    }
+    
+    .badge-module {
+        background-color: #6f42c1;
+        color: white;
+    }
+    
+    .badge-source {
+        background-color: #20c997;
+        color: white;
+    }
+    
+    .json-view {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        background-color: #f1f3f5;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .log-message {
+        word-break: break-word;
+    }
+    
+    .filter-section {
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .export-btn {
+        margin-left: 10px;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .log-timestamp {
+        white-space: nowrap;
+        font-size: 0.85rem;
+    }
+    
+    .level-badge {
+        width: 70px;
+        display: inline-block;
+        text-align: center;
+        border-radius: 4px;
+        padding: 2px 5px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .level-debug-badge { background-color: #e9ecef; color: #495057; }
+    .level-info-badge { background-color: #cfe2ff; color: #084298; }
+    .level-warning-badge { background-color: #fff3cd; color: #664d03; }
+    .level-error-badge { background-color: #f8d7da; color: #842029; }
+    .level-critical-badge { background-color: #dc3545; color: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">系统日志</h1>
+        <div>
+            <button id="refresh-logs" class="btn btn-outline-primary">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+            <button id="export-logs" class="btn btn-outline-success export-btn" data-toggle="modal" data-target="#exportModal">
+                <i class="fas fa-download"></i> 导出
+            </button>
+        </div>
+    </div>
+    
+    <!-- 过滤条件 -->
+    <div class="card shadow mb-4 log-filter-card">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">日志筛选</h6>
+        </div>
+        <div class="card-body">
+            <form id="log-filter-form" method="get" action="{{ url_for('config.system_logs') }}">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="level" class="form-label">日志级别</label>
+                        <select class="form-control" id="level" name="level">
+                            <option value="">全部级别</option>
+                            {% for level in levels %}
+                            <option value="{{ level }}" {% if current_level == level %}selected{% endif %}>{{ level|upper }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="module" class="form-label">模块</label>
+                        <select class="form-control" id="module" name="module">
+                            <option value="">全部模块</option>
+                            {% for module in modules %}
+                            <option value="{{ module }}" {% if current_module == module %}selected{% endif %}>{{ module }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="start_date" class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="end_date" class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button type="button" id="clear-filters" class="btn btn-outline-secondary">
+                        <i class="fas fa-filter-circle-xmark"></i> 清除筛选
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> 筛选日志
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 日志表格 -->
+    <div class="card shadow">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">日志列表</h6>
+            <div class="text-muted">
+                {% if logs.total > 0 %}
+                共 {{ logs.total }} 条日志，显示第 {{ logs.page }} 页 / 共 {{ logs.pages }} 页
+                {% else %}
+                暂无日志记录
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            {% if logs.total > 0 %}
+            <div class="table-responsive">
+                <table class="table table-hover log-table">
+                    <thead>
+                        <tr>
+                            <th width="140">时间</th>
+                            <th width="90">级别</th>
+                            <th width="120">模块</th>
+                            <th>消息</th>
+                            <th width="120">用户</th>
+                            <th width="100">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs.items %}
+                        <tr class="log-row" data-log-id="{{ log.id }}">
+
+<td class="log-timestamp">
+    {{ log.timestamp_display if log.timestamp_display else '' }}
+</td>
+
+
+
+                            <td>
+                                {% if log.level == 'debug' %}
+                                <span class="level-badge level-debug-badge">DEBUG</span>
+                                {% elif log.level == 'info' %}
+                                <span class="level-badge level-info-badge">INFO</span>
+                                {% elif log.level == 'warning' %}
+                                <span class="level-badge level-warning-badge">WARNING</span>
+                                {% elif log.level == 'error' %}
+                                <span class="level-badge level-error-badge">ERROR</span>
+                                {% elif log.level == 'critical' %}
+                                <span class="level-badge level-critical-badge">CRITICAL</span>
+                                {% else %}
+                                <span class="level-badge">{{ log.level|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-module">{{ log.module or 'N/A' }}</span>
+                            </td>
+                            <td class="log-message">{{ log.message|truncate(80) }}</td>
+                            <td>
+                                {% if log.user %}
+                                {{ log.user.username }}
+                                {% else %}
+                                <span class="text-muted">系统</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary view-details-btn" data-log-id="{{ log.id }}">
+                                    <i class="fas fa-eye"></i> 详情
+                                </button>
+                            </td>
+                        </tr>
+                        <tr class="log-details-row" id="log-details-{{ log.id }}" style="display: none;">
+                            <td colspan="6">
+                                <div class="log-details p-3">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6>日志详情</h6>
+                                            <table class="table table-sm">
+                                                <tr>
+                                                    <th width="120">日志ID:</th>
+                                                    <td>{{ log.id }}</td>
+                                                </tr>
+
+                                                <tr>
+                                                    <th width="120">时间:</th>
+                                                    <td>{{ log.timestamp_display if log.timestamp_display else '' }}</td>
+                                                    </tr>
+                                                    <th>级别:</th>
+                                                    <td><span class="log-level-{{ log.level }}">{{ log.level|upper }}</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <th>模块:</th>
+                                                    <td>{{ log.module or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>来源:</th>
+                                                    <td>
+                                                        {% if log.source %}
+                                                        <span class="badge badge-source">{{ log.source }}</span>
+                                                        {% else %}
+                                                        N/A
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6>上下文信息</h6>
+                                            <table class="table table-sm">
+                                                <tr>
+                                                    <th width="120">用户:</th>
+                                                    <td>
+                                                        {% if log.user %}
+                                                        {{ log.user.username }} (ID: {{ log.user_id }})
+                                                        {% else %}
+                                                        <span class="text-muted">系统/匿名</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>IP地址:</th>
+                                                    <td>{{ log.ip_address or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>请求ID:</th>
+                                                    <td>{{ log.request_id or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>创建时间:</th>
+                                                    <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '' }}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h6>完整消息</h6>
+                                        <div class="alert alert-light">
+                                            {{ log.message }}
+                                        </div>
+                                    </div>
+                                    
+                                    {% if log.details %}
+                                    <div class="mt-3">
+                                        <h6>详细数据</h6>
+                                        <div class="json-view" id="json-view-{{ log.id }}"></div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="mt-3 text-right">
+                                        <button class="btn btn-sm btn-outline-secondary copy-log-btn" data-log-id="{{ log.id }}">
+                                            <i class="fas fa-copy"></i> 复制日志
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger delete-log-btn ml-2" data-log-id="{{ log.id }}">
+                                            <i class="fas fa-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页 -->
+            {% if logs.pages > 1 %}
+            <div class="pagination-container d-flex justify-content-center">
+                <nav aria-label="日志分页">
+                    <ul class="pagination">
+                        <li class="page-item {% if not logs.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('config.system_logs', page=logs.prev_num, level=current_level, module=current_module, start_date=start_date, end_date=end_date) if logs.has_prev else '#' }}">
+                                &laquo; 上一页
+                            </a>
+                        </li>
+                        
+                        {% for page_num in logs.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page_num %}
+                                {% if page_num == logs.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('config.system_logs', page=page_num, level=current_level, module=current_module, start_date=start_date, end_date=end_date) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('config.system_logs', page=logs.next_num, level=current_level, module=current_module, start_date=start_date, end_date=end_date) if logs.has_next else '#' }}">
+                                下一页 &raquo;
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <div class="no-results">
+                <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                <h5>没有找到日志记录</h5>
+                <p class="text-muted">尝试调整筛选条件或创建一些系统活动来生成日志。</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 导出日志模态框 -->
+<div class="modal fade" id="exportModal" tabindex="-1" role="dialog" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">导出日志</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="export-form" method="post" action="{{ url_for('config.export_logs') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="export-format">导出格式</label>
+                        <select class="form-control" id="export-format" name="format" required>
+                            <option value="csv">CSV (逗号分隔值)</option>
+                            <option value="json">JSON</option>
+                            <option value="txt">纯文本</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="export-limit">最大记录数 (0 表示无限制)</label>
+                        <input type="number" class="form-control" id="export-limit" name="limit" min="0" max="10000" value="1000">
+                        <small class="form-text text-muted">为避免导出文件过大，建议限制记录数。</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-details" name="include_details" checked>
+                            <label class="form-check-label" for="include-details">
+                                包含详细数据
+                            </label>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 导出将基于当前筛选条件，包含 {{ logs.total }} 条日志记录。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download"></i> 开始导出
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 确认删除模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除这条日志记录吗？此操作无法撤销。</p>
+                <p class="text-muted" id="delete-log-info"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                    <i class="fas fa-trash"></i> 确认删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 处理JSON数据展示
+        const jsonViews = document.querySelectorAll('.json-view');
+        jsonViews.forEach(view => {
+            const logId = view.id.replace('json-view-', '');
+            const logRow = document.querySelector(`tr[data-log-id="${logId}"]`);
+            if (logRow) {
+                // 这里需要从数据属性或API获取JSON数据
+                // 暂时留空，将在后续通过AJAX获取
+            }
+        });
+        
+        // 详情查看/隐藏功能
+        const viewDetailsButtons = document.querySelectorAll('.view-details-btn');
+        viewDetailsButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const logId = this.getAttribute('data-log-id');
+                const detailsRow = document.getElementById(`log-details-${logId}`);
+                const detailsDiv = detailsRow.querySelector('.log-details');
+                
+                if (detailsRow.style.display === 'none') {
+                    // 显示详情
+                    detailsRow.style.display = 'table-row';
+                    detailsDiv.classList.add('expanded');
+                    this.innerHTML = '<i class="fas fa-eye-slash"></i> 隐藏';
+                    
+                    // 如果详情中有JSON数据，尝试获取并格式化
+                    const jsonView = document.getElementById(`json-view-${logId}`);
+                    if (jsonView && !jsonView.hasChildNodes()) {
+                        fetch(`/config/api/logs/${logId}/details`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.details) {
+                                    jsonView.textContent = JSON.stringify(data.details, null, 2);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('获取日志详情失败:', error);
+                                jsonView.textContent = '无法加载详细数据';
+                            });
+                    }
+                } else {
+                    // 隐藏详情
+                    detailsDiv.classList.remove('expanded');
+                    setTimeout(() => {
+                        detailsRow.style.display = 'none';
+                        this.innerHTML = '<i class="fas fa-eye"></i> 详情';
+                    }, 300);
+                }
+            });
+        });
+        
+        // 点击行也可以展开/收起详情
+        const logRows = document.querySelectorAll('.log-row');
+        logRows.forEach(row => {
+            row.addEventListener('click', function() {
+                const logId = this.getAttribute('data-log-id');
+                const viewBtn = this.querySelector(`.view-details-btn[data-log-id="${logId}"]`);
+                if (viewBtn) {
+                    viewBtn.click();
+                }
+            });
+        });
+        
+        // 清除筛选条件
+        document.getElementById('clear-filters').addEventListener('click', function() {
+            document.getElementById('level').value = '';
+            document.getElementById('module').value = '';
+            document.getElementById('start_date').value = '';
+            document.getElementById('end_date').value = '';
+            document.getElementById('log-filter-form').submit();
+        });
+        
+        // 刷新按钮
+        document.getElementById('refresh-logs').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 复制日志功能
+        const copyLogButtons = document.querySelectorAll('.copy-log-btn');
+        copyLogButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const logId = this.getAttribute('data-log-id');
+                
+                fetch(`/config/api/logs/${logId}`)
+                    .then(response => response.json())
+                    .then(log => {
+                        const logText = `
+日志ID: ${log.id}
+时间: ${log.timestamp}
+级别: ${log.level}
+模块: ${log.module}
+来源: ${log.source}
+消息: ${log.message}
+用户: ${log.user_name || '系统'}
+IP地址: ${log.ip_address || 'N/A'}
+请求ID: ${log.request_id || 'N/A'}
+详细数据: ${JSON.stringify(log.details, null, 2)}
+                        `.trim();
+                        
+                        navigator.clipboard.writeText(logText).then(() => {
+                            // 显示成功提示
+                            showToast('日志已复制到剪贴板', 'success');
+                        }).catch(err => {
+                            console.error('复制失败:', err);
+                            showToast('复制失败，请手动复制', 'error');
+                        });
+                    })
+                    .catch(error => {
+                        console.error('获取日志失败:', error);
+                        showToast('获取日志失败', 'error');
+                    });
+            });
+        });
+        
+        // 删除日志功能
+        let logToDelete = null;
+        const deleteLogButtons = document.querySelectorAll('.delete-log-btn');
+        deleteLogButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                logToDelete = this.getAttribute('data-log-id');
+                
+                // 获取日志信息显示在确认框中
+                fetch(`/config/api/logs/${logToDelete}`)
+                    .then(response => response.json())
+                    .then(log => {
+                        document.getElementById('delete-log-info').textContent = 
+                            `日志ID: ${log.id}, 时间: ${new Date(log.timestamp).toLocaleString()}, 消息: ${log.message.substring(0, 50)}...`;
+                        
+                        $('#deleteConfirmModal').modal('show');
+                    })
+                    .catch(error => {
+                        console.error('获取日志失败:', error);
+                        showToast('获取日志失败', 'error');
+                    });
+            });
+        });
+        
+        // 确认删除
+        document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+            if (!logToDelete) return;
+            
+            fetch(`/config/api/logs/${logToDelete}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    showToast('日志删除成功', 'success');
+                    // 刷新页面
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '删除失败');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('删除日志失败:', error);
+                showToast(`删除失败: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                $('#deleteConfirmModal').modal('hide');
+                logToDelete = null;
+            });
+        });
+        
+        // 导出表单提交
+        document.getElementById('export-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const params = new URLSearchParams();
+            
+            // 添加当前筛选条件
+            const level = document.getElementById('level').value;
+            const module = document.getElementById('module').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            
+            if (level) params.append('level', level);
+            if (module) params.append('module', module);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            
+            // 添加导出参数
+            for (const [key, value] of formData.entries()) {
+                params.append(key, value);
+            }
+            
+            // 创建导出请求
+            const exportUrl = `/config/api/logs/export?${params.toString()}`;
+            
+            // 显示导出中提示
+            showToast('正在生成导出文件...', 'info');
+            
+            // 使用fetch下载文件
+            fetch(exportUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json, text/plain, */*'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '导出失败');
+                    });
+                }
+            })
+            .then(blob => {
+                // 创建下载链接
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // 从响应头获取文件名，或者使用默认文件名
+                const filename = `system_logs_${new Date().toISOString().slice(0,10)}.${formData.get('format')}`;
+                a.download = filename;
+                
+                // 触发下载
+                document.body.appendChild(a);
+                a.click();
+                
+                // 清理
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('导出文件已生成', 'success');
+                $('#exportModal').modal('hide');
+            })
+            .catch(error => {
+                console.error('导出失败:', error);
+                showToast(`导出失败: ${error.message}`, 'error');
+            });
+        });
+        
+        // 工具函数：显示Toast提示
+        function showToast(message, type = 'info') {
+            // 检查是否已存在Toast容器
+            let toastContainer = document.getElementById('toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toast-container';
+                toastContainer.style.position = 'fixed';
+                toastContainer.style.top = '20px';
+                toastContainer.style.right = '20px';
+                toastContainer.style.zIndex = '9999';
+                document.body.appendChild(toastContainer);
+            }
+            
+            const toastId = 'toast-' + Date.now();
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // 初始化并显示Toast
+            const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+            bsToast.show();
+            
+            // 自动移除
+            toast.addEventListener('hidden.bs.toast', function () {
+                toast.remove();
+            });
+        }
+        
+        // 获取CSRF令牌（假设您的应用使用CSRF保护）
+        function getCsrfToken() {
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            return metaTag ? metaTag.content : '';
+        }
+        
+        // 自动设置结束日期为今天
+        if (!document.getElementById('end_date').value) {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('end_date').value = today;
+        }
+        
+        // 自动设置开始日期为30天前
+        if (!document.getElementById('start_date').value) {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            document.getElementById('start_date').value = thirtyDaysAgo.toISOString().split('T')[0];
+        }
+    });
+</script>
+{% endblock %}

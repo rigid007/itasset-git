@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}系统定时任务{% endblock %}
+{% block page_title %}系统定时任务{% endblock %}
+{% block page_subtitle %}查看调度器内所有任务的运行计划，并可手动触发立即执行{% endblock %}
+{% block header_actions %}
+<button type="button" class="btn btn-outline-secondary btn-sm" id="btn-refresh">
+  <i class="fas fa-sync"></i> 刷新
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  {% if scheduler_running %}
+  <span class="badge bg-success me-2"><i class="fas fa-play"></i> 调度器运行中</span>
+  {% else %}
+  <span class="badge bg-danger me-2"><i class="fas fa-stop"></i> 调度器未运行</span>
+  {% endif %}
+  <span class="text-muted small">共 {{ total }} 个任务</span>
+  <span class="text-muted small ms-3" id="refresh-time"></span>
+</div>
+
+{% if not scheduler_running %}
+<div class="alert alert-danger">
+  <i class="fas fa-exclamation-triangle"></i> 调度器当前未运行，所有定时任务不会自动执行，手动触发也会失败。请检查应用启动日志。
+</div>
+{% endif %}
+
+{% if missing %}
+<div class="alert alert-warning">
+  <i class="fas fa-exclamation-circle"></i> 以下内置任务未注册到调度器（可能被配置关闭或注册时报错）：
+  {% for m in missing %}<code>{{ m.id }}</code>{% if not loop.last %}、{% endif %}{% endfor %}
+</div>
+{% endif %}
+
+<div class="alert alert-info">
+  <i class="fas fa-info-circle"></i> 「立即执行」会把任务的下次执行时间改为现在，由调度器在后台异步运行。
+  任务受 <code>max_instances=1</code> 保护，不会与正在运行的同一任务并发；执行完成后自动恢复原有周期。
+  设备检测、链路监控等任务耗时较长，触发后请稍候再看结果。
+</div>
+
+{% for cat in categories %}
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center">
+    <h6 class="mb-0">{{ cat }}</h6>
+    <span class="badge bg-secondary ms-2">{{ grouped[cat]|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width:22%">任务</th>
+          <th style="width:32%">说明</th>
+          <th style="width:18%">执行周期</th>
+          <th style="width:16%">下次执行</th>
+          <th style="width:12%" class="text-end">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in grouped[cat] %}
+        <tr data-job-id="{{ job.id }}">
+          <td>
+            <div class="fw-semibold">{{ job.name }}</div>
+            <code class="small text-muted">{{ job.id }}</code>
+          </td>
+          <td class="small text-muted">{{ job.desc or '—' }}</td>
+          <td class="small"><code>{{ job.trigger }}</code></td>
+          <td class="small next-run">
+            {% if job.next_run_time %}{{ job.next_run_time }}
+            {% else %}<span class="badge bg-warning text-dark">已暂停</span>{% endif %}
+          </td>
+          <td class="text-end">
+            {% if job.manual and has_permission(current_user, 'system:jobs:run') %}
+            <button type="button" class="btn btn-sm btn-primary btn-run" data-job-id="{{ job.id }}"
+                    data-job-name="{{ job.name }}">
+              <i class="fas fa-bolt"></i> 立即执行
+            </button>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+  function stamp() {
+    const el = document.getElementById('refresh-time');
+    if (el) el.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  }
+
+  function refresh() {
+    fetch('{{ url_for("sysjobs.api_list") }}', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) return;
+        data.jobs.forEach(job => {
+          const row = document.querySelector('tr[data-job-id="' + CSS.escape(job.id) + '"]');
+          if (!row) return;
+          const cell = row.querySelector('.next-run');
+          if (cell) {
+            cell.innerHTML = job.next_run_time
+              ? job.next_run_time
+              : '<span class="badge bg-warning text-dark">已暂停</span>';
+          }
+        });
+        stamp();
+      })
+      .catch(() => {});
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', refresh);
+
+  document.querySelectorAll('.btn-run').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const jobId = this.dataset.jobId;
+      const jobName = this.dataset.jobName;
+      if (!confirm('确定立即执行「' + jobName + '」吗？\n任务将在后台异步运行。')) return;
+
+      const original = this.innerHTML;
+      this.disabled = true;
+      this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中';
+
+      fetch('/system/jobs/' + encodeURIComponent(jobId) + '/run', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        }
+      })
+        .then(r => r.json())
+        .then(data => {
+          alert(data.message || (data.success ? '已触发' : '触发失败'));
+          this.disabled = false;
+          this.innerHTML = original;
+          refresh();
+        })
+        .catch(err => {
+          alert('请求失败: ' + err);
+          this.disabled = false;
+          this.innerHTML = original;
+        });
+    });
+  });
+
+  // 每 30 秒自动刷新下次执行时间
+  setInterval(refresh, 30000);
+  stamp();
+})();
+</script>
+{% endblock %}

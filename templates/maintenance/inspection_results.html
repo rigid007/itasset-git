@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}巡检结果{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>巡检结果</h2>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">总巡检</h6>
+                        <h3 class="mb-0">{{ total_inspections }}</h3>
+                    </div>
+                    <i class="fas fa-clipboard-list fa-2x"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">通过</h6>
+                        <h3 class="mb-0">{{ passed_inspections }}</h3>
+                    </div>
+                    <i class="fas fa-check-circle fa-2x"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">警告</h6>
+                        <h3 class="mb-0">{{ warning_inspections }}</h3>
+                    </div>
+                    <i class="fas fa-exclamation-triangle fa-2x"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">失败</h6>
+                        <h3 class="mb-0">{{ failed_inspections }}</h3>
+                    </div>
+                    <i class="fas fa-times-circle fa-2x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤表单 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('maintenance.inspection_results') }}" class="form">
+                <div class="form-row">
+                    <div class="col-md-3 mb-2">
+                        <label for="start_date">开始日期</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date or '' }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="end_date">结束日期</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date or '' }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="inspector">巡检员</label>
+                        <input type="text" class="form-control" id="inspector" name="inspector" placeholder="姓名" value="{{ inspector or '' }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="result">总体结果</label>
+                        <select class="form-control" id="result" name="result">
+                            <option value="all" {% if result_filter == 'all' %}selected{% endif %}>全部</option>
+                            <option value="passed" {% if result_filter == 'passed' %}selected{% endif %}>通过</option>
+                            <option value="failed" {% if result_filter == 'failed' %}selected{% endif %}>失败</option>
+                            <option value="warning" {% if result_filter == 'warning' %}selected{% endif %}>警告</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row mt-2">
+                    <div class="col-md-12 text-right">
+                        <button type="submit" class="btn btn-primary">筛选</button>
+                        <a href="{{ url_for('maintenance.inspection_results') }}" class="btn btn-secondary">重置</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 结果表格 -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>结果编号</th>
+                            <th>巡检日期</th>
+                            <th>巡检员</th>
+                            <th>总体结果</th>
+                            <th>得分</th>
+                            <th>总项目</th>
+                            <th>严重问题</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result in results.items %}
+                        <tr>
+                            <td>{{ result.result_number }}</td>
+                            <td>{{ result.inspection_date.strftime('%Y-%m-%d') if result.inspection_date else '' }}</td>
+                            <td>{{ result.inspector_name or '' }}</td>
+                            <td>
+                                {% if result.overall_result == 'passed' %}
+                                    <span class="badge badge-success">通过</span>
+                                {% elif result.overall_result == 'failed' %}
+                                    <span class="badge badge-danger">失败</span>
+                                {% elif result.overall_result == 'warning' %}
+                                    <span class="badge badge-warning">警告</span>
+                                {% else %}
+                                    {{ result.overall_result }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if result.score is not none %}
+                                    {{ result.score }}%
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ result.total_items or 0 }}</td>
+                            <td>
+                                {% if result.critical_issues > 0 %}
+                                    <span class="badge badge-danger">{{ result.critical_issues }}</span>
+                                {% else %}
+                                    0
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="#" class="btn btn-sm btn-outline-primary" title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <!-- 如果有编辑权限，可添加编辑按钮 -->
+                                <!-- <a href="#" class="btn btn-sm btn-outline-secondary"><i class="fas fa-edit"></i></a> -->
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center">暂无巡检结果</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            {% if results.pages > 1 %}
+            <nav aria-label="巡检结果分页" class="mt-3">
+                <ul class="pagination justify-content-center">
+                    <!-- 上一页 -->
+                    <li class="page-item {% if not results.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('maintenance.inspection_results', page=results.prev_num, start_date=start_date, end_date=end_date, inspector=inspector, result=result_filter) if results.has_prev else '#' }}" aria-label="上一页">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+
+                    <!-- 页码 -->
+                    {% for page_num in results.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                            <li class="page-item {% if page_num == results.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('maintenance.inspection_results', page=page_num, start_date=start_date, end_date=end_date, inspector=inspector, result=result_filter) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    <!-- 下一页 -->
+                    <li class="page-item {% if not results.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('maintenance.inspection_results', page=results.next_num, start_date=start_date, end_date=end_date, inspector=inspector, result=result_filter) if results.has_next else '#' }}" aria-label="下一页">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

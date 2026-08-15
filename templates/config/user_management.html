@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 系统配置{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    :root {
+        --primary-color: #3498db;
+        --success-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --info-color: #17a2b8;
+        --light-bg: #f8f9fa;
+        --border-color: #dee2e6;
+    }
+
+    .user-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .user-card:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .user-card.inactive {
+        border-left-color: #95a5a6;
+        opacity: 0.8;
+    }
+
+    .role-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+
+    .role-admin {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .role-operator {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .role-user {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .role-viewer {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+
+    .status-active {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .status-inactive {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .action-buttons button {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+
+    .search-container {
+        position: relative;
+    }
+
+    .search-container i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+
+    .search-container input {
+        padding-left: 40px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #dee2e6;
+    }
+
+    .user-detail-modal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .detail-row {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .detail-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .detail-value {
+        color: #212529;
+        word-break: break-word;
+    }
+
+    .form-section {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .form-section h6 {
+        color: #495057;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    
+    .required::after {
+        content: " *";
+        color: #e74c3c;
+    }
+    
+    .modal-footer {
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .alert-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+    }
+    
+    .role-description {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .password-strength {
+        height: 5px;
+        border-radius: 2px;
+        margin-top: 5px;
+        transition: all 0.3s ease;
+    }
+    
+    .strength-weak {
+        background-color: #e74c3c;
+        width: 33%;
+    }
+    
+    .strength-medium {
+        background-color: #f39c12;
+        width: 66%;
+    }
+    
+    .strength-strong {
+        background-color: #2ecc71;
+        width: 100%;
+    }
+    
+    .user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: #3498db;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+    
+    .last-login {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    .department-badge {
+        background-color: #e8f4fc;
+        color: #2c3e50;
+        border: 1px solid #b3d7ff;
+        margin-right: 5px;
+        margin-bottom: 5px;
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2 text-gray-800">用户管理</h1>
+            <p class="mb-0">管理系统用户账户、权限和角色分配</p>
+        </div>
+        <div>
+            {% if current_user.is_admin %}
+            <button class="btn btn-primary" id="addUserBtn">
+                <i class="fas fa-user-plus mr-2"></i>添加用户
+            </button>
+            {% endif %}
+            <button class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt mr-2"></i>刷新
+            </button>
+        </div>
+    </div>
+
+    <!-- 搜索和筛选 -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="search-container">
+                        <i class="fas fa-search"></i>
+                        <input type="text" class="form-control" id="searchInput" placeholder="搜索用户名、邮箱或部门...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="roleFilter">
+                        <option value="">所有角色</option>
+                        <option value="admin">管理员</option>
+                        <option value="operator">操作员</option>
+                        <option value="user">普通用户</option>
+                        <option value="viewer">查看者</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="statusFilter">
+                        <option value="">所有状态</option>
+                        <option value="active">已启用</option>
+                        <option value="inactive">已禁用</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">用户列表</h6>
+        </div>
+        <div class="card-body">
+            <div id="usersContainer">
+                <!-- 用户卡片将通过JavaScript动态加载 -->
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载用户数据...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑用户模态框 -->
+<div class="modal fade" id="userModal" tabindex="-1" role="dialog" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalLabel">添加新用户</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="userForm">
+                <div class="modal-body">
+                    <input type="hidden" id="userId" name="id">
+                    
+                    <div class="form-section">
+                        <h6>账户信息</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="username" class="required">用户名</label>
+                                    <input type="text" class="form-control" id="username" name="username" required>
+                                    <small class="form-text text-muted">用户名只能包含字母、数字和下划线，长度为3-20个字符</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="email" class="required">邮箱</label>
+                                    <input type="email" class="form-control" id="email" name="email" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="password" id="passwordLabel" class="required">密码</label>
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="password" name="password">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-secondary" type="button" id="generatePassword">
+                                                <i class="fas fa-key"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="password-strength" id="passwordStrength"></div>
+                                    <small class="form-text text-muted" id="passwordHelp">密码长度至少为6个字符</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="role" class="required">角色</label>
+                                    <select class="form-control" id="role" name="role" required>
+                                        <!-- 角色选项将通过JavaScript动态加载 -->
+                                    </select>
+                                    <div class="role-description" id="roleDescription"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 个人信息 -->
+                    <div class="form-section">
+                        <h6>个人信息</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="department">部门</label>
+                                    <input type="text" class="form-control" id="department" name="department">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="phone">电话</label>
+                                    <input type="tel" class="form-control" id="phone" name="phone">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 账户状态 -->
+                    <div class="form-section">
+                        <h6>账户状态</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="is_active" name="is_active" checked>
+                                        <label class="custom-control-label" for="is_active">启用账户</label>
+                                    </div>
+                                    <small class="form-text text-muted">禁用后用户将无法登录系统</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="saveUserBtn">
+                        <i class="fas fa-save mr-2"></i>保存用户
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 用户详情模态框 -->
+<div class="modal fade" id="userDetailModal" tabindex="-1" role="dialog" aria-labelledby="userDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userDetailModalLabel">用户详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="userDetailContent">
+                    <!-- 详情内容将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                {% if current_user.is_admin %}
+                <button type="button" class="btn btn-primary" id="editFromDetailBtn">
+                    <i class="fas fa-edit mr-2"></i>编辑
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除这个用户吗？此操作不可撤销。</p>
+                <p class="text-danger"><strong>警告：</strong>删除用户将同时删除该用户的所有相关数据。</p>
+                <input type="hidden" id="userToDelete">
+                <div id="deleteUserInfo" class="mt-3 p-3 bg-light rounded">
+                    <!-- 删除的用户信息将在这里显示 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 重置密码模态框 -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" role="dialog" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetPasswordModalLabel">重置密码</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="resetPasswordForm">
+                <div class="modal-body">
+                    <input type="hidden" id="resetPasswordUserId">
+                    <div class="form-group">
+                        <label for="new_password" class="required">新密码</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="new_password" name="new_password" required>
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="toggleResetPassword">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" id="generateResetPassword">
+                                    <i class="fas fa-key"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="password-strength" id="resetPasswordStrength"></div>
+                        <small class="form-text text-muted">密码长度至少为6个字符</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_password" class="required">确认密码</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                        <div class="invalid-feedback" id="passwordMatchError">两次输入的密码不一致</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="saveResetPasswordBtn">
+                        <i class="fas fa-key mr-2"></i>重置密码
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    $(document).ready(function() {
+        console.log("用户管理页面加载完成");
+        
+        // 全局变量
+        let users = [];
+        let roles = [];
+        let csrfToken = $('meta[name="csrf-token"]').attr('content') || '';
+        let isAdmin = {% if current_user.is_admin %}true{% else %}false{% endif %};
+        
+        // 初始化页面
+        loadUsers();
+        loadRoles();
+        
+        // 只有管理员可以添加用户
+        if (isAdmin) {
+            $('#addUserBtn').on('click', function() {
+                console.log("添加用户按钮被点击");
+                openUserModal();
+            });
+        } else {
+            $('#addUserBtn').hide();
+        }
+        
+        // 刷新按钮事件
+        $('#refreshBtn').on('click', function() {
+            console.log("刷新按钮被点击");
+            loadUsers();
+        });
+        
+        // 搜索功能
+        $('#searchInput').on('keyup', debounce(function() {
+            filterUsers();
+        }, 300));
+        
+        // 角色筛选
+        $('#roleFilter').change(function() {
+            filterUsers();
+        });
+        
+        // 状态筛选
+        $('#statusFilter').change(function() {
+            filterUsers();
+        });
+        
+        // 密码显示/隐藏切换
+        $('#togglePassword').on('click', function() {
+            togglePasswordVisibility('#password', '#togglePassword');
+        });
+        
+        $('#toggleResetPassword').on('click', function() {
+            togglePasswordVisibility('#new_password', '#toggleResetPassword');
+        });
+        
+        // 生成随机密码
+        $('#generatePassword').on('click', function() {
+            generateRandomPassword('#password', '#togglePassword');
+        });
+        
+        $('#generateResetPassword').on('click', function() {
+            generateRandomPassword('#new_password', '#toggleResetPassword');
+        });
+        
+        // 密码强度检测
+        $('#password').on('keyup', function() {
+            checkPasswordStrength('#password', '#passwordStrength');
+        });
+        
+        $('#new_password').on('keyup', function() {
+            checkPasswordStrength('#new_password', '#resetPasswordStrength');
+        });
+        
+        // 确认密码验证
+        $('#confirm_password').on('keyup', function() {
+            validatePasswordMatch();
+        });
+        
+        // 角色变化显示描述
+        $('#role').change(function() {
+            updateRoleDescription();
+        });
+        
+        // 用户表单提交
+        $('#userForm').submit(function(e) {
+            e.preventDefault();
+            saveUser();
+        });
+        
+        // 重置密码表单提交
+        $('#resetPasswordForm').submit(function(e) {
+            e.preventDefault();
+            resetUserPassword();
+        });
+        
+        // 确认删除按钮事件
+        $('#confirmDeleteBtn').on('click', function() {
+            const id = $('#userToDelete').val();
+            if (id) {
+                deleteUser(id);
+            }
+        });
+        
+        // 从详情页编辑按钮
+        $('#editFromDetailBtn').on('click', function() {
+            $('#userDetailModal').modal('hide');
+            const id = $('#editFromDetailBtn').data('user-id');
+            if (id) {
+                setTimeout(() => {
+                    editUser(id);
+                }, 300);
+            }
+        });
+        $('#userModal').on('click', '.btn-secondary, .close', function() {
+          $('#userModal').modal('hide');
+        });
+        
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // 加载用户数据
+        function loadUsers() {
+            console.log("开始加载用户数据...");
+            
+            $('#usersContainer').html(`
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载用户数据...</p>
+                </div>
+            `);
+            
+            $.ajax({
+                url: '/config/api/users',
+                method: 'GET',
+                success: function(data) {
+                    console.log("用户数据加载成功，数量:", data.length);
+                    users = data;
+                    renderUsers(data);
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载用户失败:', error, xhr.responseText);
+                    showToast('加载用户失败: ' + (xhr.responseJSON?.error || error), 'danger');
+                    $('#usersContainer').html(`
+                        <div class="empty-state">
+                            <i class="fas fa-exclamation-circle text-danger"></i>
+                            <h4>加载用户失败</h4>
+                            <p>无法从服务器获取用户数据，请检查网络连接或刷新页面重试。</p>
+                            <button class="btn btn-primary" onclick="location.reload()">刷新页面</button>
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // 加载角色数据
+        function loadRoles() {
+            $.ajax({
+                url: '/config/api/users/roles',
+                method: 'GET',
+                success: function(data) {
+                    console.log("角色数据加载成功，数量:", data.length);
+                    roles = data;
+                    
+                    // 填充角色选择框
+                    const roleSelect = $('#role');
+                    roleSelect.empty();
+                    data.forEach(role => {
+                        roleSelect.append(`<option value="${role.value}">${role.label}</option>`);
+                    });
+                    
+                    // 更新角色描述
+                    updateRoleDescription();
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载角色失败:', error);
+                    // 使用默认角色
+                    const defaultRoles = [
+                        {value: 'admin', label: '管理员'},
+                        {value: 'operator', label: '操作员'},
+                        {value: 'user', label: '普通用户'},
+                        {value: 'viewer', label: '查看者'}
+                    ];
+                    roles = defaultRoles;
+                    
+                    const roleSelect = $('#role');
+                    roleSelect.empty();
+                    defaultRoles.forEach(role => {
+                        roleSelect.append(`<option value="${role.value}">${role.label}</option>`);
+                    });
+                }
+            });
+        }
+        
+        // 渲染用户列表
+        function renderUsers(userList) {
+            console.log("渲染用户列表，数量:", userList.length);
+            
+            if (userList.length === 0) {
+                let html = `
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h4>暂无用户</h4>
+                        <p>系统尚未添加任何用户。</p>
+                `;
+                
+                if (isAdmin) {
+                    html += `
+                        <button class="btn btn-primary" id="addUserEmptyBtn">
+                            <i class="fas fa-user-plus mr-2"></i>添加用户
+                        </button>
+                    `;
+                }
+                
+                html += `</div>`;
+                
+                $('#usersContainer').html(html);
+                
+                // 为空状态下的添加按钮绑定事件
+                if (isAdmin) {
+                    $('#addUserEmptyBtn').on('click', function() {
+                        openUserModal();
+                    });
+                }
+                return;
+            }
+            
+            let html = '<div class="row">';
+            
+            userList.forEach(user => {
+                const isActive = user.is_active;
+                const role = user.role;
+                const currentUserId = {{ current_user.id }};
+                const isCurrentUser = user.id === currentUserId;
+                
+                let roleBadgeClass = '';
+                let roleText = '';
+                let roleDisplay = '';
+                
+                switch(role) {
+                    case 'admin':
+                        roleBadgeClass = 'role-admin';
+                        roleText = '管理员';
+                        roleDisplay = '管理员';
+                        break;
+                    case 'operator':
+                        roleBadgeClass = 'role-operator';
+                        roleText = '操作员';
+                        roleDisplay = '操作员';
+                        break;
+                    case 'user':
+                        roleBadgeClass = 'role-user';
+                        roleText = '普通用户';
+                        roleDisplay = '用户';
+                        break;
+                    case 'viewer':
+                        roleBadgeClass = 'role-viewer';
+                        roleText = '查看者';
+                        roleDisplay = '查看者';
+                        break;
+                }
+                
+                let statusBadgeClass = '';
+                let statusText = '';
+                
+                if (isActive) {
+                    statusBadgeClass = 'status-active';
+                    statusText = '已启用';
+                } else {
+                    statusBadgeClass = 'status-inactive';
+                    statusText = '已禁用';
+                }
+                
+                // 获取用户名字的首字母作为头像
+                const avatarText = user.username.charAt(0).toUpperCase();
+                
+                html += `
+                <div class="col-lg-6 col-xl-4">
+                    <div class="card user-card ${isActive ? '' : 'inactive'}">
+                        <div class="card-body">
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="user-avatar mr-3">
+                                    ${avatarText}
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h5 class="card-title mb-1">
+                                                ${user.username}
+                                                ${isCurrentUser ? '<span class="badge badge-info ml-2">当前用户</span>' : ''}
+                                            </h5>
+                                            <p class="card-text text-muted small mb-2">
+                                                <i class="fas fa-envelope mr-1"></i>${user.email}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span class="badge ${roleBadgeClass} role-badge">${roleDisplay}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    ${user.department ? `<p class="card-text small mb-2"><i class="fas fa-building mr-1"></i>${user.department}</p>` : ''}
+                                    ${user.phone ? `<p class="card-text small mb-2"><i class="fas fa-phone mr-1"></i>${user.phone}</p>` : ''}
+                                    
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <div>
+                                            <span class="badge ${statusBadgeClass} status-badge">${statusText}</span>
+                                        </div>
+                                        <div class="last-login">
+                                            ${user.last_login ? `最后登录: ${formatDate(user.last_login)}` : '从未登录'}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-flex justify-content-between align-items-center mt-3">
+                                        <div class="text-muted small">
+                                            创建: ${formatDate(user.created_at, true)}
+                                        </div>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-outline-info view-user" data-id="${user.id}" title="查看详情">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            ${isAdmin && !isCurrentUser ? `
+                                            <button class="btn btn-sm btn-outline-warning reset-password" data-id="${user.id}" title="重置密码">
+                                                <i class="fas fa-key"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-primary edit-user" data-id="${user.id}" title="编辑">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger delete-user" data-id="${user.id}" title="删除">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+            
+            html += '</div>';
+            $('#usersContainer').html(html);
+            
+            // 绑定按钮事件
+            bindUserActions();
+        }
+        
+        // 绑定用户操作事件
+        function bindUserActions() {
+            console.log("绑定用户操作事件...");
+            
+            // 查看用户
+            $('.view-user').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("查看用户，ID:", id);
+                viewUser(id);
+            });
+            
+            // 重置密码
+            $('.reset-password').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("重置密码，ID:", id);
+                openResetPasswordModal(id);
+            });
+            
+            // 编辑用户
+            $('.edit-user').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("编辑用户，ID:", id);
+                editUser(id);
+            });
+            
+            // 删除用户
+            $('.delete-user').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("删除用户，ID:", id);
+                confirmDeleteUser(id);
+            });
+        }
+        
+        // 筛选用户
+        function filterUsers() {
+            const searchTerm = $('#searchInput').val().toLowerCase();
+            const roleFilter = $('#roleFilter').val();
+            const statusFilter = $('#statusFilter').val();
+            
+            const filtered = users.filter(user => {
+                // 搜索条件
+                const matchesSearch = !searchTerm || 
+                    user.username.toLowerCase().includes(searchTerm) ||
+                    user.email.toLowerCase().includes(searchTerm) ||
+                    (user.department && user.department.toLowerCase().includes(searchTerm));
+                
+                // 角色筛选
+                const matchesRole = !roleFilter || user.role === roleFilter;
+                
+                // 状态筛选
+                let matchesStatus = true;
+                if (statusFilter === 'active') {
+                    matchesStatus = user.is_active === true;
+                } else if (statusFilter === 'inactive') {
+                    matchesStatus = user.is_active === false;
+                }
+                
+                return matchesSearch && matchesRole && matchesStatus;
+            });
+            
+            renderUsers(filtered);
+        }
+        
+        // 查看用户详情
+        function viewUser(id) {
+            // 先从当前数据中查找用户信息
+            let user = users.find(u => u.id === id);
+            if (!user) {
+                showToast('找不到要查看的用户', 'danger');
+                return;
+            }
+            
+            const isCurrentUser = user.id === {{ current_user.id }};
+            
+            let html = `
+                <div class="text-center mb-4">
+                    <div class="user-avatar mx-auto" style="width: 64px; height: 64px; font-size: 1.5rem;">
+                        ${user.username.charAt(0).toUpperCase()}
+                    </div>
+                    <h4 class="mt-3">${user.username}</h4>
+                    ${isCurrentUser ? '<span class="badge badge-info">当前用户</span>' : ''}
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">用户名</div>
+                    <div class="detail-value">${user.username}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">邮箱</div>
+                    <div class="detail-value">${user.email}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">角色</div>
+                    <div class="detail-value">
+                        <span class="badge ${getRoleBadgeClass(user.role)}">
+                            ${getRoleDisplay(user.role)}
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            if (user.department) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">部门</div>
+                    <div class="detail-value">${user.department}</div>
+                </div>
+                `;
+            }
+            
+            if (user.phone) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">电话</div>
+                    <div class="detail-value">${user.phone}</div>
+                </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-row">
+                    <div class="detail-label">账户状态</div>
+                    <div class="detail-value">
+                        ${user.is_active ? 
+                            '<span class="badge badge-success">已启用</span>' : 
+                            '<span class="badge badge-danger">已禁用</span>'
+                        }
+                    </div>
+                </div>
+            `;
+            
+            if (user.last_login) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">最后登录时间</div>
+                    <div class="detail-value">${formatDate(user.last_login)}</div>
+                </div>
+                `;
+            } else {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">最后登录时间</div>
+                    <div class="detail-value">从未登录</div>
+                </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-row">
+                    <div class="detail-label">创建时间</div>
+                    <div class="detail-value">${formatDate(user.created_at)}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">更新时间</div>
+                    <div class="detail-value">${formatDate(user.updated_at)}</div>
+                </div>
+            `;
+            
+            $('#userDetailContent').html(html);
+            if (isAdmin && !isCurrentUser) {
+                $('#editFromDetailBtn').show().data('user-id', id);
+            } else {
+                $('#editFromDetailBtn').hide();
+            }
+            $('#userDetailModal').modal('show');
+        }
+        
+        // 打开用户模态框（添加）
+        function openUserModal() {
+            console.log("打开用户模态框");
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以添加用户', 'warning');
+                return;
+            }
+            
+            // 重置表单
+            $('#userForm')[0].reset();
+            $('#userId').val('');
+            $('#userModalLabel').text('添加新用户');
+            $('#passwordLabel').addClass('required');
+            $('#password').prop('required', true);
+            $('#passwordHelp').text('密码长度至少为6个字符');
+            $('#password').attr('type', 'password');
+            $('#togglePassword').html('<i class="fas fa-eye"></i>');
+            $('#passwordStrength').hide();
+            $('#is_active').prop('checked', true);
+            
+            // 显示模态框
+            $('#userModal').modal('show');
+        }
+        
+        // 编辑用户
+        function editUser(id) {
+            console.log("编辑用户，ID:", id);
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以编辑用户', 'warning');
+                return;
+            }
+            
+            // 先尝试从当前数据中获取用户信息
+            let user = users.find(u => u.id === id);
+            if (!user) {
+                showToast('找不到要编辑的用户', 'danger');
+                return;
+            }
+            
+            // 检查是否是当前用户
+            if (user.id === {{ current_user.id }}) {
+                showToast('不能编辑自己的账户信息', 'warning');
+                return;
+            }
+            
+            // 填充表单
+            $('#userId').val(user.id);
+            $('#username').val(user.username);
+            $('#email').val(user.email);
+            $('#role').val(user.role);
+            $('#department').val(user.department || '');
+            $('#phone').val(user.phone || '');
+            $('#is_active').prop('checked', user.is_active);
+            
+            // 密码字段特殊处理
+            $('#passwordLabel').removeClass('required');
+            $('#password').prop('required', false);
+            $('#passwordHelp').text('留空表示不修改密码');
+            $('#password').val('');
+            $('#password').attr('type', 'password');
+            $('#togglePassword').html('<i class="fas fa-eye"></i>');
+            $('#passwordStrength').hide();
+            
+            // 更新角色描述
+            updateRoleDescription();
+            
+            // 更新模态框标题
+            $('#userModalLabel').text('编辑用户');
+            $('#userModal').modal('show');
+        }
+        
+        // 打开重置密码模态框
+        function openResetPasswordModal(id) {
+            if (!isAdmin) {
+                showToast('只有管理员可以重置密码', 'warning');
+                return;
+            }
+            
+            // 先从当前数据中查找用户信息
+            let user = users.find(u => u.id === id);
+            if (!user) {
+                showToast('找不到用户', 'danger');
+                return;
+            }
+            
+            // 检查是否是当前用户
+            if (user.id === {{ current_user.id }}) {
+                showToast('不能重置自己的密码，请使用个人设置页面', 'warning');
+                return;
+            }
+            
+            $('#resetPasswordUserId').val(id);
+            $('#resetPasswordModalLabel').text(`重置密码 - ${user.username}`);
+            $('#new_password').val('');
+            $('#confirm_password').val('');
+            $('#new_password').attr('type', 'password');
+            $('#toggleResetPassword').html('<i class="fas fa-eye"></i>');
+            $('#resetPasswordStrength').hide();
+            $('#passwordMatchError').hide();
+            $('#confirm_password').removeClass('is-invalid');
+            
+            $('#resetPasswordModal').modal('show');
+        }
+        
+        // 保存用户
+        function saveUser() {
+            console.log("保存用户...");
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以保存用户', 'warning');
+                return;
+            }
+            
+            const formData = {
+                id: $('#userId').val() || null,
+                username: $('#username').val(),
+                email: $('#email').val(),
+                role: $('#role').val(),
+                department: $('#department').val() || null,
+                phone: $('#phone').val() || null,
+                is_active: $('#is_active').is(':checked')
+            };
+            
+            // 处理密码字段 - 只有在有值时才发送
+            const password = $('#password').val();
+            if (password) {
+                formData.password = password;
+            } else if (!formData.id) {
+                // 添加用户时必须提供密码
+                showToast('添加用户时密码是必填项', 'danger');
+                return;
+            }
+            
+            console.log("表单数据:", formData);
+            
+            // 验证用户名格式
+            const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+            if (!usernameRegex.test(formData.username)) {
+                showToast('用户名只能包含字母、数字和下划线，长度为3-20个字符', 'danger');
+                return;
+            }
+            
+            // 验证邮箱格式
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(formData.email)) {
+                showToast('邮箱格式无效', 'danger');
+                return;
+            }
+            
+            // 如果是添加用户或提供了密码，验证密码强度
+            if (password && password.length < 6) {
+                showToast('密码长度至少为6个字符', 'danger');
+                return;
+            }
+            
+            $('#saveUserBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>保存中...');
+            
+            // 根据是否有ID决定是添加还是更新
+            const method = formData.id ? 'PUT' : 'POST';
+            const url = formData.id ? `/config/api/users/${formData.id}` : '/config/api/users';
+            
+            $.ajax({
+                url: url,
+                method: method,
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    $('#saveUserBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存用户');
+                    $('#userModal').modal('hide');
+                    
+                    showToast(response.message || '用户保存成功', 'success');
+                    
+                    // 重新加载用户列表
+                    loadUsers();
+                },
+                error: function(xhr, status, error) {
+                    $('#saveUserBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存用户');
+                    
+                    let errorMsg = '保存用户失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法保存用户';
+                    } else if (xhr.status === 400) {
+                        errorMsg = '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 重置用户密码
+        function resetUserPassword() {
+            console.log("重置用户密码...");
+            
+            if (!isAdmin) {
+                showToast('只有管理员可以重置密码', 'warning');
+                return;
+            }
+            
+            const userId = $('#resetPasswordUserId').val();
+            const newPassword = $('#new_password').val();
+            const confirmPassword = $('#confirm_password').val();
+            
+            // 验证密码
+            if (newPassword.length < 6) {
+                showToast('密码长度至少为6个字符', 'danger');
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                $('#confirm_password').addClass('is-invalid');
+                $('#passwordMatchError').show();
+                return;
+            }
+            
+            $('#saveResetPasswordBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>重置中...');
+            
+            $.ajax({
+                url: `/config/api/users/${userId}/reset-password`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ new_password: newPassword }),
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    $('#saveResetPasswordBtn').prop('disabled', false).html('<i class="fas fa-key mr-2"></i>重置密码');
+                    $('#resetPasswordModal').modal('hide');
+                    
+                    showToast(response.message || '密码重置成功', 'success');
+                    
+                    // 重新加载用户列表
+                    loadUsers();
+                },
+                error: function(xhr, status, error) {
+                    $('#saveResetPasswordBtn').prop('disabled', false).html('<i class="fas fa-key mr-2"></i>重置密码');
+                    
+                    let errorMsg = '重置密码失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法重置密码';
+                    } else if (xhr.status === 400) {
+                        errorMsg = '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 确认删除用户
+        function confirmDeleteUser(id) {
+            if (!isAdmin) {
+                showToast('只有管理员可以删除用户', 'warning');
+                return;
+            }
+            
+            const user = users.find(u => u.id === id);
+            if (!user) {
+                showToast('找不到要删除的用户', 'danger');
+                return;
+            }
+            
+            // 检查是否是当前用户
+            if (user.id === {{ current_user.id }}) {
+                showToast('不能删除自己的账户', 'warning');
+                return;
+            }
+            
+            $('#userToDelete').val(id);
+            
+            // 显示要删除的用户信息
+            $('#deleteUserInfo').html(`
+                <h6>即将删除的用户：</h6>
+                <p><strong>用户名：</strong>${user.username}</p>
+                <p><strong>邮箱：</strong>${user.email}</p>
+                <p><strong>角色：</strong>${getRoleDisplay(user.role)}</p>
+                <p><strong>状态：</strong>${user.is_active ? '已启用' : '已禁用'}</p>
+                <p class="text-danger mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>此操作不可撤销，请谨慎操作！</p>
+            `);
+            
+            $('#deleteConfirmModal').modal('show');
+        }
+        
+        // 删除用户
+        function deleteUser(id) {
+            if (!isAdmin) {
+                showToast('只有管理员可以删除用户', 'warning');
+                return;
+            }
+            
+            $('#deleteConfirmModal').modal('hide');
+            
+            $.ajax({
+                url: `/config/api/users/${id}`,
+                method: 'DELETE',
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    showToast(response.message || '用户删除成功', 'success');
+                    loadUsers();
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '删除用户失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法删除用户';
+                    } else if (xhr.status === 404) {
+                        errorMsg = '用户不存在或已被删除';
+                    } else if (xhr.status === 400) {
+                        errorMsg = xhr.responseJSON?.error || '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 切换密码可见性
+        function togglePasswordVisibility(passwordFieldId, toggleButtonId) {
+            const passwordField = $(passwordFieldId);
+            const type = passwordField.attr('type');
+            if (type === 'password') {
+                passwordField.attr('type', 'text');
+                $(toggleButtonId).html('<i class="fas fa-eye-slash"></i>');
+            } else {
+                passwordField.attr('type', 'password');
+                $(toggleButtonId).html('<i class="fas fa-eye"></i>');
+            }
+        }
+        
+        // 生成随机密码
+        function generateRandomPassword(passwordFieldId, toggleButtonId) {
+            const chars = {
+                uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                lowercase: 'abcdefghijklmnopqrstuvwxyz',
+                numbers: '0123456789',
+                symbols: '!@#$%^&*'
+            };
+            
+            let password = '';
+            
+            // 确保包含每种字符类型
+            password += chars.uppercase.charAt(Math.floor(Math.random() * chars.uppercase.length));
+            password += chars.lowercase.charAt(Math.floor(Math.random() * chars.lowercase.length));
+            password += chars.numbers.charAt(Math.floor(Math.random() * chars.numbers.length));
+            password += chars.symbols.charAt(Math.floor(Math.random() * chars.symbols.length));
+            
+            // 添加剩余字符
+            const allChars = chars.uppercase + chars.lowercase + chars.numbers + chars.symbols;
+            for (let i = 4; i < 12; i++) {
+                password += allChars.charAt(Math.floor(Math.random() * allChars.length));
+            }
+            
+            // 打乱密码
+            password = password.split('').sort(() => Math.random() - 0.5).join('');
+            
+            $(passwordFieldId).val(password);
+            $(passwordFieldId).attr('type', 'text');
+            $(toggleButtonId).html('<i class="fas fa-eye-slash"></i>');
+            
+            // 检查密码强度
+            if (passwordFieldId === '#password') {
+                checkPasswordStrength('#password', '#passwordStrength');
+            } else if (passwordFieldId === '#new_password') {
+                checkPasswordStrength('#new_password', '#resetPasswordStrength');
+            }
+            
+            // 如果是在重置密码模态框，自动填充确认密码
+            if (passwordFieldId === '#new_password') {
+                $('#confirm_password').val(password);
+                validatePasswordMatch();
+            }
+        }
+        
+        // 检查密码强度
+        function checkPasswordStrength(passwordFieldId, strengthBarId) {
+            const password = $(passwordFieldId).val();
+            const strengthBar = $(strengthBarId);
+            
+            if (!password) {
+                strengthBar.hide();
+                return;
+            }
+            
+            let strength = 0;
+            
+            // 长度检查
+            if (password.length >= 6) strength += 1;
+            if (password.length >= 8) strength += 1;
+            
+            // 包含小写字母
+            if (/[a-z]/.test(password)) strength += 1;
+            
+            // 包含大写字母
+            if (/[A-Z]/.test(password)) strength += 1;
+            
+            // 包含数字
+            if (/[0-9]/.test(password)) strength += 1;
+            
+            // 包含特殊字符
+            if (/[^A-Za-z0-9]/.test(password)) strength += 1;
+            
+            // 更新强度条
+            strengthBar.show();
+            strengthBar.removeClass('strength-weak strength-medium strength-strong');
+            
+            if (strength <= 2) {
+                strengthBar.addClass('strength-weak');
+            } else if (strength <= 4) {
+                strengthBar.addClass('strength-medium');
+            } else {
+                strengthBar.addClass('strength-strong');
+            }
+        }
+        
+        // 验证密码匹配
+        function validatePasswordMatch() {
+            const password = $('#new_password').val();
+            const confirmPassword = $('#confirm_password').val();
+            
+            if (confirmPassword && password !== confirmPassword) {
+                $('#confirm_password').addClass('is-invalid');
+                $('#passwordMatchError').show();
+                return false;
+            } else {
+                $('#confirm_password').removeClass('is-invalid');
+                $('#passwordMatchError').hide();
+                return true;
+            }
+        }
+        
+        // 更新角色描述
+        function updateRoleDescription() {
+            const selectedRole = $('#role').val();
+            const roleInfo = roles.find(r => r.value === selectedRole);
+            
+            if (roleInfo && roleInfo.description) {
+                $('#roleDescription').text(roleInfo.description).show();
+            } else {
+                $('#roleDescription').hide();
+            }
+        }
+        
+        // 显示提示信息
+        function showToast(message, type) {
+            // 移除现有提示
+            $('.alert-toast').remove();
+            
+            const toast = $(`
+                <div class="alert alert-${type} alert-dismissible fade show alert-toast" role="alert">
+                    ${message}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `);
+            
+            $('body').append(toast);
+            
+            // 自动关闭
+            setTimeout(() => {
+                toast.alert('close');
+            }, 5000);
+        }
+        
+        // 格式化日期
+        function formatDate(dateString, dateOnly = false) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                if (dateOnly) {
+                    return date.toLocaleDateString('zh-CN');
+                } else {
+                    return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+                }
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        // 获取角色徽章类名
+        function getRoleBadgeClass(role) {
+            switch(role) {
+                case 'admin': return 'role-admin';
+                case 'operator': return 'role-operator';
+                case 'user': return 'role-user';
+                case 'viewer': return 'role-viewer';
+                default: return 'badge-secondary';
+            }
+        }
+        
+        // 获取角色显示文本
+        function getRoleDisplay(role) {
+            switch(role) {
+                case 'admin': return '管理员';
+                case 'operator': return '操作员';
+                case 'user': return '普通用户';
+                case 'viewer': return '查看者';
+                default: return role;
+            }
+        }
+    });
+</script>
+{% endblock %}

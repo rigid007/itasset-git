@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}配置基线管理{% endblock %}
+{% block page_title %}配置基线管理{% endblock %}
+{% block page_subtitle %}网络设备配置基线捕获与漂移检测{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('config_compliance.config_baseline_drifts') }}" class="btn btn-warning">
+    <i class="fas fa-exclamation-triangle"></i> 漂移监控
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- 捕获新基线 -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0"><i class="fas fa-camera"></i> 捕获配置基线</h5></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('config_compliance.config_baseline_capture') }}" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-4">
+                <select name="device_id" class="form-select" required>
+                    <option value="">-- 选择设备 --</option>
+                    {% for d in devices %}
+                    <option value="{{ d.id }}">{{ d.name }} ({{ d.ip_address or '-' }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="config_type" class="form-select">
+                    <option value="running">运行配置</option>
+                    <option value="startup">启动配置</option>
+                    <option value="vlan">VLAN配置</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-camera"></i> 捕获基线</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 基线列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">基线列表</h5>
+        <span class="text-muted">共 {{ baselines.total }} 条</span>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>设备</th>
+                    <th>配置类型</th>
+                    <th>捕获时间</th>
+                    <th>捕获方式</th>
+                    <th>哈希</th>
+                    <th>状态</th>
+                    <th style="width:200px">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in baselines.items %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.device.name if b.device else '-' }}</td>
+                    <td><span class="badge bg-info">{{ b.config_type }}</span></td>
+                    <td>{{ b.captured_at.strftime('%Y-%m-%d %H:%M') if b.captured_at else '-' }}</td>
+                    <td>{{ b.captured_by }}</td>
+                    <td><code style="font-size:10px">{{ (b.hash or '')[:16] }}...</code></td>
+                    <td>
+                        {% if b.is_active %}<span class="badge bg-success">当前基线</span>
+                        {% else %}<span class="badge bg-secondary">历史</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('config_compliance.config_baseline_detail', id=b.id) }}"
+                               class="btn btn-sm btn-outline-primary" title="查看详情"><i class="fas fa-eye"></i></a>
+                            <a href="{{ url_for('config_compliance.config_diff', device_id=b.device_id, baseline_id=b.id) }}"
+                               class="btn btn-sm btn-outline-info" title="差异对比"><i class="fas fa-code-branch"></i></a>
+                            {% if has_permission(current_user, 'config:edit') %}
+                            <form method="POST" action="{{ url_for('config_compliance.config_baseline_toggle', id=b.id) }}" style="display:inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                {% if b.is_active %}
+                                <button class="btn btn-sm btn-outline-warning" title="取消激活"><i class="fas fa-pause"></i></button>
+                                {% else %}
+                                <button class="btn btn-sm btn-outline-success" title="设为当前基线"><i class="fas fa-check-circle"></i></button>
+                                {% endif %}
+                            </form>
+                            <form method="POST" action="{{ url_for('config_compliance.config_baseline_detect_drift', id=b.id) }}" style="display:inline"
+                                  onsubmit="return confirm('将对比此基线与上一条基线，检测配置漂移，是否继续？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger" title="检测漂移"><i class="fas fa-flask"></i></button>
+                            </form>
+                            <form method="POST" action="{{ url_for('config_compliance.config_baseline_delete', id=b.id) }}" style="display:inline"
+                                  onsubmit="return confirm('确定要删除此基线吗？此操作不可撤销。')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger" title="删除基线"><i class="fas fa-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">
+                    <i class="fas fa-database fs-3 mb-2"></i><br>
+                    暂无配置基线
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if baselines.pages > 1 %}
+    <div class="card-footer">
+        <nav><ul class="pagination justify-content-center mb-0">
+            {% for p in range(1, baselines.pages + 1) %}
+            <li class="page-item {% if p == baselines.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('config_compliance.config_baseline', page=p) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+        </ul></nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

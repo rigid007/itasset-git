@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}工单模板 - 运维管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题与操作按钮 -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">工单模板</h1>
+        <a href="{{ url_for('maintenance.create_work_order_template') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus"></i> 新建模板
+        </a>
+    </div>
+
+    <!-- 模板列表卡片 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">模板列表</h6>
+        </div>
+        <div class="card-body">
+            {% if templates %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>模板名称</th>
+                            <th>工单类型</th>
+                            <th>类别</th>
+                            <th>优先级</th>
+                            <th>描述</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for template in templates %}
+                        <tr>
+                            <td>{{ template.id }}</td>
+                            <td>{{ template.name }}</td>
+                            <td>
+                                {% if template.work_order_type == 'incident' %}事件
+                                {% elif template.work_order_type == 'request' %}服务请求
+                                {% elif template.work_order_type == 'problem' %}问题
+                                {% elif template.work_order_type == 'change' %}变更
+                                {% elif template.work_order_type == 'task' %}任务
+                                {% else %}{{ template.work_order_type }}
+                                {% endif %}
+                            </td>
+                            <td>{{ template.category or '-' }}</td>
+                            <td>
+                                {% if template.priority == 'critical' %}<span class="badge badge-danger">严重</span>
+                                {% elif template.priority == 'high' %}<span class="badge badge-warning">高</span>
+                                {% elif template.priority == 'medium' %}<span class="badge badge-info">中</span>
+                                {% elif template.priority == 'low' %}<span class="badge badge-secondary">低</span>
+                                {% else %}{{ template.priority }}
+                                {% endif %}
+                            </td>
+                            <td>{{ template.description|truncate(50) }}</td>
+                            <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') if template.created_at else '' }}</td>
+                            <td>
+                                <!-- 使用模板创建工单（需后端实现） -->
+                                <a href="{{ url_for('maintenance.use_template', template_id=template.id) }}" class="btn btn-sm btn-success" title="使用模板创建工单">
+                                    <i class="fas fa-file"></i>
+                                </a>
+                                <!-- 编辑模板（需后端实现） -->
+                                <a href="{{ url_for('maintenance.edit_work_order_template', template_id=template.id) }}" class="btn btn-sm btn-primary" title="编辑">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <!-- 删除模板（需后端实现，附带确认弹窗） -->
+                                <a href="#" class="btn btn-sm btn-danger" onclick="deleteTemplate({{ template.id }})" title="删除">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-muted my-4">暂无工单模板，点击右上角“新建模板”创建。</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 删除模板确认函数（需后端配合实现删除逻辑）
+function deleteTemplate(templateId) {
+    if (confirm('确定要删除此模板吗？')) {
+        // 实际使用时请替换为真实的删除路由
+        window.location.href = "{{ url_for('maintenance.delete_work_order_template', template_id=0) }}".replace('0', templateId);
+    }
+}
+</script>
+{% endblock %}

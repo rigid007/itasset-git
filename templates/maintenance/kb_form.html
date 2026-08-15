@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑' if article else '新增' }}知识文章{% endblock %}
+{% block page_title %}{{ '编辑' if article else '新增' }}知识文章{% endblock %}
+{% block page_subtitle %}运维知识管理与经验沉淀{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('maintenance_extra.kb_manage' if has_permission(current_user, 'maintenance:edit') else 'maintenance_extra.knowledge_base') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> 返回
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <!-- 标题 -->
+                    <div class="mb-3">
+                        <label class="form-label">文章标题 <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" required
+                               value="{{ article.title if article else '' }}" placeholder="输入文章标题">
+                    </div>
+
+                    <!-- 分类和标签 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">分类</label>
+                            <select name="category" class="form-select">
+                                <option value="">-- 选择分类 --</option>
+                                {% for cat in ['网络配置', '故障处理', '设备运维', '安全加固', '监控告警', '备份恢复', '变更记录', '经验总结', '操作手册', 'FAQ'] %}
+                                <option value="{{ cat }}" {% if article and article.category == cat %}selected{% endif %}>{{ cat }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">标签 (逗号分隔)</label>
+                            <input type="text" name="tags" class="form-control"
+                                   value="{{ article.tags if article else '' }}" placeholder="如: 交换机,运维,故障">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">设备类型</label>
+                            <select name="device_type" class="form-select">
+                                <option value="">-- 不限 --</option>
+                                {% for dt in ['switch', 'router', 'firewall', 'server', 'storage', 'loadbalancer', 'wireless', 'other'] %}
+                                <option value="{{ dt }}" {% if article and article.device_type == dt %}selected{% endif %}>{{ dt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 厂商和型号 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">厂商</label>
+                            <input type="text" name="vendor" class="form-control"
+                                   value="{{ article.vendor if article else '' }}" placeholder="如: Cisco, Huawei, H3C">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">型号</label>
+                            <input type="text" name="model" class="form-control"
+                                   value="{{ article.model if article else '' }}" placeholder="如: C9300, S5700">
+                        </div>
+                    </div>
+
+                    <!-- 内容 -->
+                    <div class="mb-3">
+                        <label class="form-label">文章内容 <span class="text-danger">*</span></label>
+                        <textarea name="content" class="form-control" rows="18"
+                                  style="font-family:monospace;font-size:13px;"
+                                  placeholder="支持HTML格式，可包含代码、图片、表格等">{{ article.content if article else '' }}</textarea>
+                        <div class="form-text">支持HTML内容，代码块用 &lt;pre&gt; 包裹，注意转义特殊字符</div>
+                    </div>
+
+                    <!-- 状态和选项 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">状态</label>
+                            <select name="status" class="form-select">
+                                <option value="draft" {% if article and article.status == 'draft' %}selected{% endif %}>草稿</option>
+                                <option value="published" {% if not article or article.status == 'published' %}selected{% endif %}>发布</option>
+                                <option value="archived" {% if article and article.status == 'archived' %}selected{% endif %}>归档</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input type="hidden" name="is_featured" value="">
+                                <input class="form-check-input" type="checkbox" name="is_featured" value="on" id="is_featured"
+                                       {% if article and article.is_featured %}checked{% endif %}>
+                                <label class="form-check-label" for="is_featured">标记为精选推荐</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 提交 -->
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('maintenance_extra.knowledge_base') }}" class="btn btn-secondary">取消</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> {{ '保存修改' if article else '创建文章' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

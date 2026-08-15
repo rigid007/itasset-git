@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+
+{% block title %}操作日志 - 系统设置{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和导航 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="bi bi-clock-history me-2"></i>操作日志
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('settings.settings') }}">系统设置</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">操作日志</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{{ url_for('settings.settings') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+        </div>
+    </div>
+
+    <!-- 消息提示 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show mb-4" role="alert">
+                    {% if category == 'success' %}
+                        <i class="bi bi-check-circle me-2"></i>
+                    {% elif category == 'warning' %}
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                    {% elif category == 'error' or category == 'danger' %}
+                        <i class="bi bi-exclamation-circle me-2"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle me-2"></i>
+                    {% endif %}
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- 筛选和搜索卡片 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('settings.operation_logs') }}" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">操作类型</label>
+                    <select class="form-select" name="action_type">
+                        <option value="">所有操作</option>
+                        <option value="login" {% if request.args.get('action_type') == 'login' %}selected{% endif %}>登录</option>
+                        <option value="logout" {% if request.args.get('action_type') == 'logout' %}selected{% endif %}>登出</option>
+                        <option value="create" {% if request.args.get('action_type') == 'create' %}selected{% endif %}>创建</option>
+                        <option value="update" {% if request.args.get('action_type') == 'update' %}selected{% endif %}>更新</option>
+                        <option value="delete" {% if request.args.get('action_type') == 'delete' %}selected{% endif %}>删除</option>
+                        <option value="import" {% if request.args.get('action_type') == 'import' %}selected{% endif %}>导入</option>
+                        <option value="export" {% if request.args.get('action_type') == 'export' %}selected{% endif %}>导出</option>
+                        <option value="backup" {% if request.args.get('action_type') == 'backup' %}selected{% endif %}>备份</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">目标类型</label>
+                    <select class="form-select" name="target_type">
+                        <option value="">所有类型</option>
+                        <option value="user" {% if request.args.get('target_type') == 'user' %}selected{% endif %}>用户</option>
+                        <option value="location" {% if request.args.get('target_type') == 'location' %}selected{% endif %}>位置</option>
+                        <option value="cabinet" {% if request.args.get('target_type') == 'cabinet' %}selected{% endif %}>机柜</option>
+                        <option value="device" {% if request.args.get('target_type') == 'device' %}selected{% endif %}>设备</option>
+                        <option value="system" {% if request.args.get('target_type') == 'system' %}selected{% endif %}>系统</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">时间范围</label>
+                    <select class="form-select" name="time_range">
+                        <option value="">全部时间</option>
+                        <option value="today" {% if request.args.get('time_range') == 'today' %}selected{% endif %}>今天</option>
+                        <option value="yesterday" {% if request.args.get('time_range') == 'yesterday' %}selected{% endif %}>昨天</option>
+                        <option value="week" {% if request.args.get('time_range') == 'week' %}selected{% endif %}>本周</option>
+                        <option value="month" {% if request.args.get('time_range') == 'month' %}selected{% endif %}>本月</option>
+                        <option value="year" {% if request.args.get('time_range') == 'year' %}selected{% endif %}>今年</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">用户名</label>
+                    <input type="text" class="form-control" name="username" 
+                           placeholder="搜索用户名" value="{{ request.args.get('username', '') }}">
+                </div>
+                
+                <div class="col-md-12">
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('settings.operation_logs') }}" class="btn btn-outline-secondary">
+                            重置筛选
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search me-1"></i> 搜索
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 操作日志列表卡片 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">操作日志记录</h5>
+            <div>
+                <span class="badge bg-secondary me-2">
+                    共 {{ logs.total if logs else 0 }} 条记录
+                </span>
+                <button class="btn btn-sm btn-outline-secondary" id="exportLogsBtn">
+                    <i class="bi bi-download me-1"></i> 导出日志
+                </button>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            {% if logs and logs.items %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th width="160">时间</th>
+                            <th width="120">用户</th>
+                            <th width="100">操作</th>
+                            <th width="100">目标类型</th>
+                            <th>详情</th>
+                            <th width="140">IP地址</th>
+                            <th width="80">状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs.items %}
+                        <tr>
+                            <td>
+                                <div class="small text-muted">
+                                    {{ log.created_at.strftime('%Y-%m-%d') if log.created_at else '' }}
+                                </div>
+                                <div class="small">
+                                    {{ log.created_at.strftime('%H:%M:%S') if log.created_at else '' }}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="fw-medium">{{ log.username }}</div>
+                                <div class="small text-muted">ID: {{ log.user_id }}</div>
+                            </td>
+                            <td>
+                                {% if log.action %}
+                                <span class="badge 
+                                    {% if log.action in ['login', 'create', 'import', 'backup'] %}bg-success
+                                    {% elif log.action in ['update', 'export'] %}bg-info
+                                    {% elif log.action in ['delete'] %}bg-danger
+                                    {% elif log.action in ['logout'] %}bg-secondary
+                                    {% else %}bg-warning{% endif %}">
+                                    {{ log.action }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.target_type %}
+                                <span class="badge bg-dark">{{ log.target_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-medium">{{ log.details|truncate(50) }}</div>
+                                {% if log.target_id and log.target_id != 0 %}
+                                <div class="small text-muted">目标ID: {{ log.target_id }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <code class="small">{{ log.ip_address }}</code>
+                            </td>
+                            <td>
+                                {% if log.status == 'success' %}
+                                <span class="badge bg-success">成功</span>
+                                {% elif log.status == 'failed' %}
+                                <span class="badge bg-danger">失败</span>
+                                {% else %}
+                                <span class="badge bg-secondary">未知</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            {% if logs.pages > 1 %}
+            <nav aria-label="日志分页" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if logs.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('settings.operation_logs', page=logs.prev_num, 
+                            action_type=request.args.get('action_type', ''), 
+                            target_type=request.args.get('target_type', ''),
+                            time_range=request.args.get('time_range', ''),
+                            username=request.args.get('username', '')) }}">
+                            上一页
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">上一页</span>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in logs.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                        {% if page_num %}
+                            {% if page_num == logs.page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('settings.operation_logs', page=page_num,
+                                    action_type=request.args.get('action_type', ''), 
+                                    target_type=request.args.get('target_type', ''),
+                                    time_range=request.args.get('time_range', ''),
+                                    username=request.args.get('username', '')) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if logs.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('settings.operation_logs', page=logs.next_num,
+                            action_type=request.args.get('action_type', ''), 
+                            target_type=request.args.get('target_type', ''),
+                            time_range=request.args.get('time_range', ''),
+                            username=request.args.get('username', '')) }}">
+                            下一页
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">下一页</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-journal-x display-1 text-muted"></i>
+                <h5 class="mt-3">暂无操作日志</h5>
+                <p class="text-muted">当前筛选条件下没有找到操作日志记录</p>
+                {% if request.args.get('action_type') or request.args.get('target_type') or request.args.get('time_range') or request.args.get('username') %}
+                <a href="{{ url_for('settings.operation_logs') }}" class="btn btn-primary">
+                    <i class="bi bi-arrow-clockwise me-1"></i> 查看所有日志
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 统计信息卡片 -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">今日操作</h6>
+                            <h3 class="mb-0" id="todayCount">0</h3>
+                        </div>
+                        <div class="avatar-sm">
+                            <span class="avatar-title bg-primary rounded-circle">
+                                <i class="bi bi-calendar-day"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">成功操作</h6>
+                            <h3 class="mb-0" id="successCount">0</h3>
+                        </div>
+                        <div class="avatar-sm">
+                            <span class="avatar-title bg-success rounded-circle">
+                                <i class="bi bi-check-circle"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">用户数量</h6>
+                            <h3 class="mb-0" id="userCount">0</h3>
+                        </div>
+                        <div class="avatar-sm">
+                            <span class="avatar-title bg-info rounded-circle">
+                                <i class="bi bi-people"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">常用操作</h6>
+                            <h3 class="mb-0" id="commonAction">-</h3>
+                        </div>
+                        <div class="avatar-sm">
+                            <span class="avatar-title bg-warning rounded-circle">
+                                <i class="bi bi-activity"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导出日志模态框 -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">导出操作日志</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label class="form-label">导出格式</label>
+                        <select class="form-select" name="export_format" required>
+                            <option value="excel">Excel (.xlsx)</option>
+                            <option value="csv">CSV (.csv)</option>
+                            <option value="json">JSON (.json)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">时间范围</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input type="date" class="form-control" name="start_date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <input type="date" class="form-control" name="end_date" required>
+                            </div>
+                        </div>
+                        <div class="form-text">选择要导出的日志时间范围</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">包含字段</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="time" checked>
+                                    <label class="form-check-label">时间</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="user" checked>
+                                    <label class="form-check-label">用户</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="action" checked>
+                                    <label class="form-check-label">操作</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="target" checked>
+                                    <label class="form-check-label">目标</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="details" checked>
+                                    <label class="form-check-label">详情</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="fields[]" value="ip" checked>
+                                    <label class="form-check-label">IP地址</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmExportBtn">
+                    <i class="bi bi-download me-1"></i> 导出
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 设置日期输入框的默认值
+    const today = new Date();
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(today.getMonth() - 1);
+    
+    document.querySelector('input[name="start_date"]').value = oneMonthAgo.toISOString().split('T')[0];
+    document.querySelector('input[name="end_date"]').value = today.toISOString().split('T')[0];
+    
+    // 导出日志按钮点击事件
+    const exportLogsBtn = document.getElementById('exportLogsBtn');
+    const confirmExportBtn = document.getElementById('confirmExportBtn');
+    
+    if (exportLogsBtn) {
+        exportLogsBtn.addEventListener('click', function() {
+            const exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
+            exportModal.show();
+        });
+    }
+    
+    if (confirmExportBtn) {
+        confirmExportBtn.addEventListener('click', function() {
+            const form = document.getElementById('exportForm');
+            const formData = new FormData(form);
+            const params = new URLSearchParams(formData).toString();
+            
+            // 发送导出请求
+            fetch('{{ url_for("settings.export_operation_logs") }}?' + params, {
+                method: 'GET',
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                }
+                throw new Error('导出失败');
+            })
+            .then(blob => {
+                // 创建下载链接
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // 从响应头获取文件名
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = 'operation_logs_export';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+                
+                // 显示成功消息
+                showAlert('导出成功，文件已开始下载', 'success');
+            })
+            .catch(error => {
+                console.error('导出失败:', error);
+                showAlert('导出失败: ' + error.message, 'danger');
+            });
+        });
+    }
+    
+    // 显示提示消息
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.querySelector('.container-fluid.py-4').insertBefore(alertDiv, document.querySelector('.card.mb-4'));
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.classList.remove('show');
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.parentNode.removeChild(alertDiv);
+                    }
+                }, 150);
+            }
+        }, 3000);
+    }
+    
+    // 加载统计信息（这里需要从后端API获取）
+    fetch('{{ url_for("settings.get_logs_stats") }}')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('todayCount').textContent = data.today_count || 0;
+            document.getElementById('successCount').textContent = data.success_count || 0;
+            document.getElementById('userCount').textContent = data.user_count || 0;
+            document.getElementById('commonAction').textContent = data.common_action || '-';
+        }
+    })
+    .catch(error => {
+        console.error('获取统计信息失败:', error);
+    });
+});
+</script>
+{% endblock %}

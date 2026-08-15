@@ -1,0 +1,781 @@
+{% extends "base.html" %}
+
+{% block title %}机柜列表 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        font-weight: 600;
+    }
+    
+    .table th {
+        font-weight: 600;
+        color: #495057;
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        white-space: nowrap;
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .status-active { background-color: #28a745; }
+    .status-warning { background-color: #ffc107; }
+    .status-critical { background-color: #dc3545; }
+    .status-inactive { background-color: #6c757d; }
+    
+    .usage-bar-container {
+        width: 100%;
+        min-width: 120px;
+        height: 20px;
+        background-color: #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    .usage-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+    
+    .usage-low { background-color: #28a745; }
+    .usage-medium { background-color: #ffc107; }
+    .usage-high { background-color: #dc3545; }
+    
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .filter-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        color: #dee2e6;
+    }
+    
+    .bulk-actions-bar {
+        background-color: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        display: none;
+    }
+    
+    .pagination {
+        margin-bottom: 0;
+    }
+    
+    .copy-id-btn {
+        cursor: pointer;
+        margin-left: 6px;
+        font-size: 0.8rem;
+        color: #6c757d;
+        transition: opacity 0.2s;
+    }
+    .copy-id-btn:hover {
+        opacity: 0.7;
+        color: #0d6efd;
+    }
+    
+    /* 确保表格不换行 */
+    .table-responsive {
+        overflow-x: auto;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        .btn-group-sm .btn {
+            padding: 0.2rem 0.4rem;
+            font-size: 0.8rem;
+        }
+        .id-column {
+            white-space: nowrap;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}机柜管理{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('cabinet.cabinet_add') }}" class="btn btn-primary btn-sm ms-2">
+        <i class="fas fa-plus"></i> 添加机柜
+    </a>
+</div>
+
+<div class="d-flex">
+    <a href="{{ url_for('location.location_viz') }}" class="btn btn-outline-info btn-sm ms-2">
+        <i class="fas fa-map"></i> 机房可视化
+    </a>
+<!--     <a href="{{ url_for('cabinet.cabinet_add') }}" class="btn btn-primary btn-sm ms-2">
+        <i class="fas fa-plus"></i> 添加机柜
+    </a>
+</div> -->
+{% endblock %}
+
+{% block content %}
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
+{# 设置所有可能缺失的变量 #}
+{% if page is not defined %}{% set page = 1 %}{% endif %}
+{% if total_pages is not defined %}{% set total_pages = 1 %}{% endif %}
+{% if cabinets is not defined %}{% set cabinets = [] %}{% endif %}
+{% if search_query is not defined %}{% set search_query = '' %}{% endif %}
+{% if selected_location_id is not defined %}{% set selected_location_id = '' %}{% endif %}
+{% if selected_usage is not defined %}{% set selected_usage = '' %}{% endif %}
+{% if selected_height is not defined %}{% set selected_height = '' %}{% endif %}
+{% if sort_by is not defined %}{% set sort_by = 'name' %}{% endif %}
+{% if all_locations is not defined %}{% set all_locations = [] %}{% endif %}
+{% if total_cabinets is not defined %}{% set total_cabinets = 0 %}{% endif %}
+{% if total_u is not defined %}{% set total_u = 0 %}{% endif %}
+{% if used_u is not defined %}{% set used_u = 0 %}{% endif %}
+{% if overall_usage_percent is not defined %}{% set overall_usage_percent = 0 %}{% endif %}
+
+<!-- 搜索和筛选区域 -->
+<div class="filter-card">
+    <form method="GET" action="{{ url_for('cabinet.cabinet_list') }}" id="filter-form">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label for="search" class="form-label">搜索</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="search" name="search" 
+                           placeholder="机柜名称、描述、ID..." value="{{ search_query }}">
+                    <button class="btn btn-outline-secondary" type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="location_filter" class="form-label">位置筛选</label>
+                <select class="form-select" id="location_filter" name="location_id">
+                    <option value="">所有位置</option>
+                    {% for location in all_locations %}
+                    <option value="{{ location.id }}" {% if selected_location_id|string == location.id|string %}selected{% endif %}>
+                        {{ location.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="usage_filter" class="form-label">使用率筛选</label>
+                <select class="form-select" id="usage_filter" name="usage">
+                    <option value="">所有状态</option>
+                    <option value="low" {% if selected_usage == 'low' %}selected{% endif %}>使用率低 (&lt;70%)</option>
+                    <option value="medium" {% if selected_usage == 'medium' %}selected{% endif %}>使用率中等 (70-90%)</option>
+                    <option value="high" {% if selected_usage == 'high' %}selected{% endif %}>使用率高 (&gt;90%)</option>
+                </select>
+            </div>
+            
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-filter"></i> 筛选
+                </button>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <a class="btn btn-link p-0" data-bs-toggle="collapse" href="#advancedFilters" role="button">
+                <i class="fas fa-caret-down"></i> 高级筛选
+            </a>
+            
+            <div class="collapse mt-2" id="advancedFilters">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="height_filter" class="form-label">机柜高度</label>
+                        <select class="form-select" id="height_filter" name="height_u">
+                            <option value="">全部</option>
+                            <option value="42" {% if selected_height == '42' %}selected{% endif %}>42U</option>
+                            <option value="47" {% if selected_height == '47' %}selected{% endif %}>47U</option>
+                            <option value="other" {% if selected_height == 'other' %}selected{% endif %}>其他</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="sort_by" class="form-label">排序方式</label>
+                        <select class="form-select" id="sort_by" name="sort_by">
+                            <option value="name" {% if sort_by == 'name' %}selected{% endif %}>按名称</option>
+                            <option value="location" {% if sort_by == 'location' %}selected{% endif %}>按位置</option>
+                            <option value="usage" {% if sort_by == 'usage' %}selected{% endif %}>按使用率</option>
+                            <option value="updated" {% if sort_by == 'updated' %}selected{% endif %}>按更新时间</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- 批量操作栏 -->
+<div class="bulk-actions-bar" id="bulkActionsBar">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span id="selectedCount">0</span> 个机柜被选中
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary btn-sm me-2" id="bulkSelectAll">全选</button>
+            <button class="btn btn-outline-secondary btn-sm me-2" id="bulkSelectNone">取消全选</button>
+            <button class="btn btn-danger btn-sm" id="bulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+                <i class="fas fa-trash"></i> 批量删除
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 机柜列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>机柜列表</span>
+        <span class="badge bg-secondary">{{ cabinets|length }} 个机柜</span>
+    </div>
+    
+    <div class="card-body p-0">
+        {% if cabinets and cabinets|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                            </div>
+                        </th>
+                        <th style="width: 80px;">ID</th>
+                        <th>机柜名称</th>
+                        <th>位置</th>
+                        <th style="width: 100px;">设备数量</th>
+                        <th style="min-width: 180px;">U位使用情况</th>
+                        <th style="width: 100px;">电源容量</th>
+                        <th style="width: 100px;">状态</th>
+                        <th style="width: 110px;">更新时间</th>
+                        <th style="width: 130px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cabinet in cabinets %}
+                    <tr data-cabinet-id="{{ cabinet.id }}">
+                        <!-- 复选框 -->
+                        <td style="text-align: center;">
+                            <div class="form-check">
+                                <input class="form-check-input cabinet-checkbox" type="checkbox" value="{{ cabinet.id }}">
+                            </div>
+                        </td>
+                        <!-- ID -->
+                        <td>
+                            <span class="badge bg-secondary">{{ cabinet.id }}</span>
+                            <i class="fas fa-copy copy-id-btn" data-id="{{ cabinet.id }}" title="复制机柜ID" style="cursor: pointer;"></i>
+                        </td>
+                        <!-- 机柜名称 -->
+                        <td>
+                            <a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="text-decoration-none fw-medium">
+                                {{ cabinet.name }}
+                            </a>
+                            {% if cabinet.description %}
+                            <div class="text-muted small mt-1">{{ cabinet.description|truncate(30) }}</div>
+                            {% endif %}
+                        </td>
+                        <!-- 位置 -->
+                        <td>
+                            {% if cabinet.location %}
+                            <a href="{{ url_for('location.location_detail', id=cabinet.location.id) }}" class="text-decoration-none">
+                                <i class="fas fa-map-marker-alt text-secondary me-1"></i>
+                                {{ cabinet.location.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">未分配位置</span>
+                            {% endif %}
+                        </td>
+                        <!-- 设备数量 -->
+                        <td>
+                            <span class="badge bg-info">{{ cabinet.device_count }}</span>
+                            <a href="{{ url_for('device.device_add') }}?cabinet_id={{ cabinet.id }}"
+                               class="btn btn-outline-success btn-sm ms-1" title="添加设备到机柜">
+                                <i class="fas fa-plus"></i>
+                            </a>
+                        </td>
+                        <!-- U位使用情况 -->
+                        <td>
+                            {% set usage_info = cabinet.get_u_availability() if cabinet.get_u_availability else {'total': 0, 'used': 0, 'usage_percent': 0} %}
+                            {% if not usage_info %}{% set usage_info = {'total': 0, 'used': 0, 'usage_percent': 0} %}{% endif %}
+                            {% set usage_percent = usage_info.get('usage_percent', 0) %}
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1 me-2">
+                                    <div class="usage-bar-container">
+                                        <div class="usage-bar 
+                                            {% if usage_percent < 70 %}usage-low
+                                            {% elif usage_percent < 90 %}usage-medium
+                                            {% else %}usage-high{% endif %}" 
+                                             style="width: {{ usage_percent }}%;">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="small text-nowrap">
+                                    {{ usage_info.get('used', 0) }}/{{ usage_info.get('total', 0) }}U
+                                </div>
+                            </div>
+                            <div class="small text-muted mt-1">{{ usage_percent }}% 使用率</div>
+                        </td>
+                        <!-- 电源容量 -->
+                        <td>
+                            {% if cabinet.power_capacity %}
+                            {{ cabinet.power_capacity }} kW
+                            {% else %}
+                            <span class="text-muted">未设置</span>
+                            {% endif %}
+                        </td>
+                        <!-- 状态 -->
+                        <td>
+                            {% set usage_info = cabinet.get_u_availability() if cabinet.get_u_availability else {'total': 0, 'used': 0, 'usage_percent': 0} %}
+                            {% if not usage_info %}{% set usage_info = {'total': 0, 'used': 0, 'usage_percent': 0} %}{% endif %}
+                            {% set usage_percent = usage_info.get('usage_percent', 0) %}
+                            {% if usage_percent == 0 %}
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-circle status-indicator status-inactive"></i> 空置
+                            </span>
+                            {% elif usage_percent < 70 %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-circle status-indicator status-active"></i> 正常
+                            </span>
+                            {% elif usage_percent < 90 %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fas fa-circle status-indicator status-warning"></i> 警告
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger">
+                                <i class="fas fa-circle status-indicator status-critical"></i> 紧张
+                            </span>
+                            {% endif %}
+                        </td>
+                        <!-- 更新时间 -->
+                        <td class="text-nowrap">
+                            <span class="small text-muted">
+                                {{ cabinet.updated_at.strftime('%Y-%m-%d') if cabinet.updated_at else '' }}
+                            </span>
+                        </td>
+                        <!-- 操作 -->
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="btn btn-outline-primary" 
+                                   title="查看详情" data-bs-toggle="tooltip">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('cabinet.cabinet_edit', id=cabinet.id) }}" class="btn btn-outline-secondary" 
+                                   title="编辑" data-bs-toggle="tooltip">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger delete-cabinet-btn" 
+                                        data-cabinet-id="{{ cabinet.id }}" data-cabinet-name="{{ cabinet.name }}"
+                                        title="删除" data-bs-toggle="tooltip">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 分页 -->
+        {% if total_pages > 1 %}
+        <div class="card-footer">
+            <nav aria-label="机柜列表分页">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('cabinet.cabinet_list', page=page-1, search=search_query, location_id=selected_location_id, usage=selected_usage, height_u=selected_height, sort_by=sort_by) }}">
+                            &laquo; 上一页
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% set start_page = [page-2, 1]|max %}
+                    {% set end_page = [page+2, total_pages]|min %}
+                    
+                    {% if start_page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('cabinet.cabinet_list', page=1, search=search_query, location_id=selected_location_id, usage=selected_usage, height_u=selected_height, sort_by=sort_by) }}">1</a>
+                        </li>
+                        {% if start_page > 2 %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endif %}
+                    
+                    {% for p in range(start_page, end_page+1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('cabinet.cabinet_list', page=p, search=search_query, location_id=selected_location_id, usage=selected_usage, height_u=selected_height, sort_by=sort_by) }}">
+                                {{ p }}
+                            </a>
+                        </li>
+                    {% endfor %}
+                    
+                    {% if end_page < total_pages %}
+                        {% if end_page < total_pages - 1 %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('cabinet.cabinet_list', page=total_pages, search=search_query, location_id=selected_location_id, usage=selected_usage, height_u=selected_height, sort_by=sort_by) }}">{{ total_pages }}</a>
+                        </li>
+                    {% endif %}
+                    
+                    {% if page < total_pages %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('cabinet.cabinet_list', page=page+1, search=search_query, location_id=selected_location_id, usage=selected_usage, height_u=selected_height, sort_by=sort_by) }}">
+                            下一页 &raquo;
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <!-- 空状态提示 -->
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-server"></i>
+            </div>
+            <h5>暂无机柜数据</h5>
+            <p class="mb-4">当前没有找到任何机柜记录，您可以添加新的机柜</p>
+            <a href="{{ url_for('cabinet.cabinet_add') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> 添加机柜
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 统计信息卡片 -->
+{% if cabinets and cabinets|length > 0 %}
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">总机柜数</h6>
+                        <h3 class="mb-0">{{ total_cabinets }}</h3>
+                    </div>
+                    <div class="avatar bg-primary bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-server text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">总U位数</h6>
+                        <h3 class="mb-0">{{ total_u }}</h3>
+                    </div>
+                    <div class="avatar bg-success bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-chart-bar text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">已使用U位</h6>
+                        <h3 class="mb-0">{{ used_u }}</h3>
+                    </div>
+                    <div class="avatar bg-info bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-microchip text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">总体使用率</h6>
+                        <h3 class="mb-0">{{ overall_usage_percent }}%</h3>
+                    </div>
+                    <div class="avatar bg-warning bg-opacity-10 p-3 rounded">
+                        <i class="fas fa-percentage text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 批量删除确认模态框 -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkDeleteModalLabel">批量删除机柜</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除选中的机柜吗？此操作不可撤销，并且会删除关联的设备信息！</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 请谨慎操作！
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmBulkDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 单个删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">删除机柜</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteConfirmText">您确定要删除机柜 <strong></strong> 吗？此操作不可撤销！</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 注意：此操作将删除机柜下所有设备信息！
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function getCSRFToken() {
+        const tokenInput = document.getElementById('csrf_token');
+        return tokenInput ? tokenInput.value : '';
+    }
+    
+    function showMessage(type, message) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show position-fixed" style="top: 20px; right: 20px; z-index: 1060;">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', alertHtml);
+        setTimeout(() => {
+            const alert = document.querySelector('.alert');
+            if (alert) alert.remove();
+        }, 3000);
+    }
+    
+    function copyCabinetId(cabinetId) {
+        navigator.clipboard.writeText(cabinetId).then(() => {
+            showMessage('success', `机柜ID ${cabinetId} 已复制到剪贴板`);
+        }).catch(err => {
+            console.error('复制失败:', err);
+            showMessage('danger', '复制失败，请手动复制');
+        });
+    }
+    
+    document.body.addEventListener('click', function(e) {
+        const copyBtn = e.target.closest('.copy-id-btn');
+        if (copyBtn) {
+            const cabinetId = copyBtn.getAttribute('data-id');
+            if (cabinetId) {
+                copyCabinetId(cabinetId);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }
+    });
+    
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const cabinetCheckboxes = document.querySelectorAll('.cabinet-checkbox');
+    const bulkActionsBar = document.getElementById('bulkActionsBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const bulkSelectAll = document.getElementById('bulkSelectAll');
+    const bulkSelectNone = document.getElementById('bulkSelectNone');
+    
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('.cabinet-checkbox:checked').length;
+        if (selectedCount) selectedCount.textContent = checkedCount;
+        if (bulkActionsBar) bulkActionsBar.style.display = checkedCount > 0 ? 'block' : 'none';
+    }
+    
+    if (cabinetCheckboxes.length) {
+        cabinetCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectedCount);
+        });
+    }
+    
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            cabinetCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateSelectedCount();
+        });
+    }
+    
+    if (bulkSelectAll) {
+        bulkSelectAll.addEventListener('click', function() {
+            cabinetCheckboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            updateSelectedCount();
+        });
+    }
+    
+    if (bulkSelectNone) {
+        bulkSelectNone.addEventListener('click', function() {
+            cabinetCheckboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateSelectedCount();
+        });
+    }
+    
+    const deleteCabinetBtns = document.querySelectorAll('.delete-cabinet-btn');
+    let currentCabinetId = null;
+    let currentCabinetName = null;
+    
+    if (deleteCabinetBtns.length) {
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        const deleteConfirmText = document.getElementById('deleteConfirmText');
+        
+        deleteCabinetBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                currentCabinetId = this.getAttribute('data-cabinet-id');
+                currentCabinetName = this.getAttribute('data-cabinet-name');
+                if (deleteConfirmText) {
+                    const strongElement = deleteConfirmText.querySelector('strong');
+                    if (strongElement) strongElement.textContent = currentCabinetName;
+                }
+                deleteModal.show();
+            });
+        });
+        
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', function() {
+                if (currentCabinetId) {
+                    fetch(`/cabinet/cabinets/${currentCabinetId}/delete`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': getCSRFToken(),
+                            'Content-Type': 'application/json'
+                        }
+                    }).then(response => response.ok ? response.json() : Promise.reject())
+                      .then(data => {
+                          if (data.success) {
+                              showMessage('success', `机柜 ${currentCabinetName} 删除成功`);
+                              const row = document.querySelector(`tr[data-cabinet-id="${currentCabinetId}"]`);
+                              if (row) row.remove();
+                              const badge = document.querySelector('.card-header .badge');
+                              if (badge) {
+                                  const currentCount = parseInt(badge.textContent.match(/\d+/)[0]);
+                                  badge.textContent = `${currentCount - 1} 个机柜`;
+                              }
+                          } else {
+                              showMessage('error', `删除失败：${data.message || '未知错误'}`);
+                          }
+                      }).catch(error => {
+                          console.error('删除错误:', error);
+                          showMessage('error', '删除失败，请重试');
+                      }).finally(() => {
+                          deleteModal.hide();
+                          currentCabinetId = null;
+                          currentCabinetName = null;
+                      });
+                }
+            });
+        }
+    }
+    
+    const confirmBulkDeleteBtn = document.getElementById('confirmBulkDeleteBtn');
+    if (confirmBulkDeleteBtn) {
+        confirmBulkDeleteBtn.addEventListener('click', function() {
+            const selectedIds = Array.from(document.querySelectorAll('.cabinet-checkbox:checked'))
+                .map(checkbox => checkbox.value);
+            
+            if (selectedIds.length > 0) {
+                fetch('/cabinet/cabinet/bulk_delete', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCSRFToken(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ids: selectedIds, csrf_token: getCSRFToken() })
+                }).then(response => response.ok ? response.json() : Promise.reject())
+                  .then(data => {
+                      if (data.success) {
+                          showMessage('success', `成功删除 ${data.deleted_count || 0} 个机柜`);
+                          setTimeout(() => window.location.reload(), 1500);
+                      } else {
+                          showMessage('error', `批量删除失败：${data.message || '未知错误'}`);
+                      }
+                  }).catch(error => {
+                      console.error('批量删除错误:', error);
+                      showMessage('error', '批量删除失败，请重试');
+                  }).finally(() => {
+                      const modal = bootstrap.Modal.getInstance(document.getElementById('bulkDeleteModal'));
+                      if (modal) modal.hide();
+                  });
+            }
+        });
+    }
+    
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        if (tooltipTriggerList.length) {
+            [...tooltipTriggerList].map(t => new bootstrap.Tooltip(t));
+        }
+    }
+    
+    updateSelectedCount();
+});
+</script>
+{% endblock %}

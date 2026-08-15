@@ -1,0 +1,1240 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 统计信息面板 -->
+    <div class="row mb-3">
+        <div class="col-md-2 col-sm-6 mb-2">
+            <div class="card bg-primary text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-server fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">设备总数</h6>
+                            <h3 class="mb-0" id="deviceCount">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-2">
+            <div class="card bg-success text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-wifi fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">在线设备</h6>
+                            <h3 class="mb-0" id="onlineCount">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-2">
+            <div class="card bg-info text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-link fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">连接数</h6>
+                            <h3 class="mb-0" id="linkCount">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-2">
+            <div class="card bg-warning text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">离线设备</h6>
+                            <h3 class="mb-0" id="offlineCount">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-2">
+            <div class="card bg-secondary text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-history fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">更新于</h6>
+                            <h6 class="mb-0" id="lastUpdateTime">--:--:--</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">网络拓扑视图</h5>
+                        <small class="text-muted" id="topologyInfo">正在加载拓扑信息...</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <!-- 搜索框 -->
+                        <div class="input-group input-group-sm me-2" style="width: 200px;">
+                            <input type="text" id="topologySearch" class="form-control" 
+                                   placeholder="搜索设备或IP..." aria-label="搜索">
+                            <button class="btn btn-outline-secondary" type="button" onclick="clearSearch()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- 设备筛选 -->
+                        <div class="btn-group btn-group-sm me-2">
+                            <button class="btn btn-outline-secondary" onclick="filterDevices('all')">
+                                全部
+                            </button>
+                            <button class="btn btn-outline-success" onclick="filterDevices('online')">
+                                在线
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="filterDevices('offline')">
+                                离线
+                            </button>
+                        </div>
+                        
+                        <!-- 布局切换 -->
+                        <div class="btn-group btn-group-sm me-2">
+                            <button class="btn btn-outline-primary" onclick="changeLayout('force')" title="力导向布局">
+                                <i class="fas fa-sitemap"></i>
+                            </button>
+                            <button class="btn btn-outline-primary" onclick="changeLayout('circular')" title="环形布局">
+                                <i class="fas fa-circle"></i>
+                            </button>
+                            <button class="btn btn-outline-primary" onclick="changeLayout('grid')" title="网格布局">
+                                <i class="fas fa-th"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- 操作按钮 -->
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-primary" onclick="refreshTopology()" title="刷新拓扑">
+                                <i class="fas fa-sync"></i>
+                            </button>
+                            <button class="btn btn-success" onclick="exportTopologyImage()" title="导出图片">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn btn-info" onclick="exportTopologyData()" title="导出数据">
+                                <i class="fas fa-file-export"></i>
+                            </button>
+                            <button class="btn btn-secondary" onclick="showTopologyLogs()" title="查看日志">
+                                <i class="fas fa-history"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body position-relative">
+                    <!-- 加载状态 -->
+                    <div id="loadingOverlay" class="position-absolute w-100 h-100 d-flex flex-column justify-content-center align-items-center bg-white bg-opacity-75" style="z-index: 10; top: 0; left: 0;">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <div class="text-muted" id="loadingText">正在加载拓扑数据...</div>
+                    </div>
+                    
+                    <!-- 错误提示 -->
+                    <div id="errorAlert" class="alert alert-danger d-none" role="alert" style="position: absolute; top: 10px; right: 10px; z-index: 11; max-width: 400px;">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <span id="errorMessage"></span>
+                        <button type="button" class="btn-close" onclick="hideError()"></button>
+                    </div>
+                    
+                    <!-- 拓扑容器 -->
+                    <div id="topology-container" style="width: 100%; height: 750px;"></div>
+                    
+                    <!-- 图例 -->
+                    <div class="mt-3">
+                        <div class="d-flex flex-wrap align-items-center">
+                            <span class="me-3"><span class="badge bg-success me-1" style="width: 12px; height: 12px; display: inline-block;"></span> 在线设备</span>
+                            <span class="me-3"><span class="badge bg-danger me-1" style="width: 12px; height: 12px; display: inline-block;"></span> 离线设备</span>
+                            <span class="me-3"><i class="fas fa-circle text-primary me-1"></i> 路由器</span>
+                            <span class="me-3"><i class="fas fa-square text-info me-1"></i> 交换机</span>
+                            <span class="me-3"><i class="fas fa-shield-alt text-warning me-1"></i> 防火墙</span>
+                            <span class="me-3"><i class="fas fa-server text-secondary me-1"></i> 服务器</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 设备详情模态框 -->
+<div class="modal fade" id="deviceModal" tabindex="-1" aria-labelledby="deviceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deviceModalLabel">设备详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <i class="fas fa-server fa-3x mb-2" id="deviceIcon"></i>
+                    <h4 id="deviceName">设备名称</h4>
+                    <span class="badge" id="deviceStatusBadge">状态</span>
+                </div>
+                <table class="table table-sm">
+                    <tr>
+                        <th width="120">设备类型</th>
+                        <td id="deviceType">--</td>
+                    </tr>
+                    <tr>
+                        <th>IP地址</th>
+                        <td id="deviceIp">--</td>
+                    </tr>
+                    <tr>
+                        <th>MAC地址</th>
+                        <td id="deviceMac">--</td>
+                    </tr>
+                    <tr>
+                        <th>厂商</th>
+                        <td id="deviceVendor">--</td>
+                    </tr>
+                    <tr>
+                        <th>型号</th>
+                        <td id="deviceModel">--</td>
+                    </tr>
+                    <tr>
+                        <th>连接数</th>
+                        <td id="deviceConnections">0</td>
+                    </tr>
+                    <tr>
+                        <th>最后活跃</th>
+                        <td id="deviceLastSeen">--</td>
+                    </tr>
+                </table>
+                <div class="mt-3">
+                    <h6>接口列表</h6>
+                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table table-sm table-borderless" id="interfaceTable">
+                            <thead>
+                                <tr>
+                                    <th>接口</th>
+                                    <th>状态</th>
+                                    <th>对端设备</th>
+                                </tr>
+                            </thead>
+                            <tbody id="interfaceList">
+                                <!-- 接口列表动态生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="showDeviceLogs()">查看日志</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志模态框 -->
+<div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logsModalLabel">拓扑检测日志</h5>
+                <div class="ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary me-2" onclick="refreshLogs()">
+                        <i class="fas fa-sync"></i> 刷新
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="clearLogs()">
+                        <i class="fas fa-trash"></i> 清空
+                    </button>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <input type="text" class="form-control form-control-sm" id="logSearch" placeholder="搜索日志内容...">
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" id="logTypeFilter">
+                            <option value="">全部类型</option>
+                            <option value="info">信息</option>
+                            <option value="warning">警告</option>
+                            <option value="error">错误</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" id="logDeviceFilter">
+                            <option value="">全部设备</option>
+                            <!-- 设备选项动态生成 -->
+                        </select>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th width="150">时间</th>
+                                <th width="120">设备</th>
+                                <th width="150">接口关系</th>
+                                <th width="80">类型</th>
+                                <th>日志内容</th>
+                                <th width="80">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody">
+                            <!-- 日志内容动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="text-muted" id="logCount">共 0 条日志</div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="prevLogPage()" id="prevLogBtn" disabled>
+                            <i class="fas fa-chevron-left"></i> 上一页
+                        </button>
+                        <span class="mx-2">第 <span id="logPage">1</span> 页</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="nextLogPage()" id="nextLogBtn" disabled>
+                            下一页 <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 右键菜单 -->
+<div id="contextMenu" class="dropdown-menu" style="display: none; position: absolute; z-index: 1000;">
+    <a class="dropdown-item" href="#" onclick="showNodeDetail()"><i class="fas fa-info-circle me-2"></i>查看详情</a>
+    <a class="dropdown-item" href="#" onclick="pingNode()"><i class="fas fa-network-wired me-2"></i>Ping测试</a>
+    <div class="dropdown-divider"></div>
+    <a class="dropdown-item" href="#" onclick="isolateNode()"><i class="fas fa-eye-slash me-2"></i>隔离显示</a>
+    <a class="dropdown-item" href="#" onclick="highlightConnections()"><i class="fas fa-highlighter me-2"></i>高亮连接</a>
+    <div class="dropdown-divider"></div>
+    <a class="dropdown-item text-danger" href="#" onclick="removeNode()"><i class="fas fa-trash me-2"></i>移除节点</a>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- 引入ECharts -->
+<script src="{{ url_for('static', filename='js/echarts.min.js') }}"></script>
+<!-- 引入WebSocket支持 -->
+<script>
+// 全局变量
+let topologyChart;
+let topologyData = { nodes: [], links: [] };
+let filteredNodes = [];
+let filteredLinks = [];
+let deviceFilter = 'all';
+let currentLayout = 'force';
+let searchKeyword = '';
+let logPage = 1;
+let logPageSize = 20;
+let selectedNode = null;
+let wsConnection = null;
+
+// 设备类型图标映射
+const deviceIcons = {
+    'router': 'circle',
+    'switch': 'rect',
+    'firewall': 'triangle',
+    'server': 'diamond',
+    'pc': 'roundRect',
+    'ap': 'pin',
+    'printer': 'star'
+};
+
+// 设备类型颜色映射
+const deviceColors = {
+    'router': '#1890ff',
+    'switch': '#13c2c2',
+    'firewall': '#fa8c16',
+    'server': '#722ed1',
+    'pc': '#52c41a',
+    'ap': '#f759ab',
+    'printer': '#a0d911'
+};
+
+// 初始化拓扑图
+function initTopology() {
+    try {
+        const container = document.getElementById('topology-container');
+        if (!container) {
+            throw new Error('拓扑容器未找到');
+        }
+        
+        // 显示加载状态
+        showLoading('正在初始化拓扑图...');
+        
+        topologyChart = echarts.init(container, null, {
+            renderer: 'canvas',
+            useDirtyRect: false
+        });
+        
+        // 设置默认配置
+        const option = getTopologyOption();
+        topologyChart.setOption(option);
+        
+        // 加载拓扑数据
+        loadTopologyData();
+        
+        // 设置拓扑图事件
+        setupTopologyEvents();
+        
+        // 初始化WebSocket连接
+        initWebSocket();
+        
+        // 初始化搜索功能
+        initSearch();
+        
+    } catch (error) {
+        showError('初始化拓扑图失败: ' + error.message);
+        console.error('拓扑初始化错误:', error);
+    }
+}
+
+// 获取拓扑图配置
+function getTopologyOption() {
+    return {
+        backgroundColor: '#f8f9fa',
+        tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            borderColor: '#333',
+            textStyle: { color: '#fff' },
+            formatter: function(params) {
+                if (params.dataType === 'node') {
+                    const node = params.data;
+                    return `
+                        <div style="font-weight: bold; margin-bottom: 5px;">${node.name}</div>
+                        <div>IP: ${node.ip || 'N/A'}</div>
+                        <div>类型: ${node.type || '未知'}</div>
+                        <div>状态: <span style="color: ${node.status === 'online' ? '#52c41a' : '#f5222d'}">${node.status === 'online' ? '在线' : '离线'}</span></div>
+                        ${node.vendor ? `<div>厂商: ${node.vendor}</div>` : ''}
+                    `;
+                } else {
+                    const link = params.data;
+                    return `
+                        <div style="font-weight: bold;">接口连接</div>
+                        <div>${link.source_name}:${link.source_if} ↔ ${link.target_name}:${link.target_if}</div>
+                        <div>协议: ${link.protocol || '未知'}</div>
+                        ${link.bandwidth ? `<div>带宽: ${link.bandwidth}</div>` : ''}
+                    `;
+                }
+            }
+        },
+        animationDuration: 1000,
+        animationEasingUpdate: 'quinticInOut',
+        series: [{
+            type: 'graph',
+            layout: currentLayout,
+            force: {
+                repulsion: 300,
+                edgeLength: 150,
+                gravity: 0.1,
+                friction: 0.6
+            },
+            circular: {
+                rotateLabel: true
+            },
+            roam: true,
+            draggable: true,
+            focusNodeAdjacency: true,
+            edgeSymbol: ['none', 'arrow'],
+            edgeSymbolSize: [0, 10],
+            edgeLabel: {
+                show: true,
+                formatter: function(params) {
+                    return `${params.data.source_if || ''}`;
+                },
+                fontSize: 10,
+                color: '#666'
+            },
+            label: {
+                show: true,
+                position: 'bottom',
+                distance: 5,
+                fontSize: 12,
+                fontWeight: 'normal',
+                color: '#333',
+                formatter: function(params) {
+                    // 如果搜索关键词不为空且匹配，高亮显示
+                    if (searchKeyword && params.name.toLowerCase().includes(searchKeyword.toLowerCase())) {
+                        return `{search|${params.name}}`;
+                    }
+                    return params.name;
+                },
+                rich: {
+                    search: {
+                        backgroundColor: '#ffec3d',
+                        padding: [2, 4],
+                        borderRadius: 2
+                    }
+                }
+            },
+            lineStyle: {
+                color: '#d9d9d9',
+                width: 2,
+                type: 'solid',
+                curveness: 0.1
+            },
+            emphasis: {
+                label: {
+                    show: true,
+                    fontSize: 14,
+                    fontWeight: 'bold'
+                },
+                lineStyle: {
+                    width: 4,
+                    color: '#1890ff'
+                }
+            },
+            blur: {
+                label: {
+                    show: false
+                },
+                lineStyle: {
+                    opacity: 0.1
+                }
+            },
+            select: {
+                label: {
+                    show: true,
+                    color: '#1890ff',
+                    fontWeight: 'bold'
+                },
+                lineStyle: {
+                    color: '#1890ff',
+                    width: 3
+                }
+            },
+            data: [],
+            links: [],
+            categories: [
+                { name: 'router', itemStyle: { color: deviceColors.router } },
+                { name: 'switch', itemStyle: { color: deviceColors.switch } },
+                { name: 'firewall', itemStyle: { color: deviceColors.firewall } },
+                { name: 'server', itemStyle: { color: deviceColors.server } },
+                { name: 'pc', itemStyle: { color: deviceColors.pc } },
+                { name: 'ap', itemStyle: { color: deviceColors.ap } },
+                { name: 'printer', itemStyle: { color: deviceColors.printer } }
+            ]
+        }]
+    };
+}
+
+// 加载拓扑数据
+function loadTopologyData() {
+    showLoading('正在加载拓扑数据...');
+    
+    fetch('/api/topology-data')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            topologyData = data;
+            updateStatistics(data);
+            applyFilter();
+            hideLoading();
+        })
+        .catch(error => {
+            showError('加载拓扑数据失败: ' + error.message);
+            hideLoading();
+            console.error('数据加载错误:', error);
+        });
+}
+
+// 更新统计信息
+function updateStatistics(data) {
+    const totalDevices = data.nodes.length;
+    const onlineDevices = data.nodes.filter(node => node.status === 'online').length;
+    const offlineDevices = totalDevices - onlineDevices;
+    const totalLinks = data.links.length;
+    
+    document.getElementById('deviceCount').textContent = totalDevices;
+    document.getElementById('onlineCount').textContent = onlineDevices;
+    document.getElementById('offlineCount').textContent = offlineDevices;
+    document.getElementById('linkCount').textContent = totalLinks;
+    document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+    document.getElementById('topologyInfo').textContent = 
+        `共 ${totalDevices} 台设备，${onlineDevices} 台在线，${totalLinks} 条连接`;
+}
+
+// 应用筛选
+function applyFilter() {
+    // 根据设备状态筛选
+    if (deviceFilter === 'online') {
+        filteredNodes = topologyData.nodes.filter(node => node.status === 'online');
+    } else if (deviceFilter === 'offline') {
+        filteredNodes = topologyData.nodes.filter(node => node.status !== 'online');
+    } else {
+        filteredNodes = [...topologyData.nodes];
+    }
+    
+    // 根据搜索关键词筛选
+    if (searchKeyword) {
+        const keyword = searchKeyword.toLowerCase();
+        filteredNodes = filteredNodes.filter(node => 
+            node.name.toLowerCase().includes(keyword) || 
+            (node.ip && node.ip.toLowerCase().includes(keyword)) ||
+            (node.mac && node.mac.toLowerCase().includes(keyword))
+        );
+    }
+    
+    // 获取筛选后节点的ID
+    const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
+    
+    // 筛选连接
+    filteredLinks = topologyData.links.filter(link => 
+        filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target)
+    );
+    
+    // 更新拓扑图
+    updateTopologyChart();
+}
+
+// 更新拓扑图显示
+function updateTopologyChart() {
+    if (!topologyChart) return;
+    
+    const option = topologyChart.getOption();
+    
+    // 准备节点数据
+    const nodes = filteredNodes.map(node => ({
+        id: node.id,
+        name: node.name,
+        value: node.name,
+        symbolSize: getNodeSize(node),
+        symbol: deviceIcons[node.type] || 'circle',
+        category: node.type || 'router',
+        itemStyle: {
+            color: node.status === 'online' ? deviceColors[node.type] || '#1890ff' : '#d9d9d9',
+            borderColor: '#fff',
+            borderWidth: 2
+        },
+        data: node
+    }));
+    
+    // 准备连接数据
+    const links = filteredLinks.map(link => ({
+        source: link.source,
+        target: link.target,
+        label: {
+            show: link.source_if && link.target_if,
+            formatter: `${link.source_if || ''} ↔ ${link.target_if || ''}`,
+            fontSize: 9
+        },
+        lineStyle: {
+            color: link.status === 'up' ? '#52c41a' : '#f5222d',
+            type: link.type === 'trunk' ? 'dashed' : 'solid',
+            width: link.bandwidth ? Math.min(5, parseInt(link.bandwidth) / 100) : 2
+        },
+        data: link
+    }));
+    
+    option.series[0].data = nodes;
+    option.series[0].links = links;
+    
+    topologyChart.setOption(option, true);
+}
+
+// 根据节点类型和设备重要性计算节点大小
+function getNodeSize(node) {
+    const baseSizes = {
+        'router': 50,
+        'switch': 45,
+        'firewall': 45,
+        'server': 40,
+        'pc': 25,
+        'ap': 30,
+        'printer': 20
+    };
+    
+    let size = baseSizes[node.type] || 30;
+    
+    // 根据连接数调整大小
+    const connections = topologyData.links.filter(link => 
+        link.source === node.id || link.target === node.id
+    ).length;
+    
+    size += Math.min(connections * 2, 20);
+    
+    return size;
+}
+
+// 设置拓扑图事件
+function setupTopologyEvents() {
+    if (!topologyChart) return;
+    
+    // 双击节点查看详情
+    topologyChart.on('dblclick', function(params) {
+        if (params.dataType === 'node') {
+            showDeviceDetail(params.data);
+        }
+    });
+    
+    // 单击节点
+    topologyChart.on('click', function(params) {
+        if (params.dataType === 'node') {
+            selectedNode = params.data;
+            // 高亮相关连接
+            highlightNodeConnections(params.data.id);
+        }
+    });
+    
+    // 右键点击显示菜单
+    const container = document.getElementById('topology-container');
+    container.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        
+        const point = [e.offsetX, e.offsetY];
+        const node = topologyChart.convertFromPixel('grid', point);
+        
+        if (node) {
+            const dataIndex = topologyChart.getZr().painter.getViewOfSeriesForPoint(node);
+            if (dataIndex >= 0) {
+                const data = topologyChart.getModel().getSeriesByIndex(0).getData();
+                const nodeData = data.get(dataIndex);
+                selectedNode = nodeData;
+                
+                // 显示右键菜单
+                const contextMenu = document.getElementById('contextMenu');
+                contextMenu.style.display = 'block';
+                contextMenu.style.left = e.pageX + 'px';
+                contextMenu.style.top = e.pageY + 'px';
+                
+                // 点击其他地方关闭菜单
+                setTimeout(() => {
+                    document.addEventListener('click', function hideMenu() {
+                        contextMenu.style.display = 'none';
+                        document.removeEventListener('click', hideMenu);
+                    });
+                }, 100);
+            }
+        }
+    });
+    
+    // 窗口大小变化时重绘
+    window.addEventListener('resize', function() {
+        if (topologyChart) {
+            topologyChart.resize();
+        }
+    });
+}
+
+// 高亮节点连接
+function highlightNodeConnections(nodeId) {
+    if (!topologyChart) return;
+    
+    const option = topologyChart.getOption();
+    const links = option.series[0].links || [];
+    
+    // 重置所有连接颜色
+    links.forEach(link => {
+        link.lineStyle = {
+            ...link.lineStyle,
+            color: link.data.status === 'up' ? '#52c41a' : '#f5222d'
+        };
+    });
+    
+    // 高亮与当前节点相关的连接
+    links.forEach(link => {
+        if (link.source === nodeId || link.target === nodeId) {
+            link.lineStyle = {
+                ...link.lineStyle,
+                color: '#1890ff',
+                width: 4
+            };
+        }
+    });
+    
+    topologyChart.setOption(option);
+}
+
+// 显示设备详情
+function showDeviceDetail(nodeData) {
+    if (!nodeData) return;
+    
+    document.getElementById('deviceName').textContent = nodeData.name;
+    document.getElementById('deviceType').textContent = nodeData.type || '未知';
+    document.getElementById('deviceIp').textContent = nodeData.ip || 'N/A';
+    document.getElementById('deviceMac').textContent = nodeData.mac || 'N/A';
+    document.getElementById('deviceVendor').textContent = nodeData.vendor || '未知';
+    document.getElementById('deviceModel').textContent = nodeData.model || '未知';
+    document.getElementById('deviceLastSeen').textContent = nodeData.last_seen || 'N/A';
+    
+    // 计算连接数
+    const connections = topologyData.links.filter(link => 
+        link.source === nodeData.id || link.target === nodeData.id
+    ).length;
+    document.getElementById('deviceConnections').textContent = connections;
+    
+    // 设置状态徽章
+    const badge = document.getElementById('deviceStatusBadge');
+    badge.textContent = nodeData.status === 'online' ? '在线' : '离线';
+    badge.className = `badge bg-${nodeData.status === 'online' ? 'success' : 'danger'}`;
+    
+    // 设置设备图标
+    const icon = document.getElementById('deviceIcon');
+    const iconClasses = {
+        'router': 'fa-router',
+        'switch': 'fa-network-wired',
+        'firewall': 'fa-shield-alt',
+        'server': 'fa-server',
+        'pc': 'fa-desktop',
+        'ap': 'fa-wifi',
+        'printer': 'fa-print'
+    };
+    icon.className = `fas fa-3x mb-2 ${iconClasses[nodeData.type] || 'fa-server'}`;
+    
+    // 显示接口列表
+    const interfaceList = document.getElementById('interfaceList');
+    interfaceList.innerHTML = '';
+    
+    if (nodeData.interfaces && nodeData.interfaces.length > 0) {
+        nodeData.interfaces.forEach(iface => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${iface.name}</td>
+                <td><span class="badge bg-${iface.status === 'up' ? 'success' : 'secondary'}">${iface.status || 'down'}</span></td>
+                <td>${iface.peer_device || '--'}:${iface.peer_interface || '--'}</td>
+            `;
+            interfaceList.appendChild(tr);
+        });
+    } else {
+        interfaceList.innerHTML = '<tr><td colspan="3" class="text-center text-muted">无接口信息</td></tr>';
+    }
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
+    modal.show();
+}
+
+// 刷新拓扑
+function refreshTopology() {
+    loadTopologyData();
+}
+
+// 导出拓扑图为图片
+function exportTopologyImage() {
+    if (!topologyChart) return;
+    
+    const image = topologyChart.getDataURL({
+        type: 'png',
+        pixelRatio: 2,
+        backgroundColor: '#fff'
+    });
+    
+    const link = document.createElement('a');
+    link.href = image;
+    link.download = `topology-${new Date().toISOString().slice(0,10)}.png`;
+    link.click();
+}
+
+// 导出拓扑数据为JSON
+function exportTopologyData() {
+    const dataStr = JSON.stringify(topologyData, null, 2);
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `topology-data-${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    
+    URL.revokeObjectURL(url);
+}
+
+// 显示拓扑日志
+function showTopologyLogs() {
+    loadLogs();
+    const modal = new bootstrap.Modal(document.getElementById('logsModal'));
+    modal.show();
+}
+
+// 加载日志
+function loadLogs() {
+    fetch(`/api/topology-logs?page=${logPage}&size=${logPageSize}`)
+        .then(res => res.json())
+        .then(data => {
+            updateLogsTable(data);
+        })
+        .catch(error => {
+            showError('加载日志失败: ' + error.message);
+        });
+}
+
+// 更新日志表格
+function updateLogsTable(data) {
+    const tbody = document.getElementById('logsTableBody');
+    tbody.innerHTML = '';
+    
+    data.logs.forEach(log => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${log.check_time}</td>
+            <td>${log.device_name}</td>
+            <td>${log.interface_rel || '--'}</td>
+            <td><span class="badge bg-${getLogBadgeColor(log.log_type)}">${log.log_type}</span></td>
+            <td>${log.message}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-info" onclick="viewLogDetail(${log.id})" title="查看详情">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    // 更新分页信息
+    document.getElementById('logCount').textContent = `共 ${data.total || 0} 条日志`;
+    document.getElementById('logPage').textContent = logPage;
+    document.getElementById('prevLogBtn').disabled = logPage <= 1;
+    document.getElementById('nextLogBtn').disabled = !data.has_more;
+    
+    // 更新设备筛选选项
+    updateDeviceFilterOptions(data.devices || []);
+}
+
+// 获取日志徽章颜色
+function getLogBadgeColor(logType) {
+    const colors = {
+        'error': 'danger',
+        'warning': 'warning',
+        'info': 'info',
+        'success': 'success'
+    };
+    return colors[logType] || 'secondary';
+}
+
+// 更新设备筛选选项
+function updateDeviceFilterOptions(devices) {
+    const select = document.getElementById('logDeviceFilter');
+    // 保留第一个选项
+    select.innerHTML = '<option value="">全部设备</option>';
+    
+    devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.id;
+        option.textContent = device.name;
+        select.appendChild(option);
+    });
+}
+
+// 刷新日志
+function refreshLogs() {
+    logPage = 1;
+    loadLogs();
+}
+
+// 上一页日志
+function prevLogPage() {
+    if (logPage > 1) {
+        logPage--;
+        loadLogs();
+    }
+}
+
+// 下一页日志
+function nextLogPage() {
+    logPage++;
+    loadLogs();
+}
+
+// 清空日志
+function clearLogs() {
+    if (confirm('确定要清空所有日志吗？此操作不可恢复。')) {
+        fetch('/api/clear-logs', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    refreshLogs();
+                }
+            });
+    }
+}
+
+// 切换布局
+function changeLayout(layout) {
+    currentLayout = layout;
+    
+    if (topologyChart) {
+        const option = topologyChart.getOption();
+        option.series[0].layout = layout;
+        topologyChart.setOption(option);
+    }
+}
+
+// 筛选设备
+function filterDevices(filter) {
+    deviceFilter = filter;
+    applyFilter();
+}
+
+// 搜索拓扑
+function initSearch() {
+    const searchInput = document.getElementById('topologySearch');
+    let searchTimeout;
+    
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchKeyword = this.value.trim();
+            applyFilter();
+        }, 300);
+    });
+    
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchKeyword = this.value.trim();
+            applyFilter();
+        }
+    });
+}
+
+// 清空搜索
+function clearSearch() {
+    document.getElementById('topologySearch').value = '';
+    searchKeyword = '';
+    applyFilter();
+}
+
+// 初始化WebSocket连接
+function initWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/topology`;
+    
+    try {
+        wsConnection = new WebSocket(wsUrl);
+        
+        wsConnection.onopen = function() {
+            console.log('WebSocket连接已建立');
+        };
+        
+        wsConnection.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+        };
+        
+        wsConnection.onerror = function(error) {
+            console.error('WebSocket错误:', error);
+        };
+        
+        wsConnection.onclose = function() {
+            console.log('WebSocket连接已关闭');
+            // 5秒后尝试重连
+            setTimeout(initWebSocket, 5000);
+        };
+    } catch (error) {
+        console.error('WebSocket初始化失败:', error);
+    }
+}
+
+// 处理WebSocket消息
+function handleWebSocketMessage(data) {
+    switch (data.type) {
+        case 'topology_update':
+            topologyData = data.data;
+            updateStatistics(topologyData);
+            applyFilter();
+            break;
+            
+        case 'device_status_change':
+            updateDeviceStatus(data.device_id, data.status);
+            break;
+            
+        case 'new_log':
+            // 如果有新的日志且日志模态框是打开的，刷新日志
+            if (document.getElementById('logsModal').classList.contains('show')) {
+                refreshLogs();
+            }
+            break;
+            
+        default:
+            console.log('未知的WebSocket消息类型:', data.type);
+    }
+}
+
+// 更新设备状态
+function updateDeviceStatus(deviceId, status) {
+    const node = topologyData.nodes.find(n => n.id === deviceId);
+    if (node) {
+        node.status = status;
+        applyFilter();
+    }
+}
+
+// 显示加载状态
+function showLoading(message) {
+    const overlay = document.getElementById('loadingOverlay');
+    const text = document.getElementById('loadingText');
+    
+    if (overlay) {
+        overlay.style.display = 'flex';
+        text.textContent = message || '正在加载...';
+    }
+}
+
+// 隐藏加载状态
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// 显示错误信息
+function showError(message) {
+    const alert = document.getElementById('errorAlert');
+    const messageSpan = document.getElementById('errorMessage');
+    
+    if (alert && messageSpan) {
+        messageSpan.textContent = message;
+        alert.classList.remove('d-none');
+        
+        // 5秒后自动隐藏
+        setTimeout(hideError, 5000);
+    }
+}
+
+// 隐藏错误信息
+function hideError() {
+    const alert = document.getElementById('errorAlert');
+    if (alert) {
+        alert.classList.add('d-none');
+    }
+}
+
+// 页面加载完成时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    initTopology();
+    
+    // 初始化日志筛选
+    document.getElementById('logSearch').addEventListener('input', function() {
+        // 实现日志搜索
+    });
+    
+    document.getElementById('logTypeFilter').addEventListener('change', function() {
+        // 实现日志类型筛选
+    });
+    
+    document.getElementById('logDeviceFilter').addEventListener('change', function() {
+        // 实现日志设备筛选
+    });
+});
+
+// 右键菜单功能
+function showNodeDetail() {
+    if (selectedNode) {
+        showDeviceDetail(selectedNode);
+    }
+}
+
+function pingNode() {
+    if (selectedNode) {
+        fetch(`/api/ping-device/${selectedNode.id}`)
+            .then(res => res.json())
+            .then(data => {
+                alert(`Ping ${selectedNode.name}: ${data.success ? '成功' : '失败'}\n延迟: ${data.latency || 'N/A'}ms`);
+            });
+    }
+}
+
+function isolateNode() {
+    if (selectedNode) {
+        // 只显示选中的节点及其直接连接的节点
+        const connectedNodeIds = new Set([selectedNode.id]);
+        const connectedLinks = [];
+        
+        topologyData.links.forEach(link => {
+            if (link.source === selectedNode.id) {
+                connectedNodeIds.add(link.target);
+                connectedLinks.push(link);
+            } else if (link.target === selectedNode.id) {
+                connectedNodeIds.add(link.source);
+                connectedLinks.push(link);
+            }
+        });
+        
+        filteredNodes = topologyData.nodes.filter(node => connectedNodeIds.has(node.id));
+        filteredLinks = connectedLinks;
+        
+        updateTopologyChart();
+    }
+}
+
+function highlightConnections() {
+    if (selectedNode) {
+        highlightNodeConnections(selectedNode.id);
+    }
+}
+
+function removeNode() {
+    if (selectedNode && confirm(`确定要移除设备 ${selectedNode.name} 吗？`)) {
+        // 从拓扑数据中移除
+        topologyData.nodes = topologyData.nodes.filter(node => node.id !== selectedNode.id);
+        topologyData.links = topologyData.links.filter(link => 
+            link.source !== selectedNode.id && link.target !== selectedNode.id
+        );
+        
+        applyFilter();
+    }
+}
+
+// 查看设备日志
+function showDeviceLogs() {
+    const deviceName = document.getElementById('deviceName').textContent;
+    document.getElementById('logDeviceFilter').value = deviceName;
+    loadLogs();
+    
+    const logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
+    logsModal.show();
+}
+
+// 查看日志详情
+function viewLogDetail(logId) {
+    // 实现查看日志详情的逻辑
+    alert(`查看日志详情 ID: ${logId}`);
+}
+
+// 键盘快捷键支持
+document.addEventListener('keydown', function(e) {
+    // Ctrl+F: 聚焦搜索框
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('topologySearch').focus();
+    }
+    
+    // F5: 刷新拓扑
+    if (e.key === 'F5') {
+        e.preventDefault();
+        refreshTopology();
+    }
+    
+    // Esc: 清除搜索和筛选
+    if (e.key === 'Escape') {
+        clearSearch();
+        filterDevices('all');
+    }
+});
+</script>
+{% endblock %}

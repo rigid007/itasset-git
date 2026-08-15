@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}新建巡检任务 - 维护管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-plus-circle"></i> 新建巡检任务</h2>
+        <a href="{{ url_for('maintenance.inspection_tasks') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-edit"></i> 任务信息
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('maintenance.create_inspection_task') }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.title.label(class="form-label") }}
+                        {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else "")) }}
+                        {% for error in form.title.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.inspection_type.label(class="form-label") }}
+                        {{ form.inspection_type(class="form-select" + (" is-invalid" if form.inspection_type.errors else "")) }}
+                        {% for error in form.inspection_type.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.template_id.label(class="form-label") }}
+                        {{ form.template_id(class="form-select" + (" is-invalid" if form.template_id.errors else "")) }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.device_id.label(class="form-label") }}
+                        {{ form.device_id(class="form-select" + (" is-invalid" if form.device_id.errors else "")) }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.location_id.label(class="form-label") }}
+                        {{ form.location_id(class="form-select" + (" is-invalid" if form.location_id.errors else "")) }}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.cabinet_id.label(class="form-label") }}
+                        {{ form.cabinet_id(class="form-select" + (" is-invalid" if form.cabinet_id.errors else "")) }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.scheduled_date.label(class="form-label") }}
+                        {{ form.scheduled_date(class="form-control" + (" is-invalid" if form.scheduled_date.errors else ""), type="date") }}
+                        {% for error in form.scheduled_date.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.scheduled_time.label(class="form-label") }}
+                        {{ form.scheduled_time(class="form-control" + (" is-invalid" if form.scheduled_time.errors else ""), type="time") }}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.due_date.label(class="form-label") }}
+                        {{ form.due_date(class="form-control" + (" is-invalid" if form.due_date.errors else ""), type="date") }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.assigned_to_id.label(class="form-label") }}
+                        {{ form.assigned_to_id(class="form-select" + (" is-invalid" if form.assigned_to_id.errors else "")) }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.reminder_days.label(class="form-label") }}
+                        {{ form.reminder_days(class="form-control" + (" is-invalid" if form.reminder_days.errors else ""), type="number", min="0") }}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    {{ form.team_members.label(class="form-label") }}
+                    {{ form.team_members(class="form-control" + (" is-invalid" if form.team_members.errors else ""), rows=3) }}
+                    <small class="text-muted">每行一个成员，可以是用户名或ID</small>
+                </div>
+
+                <div class="mb-3">
+                    {{ form.notes.label(class="form-label") }}
+                    {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""), rows=3) }}
+                </div>
+
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存任务
+                    </button>
+                    <a href="{{ url_for('maintenance.inspection_tasks') }}" class="btn btn-secondary">
+                        取消
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 可添加前端联动效果，例如根据巡检类型动态隐藏某些字段等 -->
+{% endblock %}

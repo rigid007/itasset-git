@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}用户手册{% endblock %}
+{% block page_title %}用户手册{% endblock %}
+{% block page_subtitle %}网络资产管理系统功能指南{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <!-- 侧边导航 -->
+        <nav id="manual-toc" class="card mb-4 sticky-top" style="top:1rem">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-list"></i> 目录</h5></div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush small">
+                    <a class="list-group-item list-group-item-action" href="#overview">1. 系统概述</a>
+                    <a class="list-group-item list-group-item-action" href="#quickstart">2. 快速入门</a>
+                    <a class="list-group-item list-group-item-action" href="#dashboard">3. 仪表盘</a>
+                    <a class="list-group-item list-group-item-action" href="#device">4. 设备管理</a>
+                    <a class="list-group-item list-group-item-action" href="#asset">5. 资产管理</a>
+                    <a class="list-group-item list-group-item-action" href="#location">6. 位置与机柜</a>
+                    <a class="list-group-item list-group-item-action" href="#monitor">7. 监控管理</a>
+                    <a class="list-group-item list-group-item-action" href="#alert">8. 告警管理</a>
+                    <a class="list-group-item list-group-item-action" href="#topology">9. 拓扑管理</a>
+                    <a class="list-group-item list-group-item-action" href="#maintenance">10. 运维管理</a>
+                    <a class="list-group-item list-group-item-action" href="#report">11. 报表中心</a>
+                    <a class="list-group-item list-group-item-action" href="#config">12. 系统配置</a>
+                    <a class="list-group-item list-group-item-action" href="#faq">13. 常见问题</a>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <div class="col-md-9">
+        <!-- 系统概述 -->
+        <section id="overview" class="card mb-4">
+            <div class="card-header bg-primary text-white"><h4 class="mb-0"><i class="fas fa-info-circle"></i> 1. 系统概述</h4></div>
+            <div class="card-body">
+                <p>网络资产管理系统是一套面向企业IT基础设施的综合管理平台，涵盖设备发现与登记、实时监控、告警管理、网络拓扑可视化、运维工单、资产全生命周期管理及报表分析等核心功能。系统采用 B/S 架构，通过浏览器即可完成所有操作。</p>
+                <h6>核心能力</h6>
+                <ul>
+                    <li><strong>设备管理</strong> — 网络设备的发现、登记、编辑、批量导入导出</li>
+                    <li><strong>监控管理</strong> — 实时性能数据采集（CPU、内存、磁盘、网络）、健康评分、SLA在线率</li>
+                    <li><strong>告警管理</strong> — 告警规则配置、通知推送（邮件/微信/Slack/Webhook）</li>
+                    <li><strong>拓扑管理</strong> — 物理拓扑与逻辑拓扑自动发现、连接关系管理</li>
+                    <li><strong>运维管理</strong> — 巡检任务、工单流转、变更管理、问题管理、知识库</li>
+                    <li><strong>资产管理</strong> — 资产台账、合同管理、软件许可、资产盘点、供应商管理、备件管理</li>
+                    <li><strong>报表中心</strong> — 综合报表、合规管理、报表分发、趋势预测</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 快速入门 -->
+        <section id="quickstart" class="card mb-4">
+            <div class="card-header bg-success text-white"><h4 class="mb-0"><i class="fas fa-rocket"></i> 2. 快速入门</h4></div>
+            <div class="card-body">
+                <h6>2.1 登录系统</h6>
+                <p>打开浏览器访问系统地址，使用管理员分配的用户名和密码登录。首次登录后建议在个人设置中修改密码。</p>
+                <h6>2.2 设备发现</h6>
+                <ol>
+                    <li>导航至 <strong>设备管理 → 设备列表 → 网络扫描</strong></li>
+                    <li>输入 IP 地址段（如 192.168.1.0/24），点击扫描</li>
+                    <li>扫描完成后可选择将发现的设备导入系统</li>
+                    <li>也可以通过 <strong>批量导入</strong> 上传 Excel 模板批量创建设备</li>
+                </ol>
+                <h6>2.3 配置监控</h6>
+                <ol>
+                    <li>进入 <strong>监控管理 → 监控配置</strong>，为设备启用 Ping 或 SNMP 采集</li>
+                    <li>系统将自动按周期采集设备的 CPU、内存、磁盘等指标</li>
+                    <li>在 <strong>实时监控</strong> 页面查看各设备的实时数据</li>
+                </ol>
+                <h6>2.4 设置告警</h6>
+                <ol>
+                    <li>进入 <strong>配置管理 → 告警设置</strong>，配置 SMTP 邮箱或 Webhook 等通知渠道</li>
+                    <li>在 <strong>告警管理 → 告警规则</strong> 中创建告警规则，设定阈值</li>
+                    <li>当监控指标触发阈值时将自动发送通知</li>
+                </ol>
+            </div>
+        </section>
+
+        <!-- 仪表盘 -->
+        <section id="dashboard" class="card mb-4">
+            <div class="card-header bg-info text-white"><h4 class="mb-0"><i class="fas fa-chart-pie"></i> 3. 仪表盘</h4></div>
+            <div class="card-body">
+                <h6>3.1 主仪表盘</h6>
+                <p>登录后首页为主仪表盘，展示：设备总数及在线/离线统计、告警概览、CPU/内存/磁盘使用率趋势图、网络吞吐量、设备状态分布、最新告警列表、设备健康评分分布。</p>
+                <h6>3.2 管理驾驶舱</h6>
+                <p>导航至 <strong>综合报表 → 管理驾驶舱</strong>，提供全局业务视角的数据看板。</p>
+                <h6>3.3 监控管理仪表板</h6>
+                <p>导航至 <strong>监控管理 → 管理仪表板</strong>，查看监控覆盖率、健康评分统计、维护窗口状态等。</p>
+            </div>
+        </section>
+
+        <!-- 设备管理 -->
+        <section id="device" class="card mb-4">
+            <div class="card-header bg-secondary text-white"><h4 class="mb-0"><i class="fas fa-server"></i> 4. 设备管理</h4></div>
+            <div class="card-body">
+                <h6>4.1 设备列表</h6>
+                <p>展示所有已登记设备，支持按类型、状态、位置等条件筛选，可自定义列显示。点击设备名称进入详情页。</p>
+                <h6>4.2 添加/编辑设备</h6>
+                <p>支持手动添加单个设备，填写设备名称、IP 地址、设备类型、厂商型号、位置归属、SNMP 团体字等字段。编辑时还可修改监控配置和接口信息。</p>
+                <h6>4.3 批量操作</h6>
+                <ul>
+                    <li><strong>批量导入</strong> — 下载 Excel 模板，按格式填写后上传，支持 IP 范围自动生成</li>
+                    <li><strong>批量导出</strong> — 将设备列表导出为 CSV 文件</li>
+                    <li><strong>批量删除</strong> — 选择多个设备后批量删除</li>
+                    <li><strong>批量 Ping</strong> — 批量检测设备连通性</li>
+                </ul>
+                <h6>4.4 网络扫描</h6>
+                <p>输入 IP 范围进行网络扫描，自动识别在线设备及其开放端口、MAC 地址等信息。扫描结果可选择导入到设备列表中。</p>
+                <h6>4.5 设备详情</h6>
+                <p>设备详情页聚合展示：基本信息、监控数据（实时及历史）、接口列表、关联工单、变更记录、配置基线、配置版本历史等。</p>
+            </div>
+        </section>
+
+        <!-- 资产管理 -->
+        <section id="asset" class="card mb-4">
+            <div class="card-header bg-warning text-dark"><h4 class="mb-0"><i class="fas fa-cubes"></i> 5. 资产管理</h4></div>
+            <div class="card-body">
+                <h6>5.1 资产库存/台账</h6>
+                <p>管理企业所有IT资产（含网络设备、服务器、存储等）。资产卡片记录资产编号、名称、类别、采购信息、财务信息（原值、残值、当前净值）、位置归属等。</p>
+                <h6>5.2 资产全生命周期</h6>
+                <ul>
+                    <li><strong>入库登记</strong> — 添加新资产，录入采购日期、供应商、质保期</li>
+                    <li><strong>状态变更</strong> — 在库、领用、维修、报废等状态流转</li>
+                    <li><strong>折旧计算</strong> — 支持直线法/双倍余额递减法折旧，自动计算当前净值</li>
+                </ul>
+                <h6>5.3 合同管理</h6>
+                <p>管理采购合同、维保合同等，跟踪合同金额、生效日期、到期提醒。支持合同附件上传。</p>
+                <h6>5.4 软件许可管理</h6>
+                <p>记录软件许可证的购买数量、已分配数量，支持许可证的分配/回收操作，跟踪许可证到期时间。</p>
+                <h6>5.5 资产盘点</h6>
+                <p>创建盘点任务，选择盘点范围（按位置/部门），系统自动生成盘点明细。现场扫描或录入盘点结果（一致/差异/缺失/损坏），自动生成盘点报告。</p>
+                <h6>5.6 供应商与备件管理</h6>
+                <p>管理供应商信息、联系方式、供货范围。管理备件库存的入库/出库/使用记录，支持备件申请审批流程。</p>
+            </div>
+        </section>
+
+        <!-- 位置与机柜 -->
+        <section id="location" class="card mb-4">
+            <div class="card-header" style="background:#6f42c1;color:#fff"><h4 class="mb-0"><i class="fas fa-map-marker-alt"></i> 6. 位置与机柜管理</h4></div>
+            <div class="card-body">
+                <h6>6.1 位置管理</h6>
+                <p>按机房/楼层/区域组织位置层级，支持导入导出。机房可视化页面以 2D/3D 视图展示设备分布。</p>
+                <h6>6.2 机柜管理</h6>
+                <p>管理机柜的 U 位分配，机架视图直观展示每个 U 位的设备占用情况。支持拖拽调整设备在机柜中的位置，可视化展示设备在机柜中的安装布局。</p>
+            </div>
+        </section>
+
+        <!-- 监控管理 -->
+        <section id="monitor" class="card mb-4">
+            <div class="card-header bg-danger text-white"><h4 class="mb-0"><i class="fas fa-heartbeat"></i> 7. 监控管理</h4></div>
+            <div class="card-body">
+                <h6>7.1 实时监控</h6>
+                <p>以卡片列表展示所有设备的实时运行状态，包括 CPU 使用率、内存使用率、磁盘使用率、网络流量、温度、在线时长等指标。状态通过颜色标识（正常/警告/危险）。</p>
+                <h6>7.2 性能图表</h6>
+                <p>选择设备和指标后，以折线图展示历史性能趋势，支持按时间范围筛选。</p>
+                <h6>7.3 设备状态总览</h6>
+                <p>以表格形式汇总所有设备的最新监控数据，支持排序和筛选，便于快速定位异常设备。</p>
+                <h6>7.4 健康评分</h6>
+                <p>基于监控数据自动计算各设备的健康评分（0-100分），综合 CPU、内存、磁盘、网络、Ping 五项指标。支持按评分分布统计，快速识别亚健康设备。</p>
+                <h6>7.5 SLA 在线率</h6>
+                <p>基于实际的 MonitorData 记录计算设备在线率（月度/季度/年度），统计平均在线率、低于 SLA 阈值的设备数及总宕机时间。</p>
+                <h6>7.6 维护窗口</h6>
+                <p>创建维护窗口，设定受影响的设备及时间范围，维护期间自动抑制相关告警。</p>
+                <h6>7.7 异常检测</h6>
+                <p>配置异常检测规则，系统通过统计偏差等方法自动识别指标异常，支持灵敏度调节。</p>
+                <h6>7.8 趋势预测</h6>
+                <p>基于历史监控数据，按天聚合指标均值，生成未来 7 天的趋势预测（含简单线性趋势）。</p>
+                <h6>7.9 告警升级策略</h6>
+                <p>设置多级告警升级策略，当告警持续未处理时自动通知更高级别负责人。</p>
+            </div>
+        </section>
+
+        <!-- 告警管理 -->
+        <section id="alert" class="card mb-4">
+            <div class="card-header" style="background:#e67e22;color:#fff"><h4 class="mb-0"><i class="fas fa-bell"></i> 8. 告警管理</h4></div>
+            <div class="card-body">
+                <h6>8.1 告警列表与活跃告警</h6>
+                <p>展示系统产生的所有告警，支持按级别（紧急/高/中/低）、状态（活跃/已确认/已解决）、时间范围筛选。活跃告警视图聚焦当前未处理的告警。</p>
+                <h6>8.2 告警规则</h6>
+                <p>创建告警规则：选择指标（CPU/内存/磁盘等）、设定比较运算符和阈值、持续时间。支持批量启用/禁用规则。</p>
+                <h6>8.3 通知设置</h6>
+                <p>配置告警通知渠道及接收人。支持多种通知方式：邮件（SMTP）、企业微信机器人、Slack 机器人、通用 Webhook。通知内容支持自定义模板。</p>
+                <h6>8.4 告警确认与处理</h6>
+                <p>支持单条或批量确认告警、解决告警，记录处理人及处理时间。</p>
+            </div>
+        </section>
+
+        <!-- 拓扑管理 -->
+        <section id="topology" class="card mb-4">
+            <div class="card-header" style="background:#1abc9c;color:#fff"><h4 class="mb-0"><i class="fas fa-project-diagram"></i> 9. 拓扑管理</h4></div>
+            <div class="card-body">
+                <h6>9.1 物理拓扑</h6>
+                <p>以图形化方式展示网络设备的物理连接关系，支持拖拽布局、自动排列，设备状态通过颜色实时反映。</p>
+                <h6>9.2 逻辑拓扑</h6>
+                <p>以逻辑视角展示网络分层结构（核心层/汇聚层/接入层），便于理解网络架构。</p>
+                <h6>9.3 自动发现</h6>
+                <p>通过 LLDP/CDP 协议自动发现网络设备间的互联关系，支持手动添加连接。</p>
+                <h6>9.4 连接关系管理</h6>
+                <p>以表格形式管理设备间的连接，支持添加/编辑/删除连接，查看连接详情（两端设备、接口、带宽等）。</p>
+                <h6>9.5 接口管理</h6>
+                <p>管理设备接口信息（名称、类型、状态、速率），支持 SNMP 自动发现接口。</p>
+            </div>
+        </section>
+
+        <!-- 运维管理 -->
+        <section id="maintenance" class="card mb-4">
+            <div class="card-header" style="background:#2c3e50;color:#fff"><h4 class="mb-0"><i class="fas fa-tools"></i> 10. 运维管理</h4></div>
+            <div class="card-body">
+                <h6>10.1 巡检管理</h6>
+                <ul>
+                    <li><strong>巡检模板</strong> — 创建巡检模板，定义检查项目列表（日检/周检/月检等）</li>
+                    <li><strong>巡检任务</strong> — 基于模板创建巡检任务，指派负责人，设定计划日期</li>
+                    <li><strong>任务执行</strong> — 负责人按检查项逐项填写结果，系统自动计算完成进度</li>
+                    <li><strong>巡检结果</strong> — 查看历史巡检结果，统计通过/失败/警告项目数</li>
+                    <li><strong>巡检计划</strong> — 以日历视图查看巡检任务排期</li>
+                </ul>
+                <h6>10.2 工单管理</h6>
+                <ul>
+                    <li><strong>创建工单</strong> — 填写标题、描述、类型（故障/服务请求/维护）、优先级、关联设备</li>
+                    <li><strong>工单流转</strong> — 支持分配、处理、解决、关闭、重新打开等状态流转</li>
+                    <li><strong>工单模板</strong> — 预设工单模板，快速创建标准工单</li>
+                    <li><strong>工单分类</strong> — 自定义工单分类，便于统计和筛选</li>
+                </ul>
+                <h6>10.3 变更管理</h6>
+                <ul>
+                    <li><strong>变更请求</strong> — 创建变更申请，填写变更内容、影响范围、实施方案、回退计划</li>
+                    <li><strong>变更审批</strong> — 支持审批流程，记录审批意见</li>
+                    <li><strong>变更日历</strong> — 以日历视图展示计划中的变更</li>
+                </ul>
+                <h6>10.4 问题管理</h6>
+                <p>记录和分析重复发生的故障，支持根因分析（RCA）、解决方案归档。可与关联工单联动，识别已知错误。</p>
+                <h6>10.5 知识库</h6>
+                <p>建立运维知识库，支持创建/编辑/发布技术文章。文章支持分类、标签、设备类型关联。支持草稿/发布/归档状态管理。</p>
+                <h6>10.6 已知错误与服务目录</h6>
+                <p>记录已知错误及其临时方案。服务目录定义标准服务项及预计完成时间，规范服务请求流程。</p>
+            </div>
+        </section>
+
+        <!-- 报表中心 -->
+        <section id="report" class="card mb-4">
+            <div class="card-header" style="background:#8e44ad;color:#fff"><h4 class="mb-0"><i class="fas fa-file-alt"></i> 11. 报表中心</h4></div>
+            <div class="card-body">
+                <h6>11.1 标准报表</h6>
+                <ul>
+                    <li><strong>设备状态报表</strong> — 在线/离线统计、设备类型分布</li>
+                    <li><strong>设备性能报表</strong> — CPU/内存/磁盘使用率排名</li>
+                    <li><strong>接口利用率报表</strong> — 接口流量和带宽利用率</li>
+                    <li><strong>机柜利用率报表</strong> — U 位占用率统计</li>
+                    <li><strong>位置汇总报表</strong> — 各位置的设备分布</li>
+                    <li><strong>资产库存报表</strong> — 资产类别、部门分布统计</li>
+                    <li><strong>告警统计报表</strong> — 告警数量趋势、级别分布</li>
+                    <li><strong>监控覆盖率报表</strong> — 已监控/未监控设备比例</li>
+                </ul>
+                <h6>11.2 综合报表</h6>
+                <p>聚合展示设备分布、告警统计、性能数据、机柜利用率等，提供全局数据概览。</p>
+                <h6>11.3 合规管理</h6>
+                <ul>
+                    <li><strong>合规框架</strong> — 定义 ISO27001/SOX/PCI 等合规框架及控制项</li>
+                    <li><strong>合规证据</strong> — 收集和管理合规审计证据，跟踪通过/未通过状态</li>
+                    <li><strong>合规报告</strong> — 按框架生成合规达标率报告</li>
+                </ul>
+                <h6>11.4 报表分发</h6>
+                <p>创建定时分发任务，按 Cron 表达式自动生成并通过邮件/Slack/Webhook 发送报表。</p>
+                <h6>11.5 趋势预测</h6>
+                <p>基于历史数据生成指标趋势图表，辅助容量规划。</p>
+                <h6>11.6 管理驾驶舱</h6>
+                <p>面向管理层的全局数据看板，支持自定义仪表板布局。</p>
+            </div>
+        </section>
+
+        <!-- 系统配置 -->
+        <section id="config" class="card mb-4">
+            <div class="card-header bg-dark text-white"><h4 class="mb-0"><i class="fas fa-cog"></i> 12. 系统配置</h4></div>
+            <div class="card-body">
+                <h6>12.1 系统设置</h6>
+                <p>配置系统名称、Logo、会话超时时间、密码策略等全局参数。</p>
+                <h6>12.2 SNMP 设置</h6>
+                <p>配置默认 SNMP 参数（版本、团体字、超时时间、重试次数），用于设备监控和拓扑发现。</p>
+                <h6>12.3 凭证管理</h6>
+                <p>管理 SSH/Telnet/API 登录凭证，支持按设备类型分组管理，用于自动采集和巡检。</p>
+                <h6>12.4 网络发现配置</h6>
+                <p>配置 IP 扫描范围、调度计划，自动发现新设备并登记。</p>
+                <h6>12.5 告警设置</h6>
+                <p>配置 SMTP 邮箱（发件人地址、服务器、端口、加密方式）、企业微信机器人 Webhook、Slack Webhook、通用 Webhook，支持测试发送。</p>
+                <h6>12.6 用户与权限</h6>
+                <ul>
+                    <li><strong>用户管理</strong> — 创建/编辑/禁用系统用户</li>
+                    <li><strong>角色管理</strong> — 定义管理员/操作员/普通用户/查看者等角色</li>
+                    <li><strong>权限管理</strong> — 细粒度的模块级权限控制（view/edit），覆盖设备、资产、监控、运维、报表等所有模块</li>
+                </ul>
+                <h6>12.7 配置基线</h6>
+                <p>捕获设备配置快照作为基线，自动检测配置漂移（Config Drift），记录配置版本历史，支持配置差异对比。</p>
+                <h6>12.8 合规策略</h6>
+                <p>定义合规检查策略（安全/网络/系统类别），按计划或手动执行合规检查，生成合规报告。</p>
+                <h6>12.9 审计日志</h6>
+                <p>记录所有用户操作日志（创建/修改/删除），支持按时间、用户、操作类型检索。</p>
+                <h6>12.10 备份与恢复</h6>
+                <p>支持系统配置的备份与恢复，可下载备份文件。</p>
+            </div>
+        </section>
+
+        <!-- 常见问题 -->
+        <section id="faq" class="card mb-4">
+            <div class="card-header" style="background:#95a5a6;color:#fff"><h4 class="mb-0"><i class="fas fa-question-circle"></i> 13. 常见问题</h4></div>
+            <div class="card-body">
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">如何添加新设备？</button></h2>
+                        <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">进入 设备管理 → 设备列表，点击"添加设备"按钮填写表单。也可通过"网络扫描"功能自动发现设备后导入，或使用"批量导入"功能上传 Excel 文件。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">监控数据没有显示怎么办？</button></h2>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">首先确认设备已配置监控（设备详情 → 监控配置），确保启用了 Ping 或 SNMP 采集。检查设备是否在线、SNMP 团体字是否正确。采集任务每 30 秒执行一次，新配置的设备需要等待下一次采集周期。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">如何设置告警通知？</button></h2>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">第一步：进入 配置管理 → 告警设置，配置 SMTP 邮箱或企业微信/Slack Webhook。第二步：进入 告警管理 → 告警规则，创建告警规则并关联通知渠道。保存完成后点击"测试发送"验证配置是否正确。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">如何创建巡检任务？</button></h2>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">先创建巡检模板（运维管理 → 巡检模板），定义检查项目。然后进入 巡检任务 → 新建巡检任务，选择模板、填写任务信息、指派负责人。负责人登录后即可执行巡检并录入结果。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">资产盘点的流程是什么？</button></h2>
+                        <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">进入 资产管理 → 资产盘点 → 创建盘点任务，选择盘点范围（按位置/部门）。系统自动生成盘点明细清单。盘点人员在现场逐项核对，录入盘点结果（一致/差异/缺失/损坏）。全部完成后生成盘点报告，查看差异分析。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6">权限角色如何分配？</button></h2>
+                        <div id="faq6" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">进入 配置管理 → 角色管理，创建角色并勾选该角色拥有的权限（每个模块分 view/edit 两级）。进入 用户管理，为用户分配角色。系统预置了管理员、操作员、普通用户、查看者四个默认角色。</div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7">Cron 表达式如何使用？</button></h2>
+                        <div id="faq7" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">Cron 表达式格式为"分 时 日 月 周"，例如："0 8 * * 1"表示每周一早8点，"*/30 * * * *"表示每30分钟，"0 9 1 * *"表示每月1日上午9点。在报表分发任务的 Cron 字段中使用。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="text-center mb-4">
+            <p class="text-muted">最后更新: 2026年7月</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 滚动时高亮当前章节
+document.addEventListener('DOMContentLoaded', function() {
+    var tocLinks = document.querySelectorAll('#manual-toc .list-group-item');
+    var sections = [];
+    tocLinks.forEach(function(link) {
+        var href = link.getAttribute('href');
+        if (href && href.startsWith('#')) {
+            sections.push(document.getElementById(href.substring(1)));
+        }
+    });
+    window.addEventListener('scroll', function() {
+        var scrollY = window.scrollY + 100;
+        var activeId = null;
+        sections.forEach(function(section) {
+            if (section && section.offsetTop <= scrollY) {
+                activeId = section.id;
+            }
+        });
+        tocLinks.forEach(function(link) {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + activeId) {
+                link.classList.add('active');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

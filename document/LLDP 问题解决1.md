@@ -1,0 +1,471 @@
+问题解决了，分析如下：
+
+
+1. SNMP 数据解析错误
+从你的 snmpwalk输出可以看到：
+
+
+# 1. LLDP 本地端口索引查询
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.4.1.1.6
+iso.0.8802.1.1.2.1.4.1.1.6.1068876.2.1 = INTEGER: 5
+iso.0.8802.1.1.2.1.4.1.1.6.1086161.1.1 = INTEGER: 5
+
+# 2. LLDP 本地端口 ifIndex 映射
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.3.7.1.2
+iso.0.8802.1.1.2.1.3.7.1.2.1 = INTEGER: 5
+iso.0.8802.1.1.2.1.3.7.1.2.2 = INTEGER: 5
+
+# 3. LLDP 本地端口描述
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.3.7.1.4
+iso.0.8802.1.1.2.1.3.7.1.4.1 = STRING: "GigabitEthernet1/0/1 Interface"
+iso.0.8802.1.1.2.1.3.7.1.4.2 = STRING: "GigabitEthernet1/0/2 Interface"
+
+
+关键发现：
+
+    LLDP 端口 1 对应 ifIndex 5，描述是 GigabitEthernet1/0/1
+    LLDP 端口 2 对应 ifIndex 5，描述是 GigabitEthernet1/0/2
+    但接口映射显示 ifIndex 5 对应 GigabitEthernet1/0/5
+
+这是矛盾的！你的设备可能存在 ifIndex 与接口名映射错误。
+
+
+2. 代码中的 OID 解析错误
+在 discover_lldp_neighbors函数中，OID 解析部分的逻辑有问题
+
+# 当前代码
+parts = oid_str.split('.')
+if len(parts) >= 3:
+    time_mark = parts[-3]
+    local_port = parts[-2]  # 这里应该是 LLDP 端口号
+    remote_index = parts[-1]
+
+
+    但根据你的 snmpwalk输出，OID 结构是：
+
+    1.0.8802.1.1.2.1.4.1.1.6.1068876.2.1
+# 其中：
+# 1068876 = time_mark
+# 2 = local_port (LLDP端口号)
+# 1 = remote_index
+
+你的代码将 local_port从 OID 的 [-2]位置提取，这应该是数字 "2"，但实际 LLDP 返回的 local_port 值是数字 "5"。
+
+✅ 修复方案
+1. 修复 OID 解析逻辑
+修改 discover_lldp_neighbors函数的 OID 解析部分
+
+def discover_lldp_neighbors(ip, community='public'):
+    """
+    通过 SNMP 发现 LLDP 邻居，正确获取本地端口名称
+    """
+    # 定义 LLDP Remote 表 OID
+    oid_map = {
+        'chassis_subtype':  '1.0.8802.1.1.2.1.4.1.1.4',
+        'remote_chassis':   '1.0.8802.1.1.2.1.4.1.1.5',
+        'remote_port':      '1.0.8802.1.1.2.1.4.1.1.7',
+        'remote_port_desc': '1.0.8802.1.1.2.1.4.1.1.8',
+        'local_port_num':   '1.0.8802.1.1.2.1.4.1.1.6',  # 这个 OID 返回的值是 ifIndex
+        'remote_sysname':   '1.0.8802.1.1.2.1.4.1.1.9',
+        'remote_sysdesc':   '1.0.8802.1.1.2.1.4.1.1.10',
+        'cap_supported':    '1.0.8802.1.1.2.1.4.1.1.11',
+        'cap_enabled':      '1.0.8802.1.1.2.1.4.1.1.12',
+    }
+
+    raw_data = {}
+    try:
+        # 收集所有 remote 表项
+        for key, oid in oid_map.items():
+            entries = snmp_walk(ip, oid, community, timeout=10, retries=3)
+            for oid_str, val in entries:
+                parts = oid_str.split('.')
+                if len(parts) >= 3:
+                    time_mark = parts[-3]
+                    lldp_port_num = parts[-2]  # 这才是 LLDP 端口号（1,2,3...）
+                    remote_index = parts[-1]
+                else:
+                    continue
+                composite_key = (time_mark, lldp_port_num, remote_index)
+                if composite_key not in raw_data:
+                    raw_data[composite_key] = {}
+                
+                # 处理字节串
+                if isinstance(val, bytes):
+                    try:
+                        val_str = val.decode('utf-8', errors='replace')
+                    except UnicodeDecodeError:
+                        val_str = val.decode('latin1', errors='replace')
+                else:
+                    val_str = str(val)
+                
+                # 特殊处理 local_port_num，它实际上是 ifIndex
+                if key == 'local_port_num':
+                    # 确保存储为字符串
+                    raw_data[composite_key][key] = val_str.strip('"').replace('\x00', '')
+                else:
+                    raw_data[composite_key][key] = val_str.strip('"').replace('\x00', '')
+        
+        # 获取本地端口描述映射 (lldpLocPortNum -> lldpLocPortDesc)
+        # OID: 1.0.8802.1.1.2.1.3.7.1.4
+        print(f"[DEBUG] 获取 LLDP 本地端口描述...")
+        local_desc_entries = snmp_walk(ip, '1.0.8802.1.1.2.1.3.7.1.4', community, timeout=10, retries=3)
+        local_desc_map = {}
+        for oid_str, val in local_desc_entries:
+            parts = oid_str.split('.')
+            if parts:
+                lldp_port_num = parts[-1]  # LLDP 端口号
+                if isinstance(val, bytes):
+                    try:
+                        val_str = val.decode('utf-8', errors='replace')
+                    except UnicodeDecodeError:
+                        val_str = val.decode('latin1', errors='replace')
+                else:
+                    val_str = str(val)
+                local_desc_map[lldp_port_num] = val_str.strip('"').replace('\x00', '')
+        print(f"[DEBUG] LLDP 端口描述映射: {local_desc_map}")
+        
+        # 获取本地端口 IfIndex 映射 (lldpLocPortNum -> lldpLocPortIfIndex)
+        # OID: 1.0.8802.1.1.2.1.3.7.1.2
+        print(f"[DEBUG] 获取 LLDP 本地端口 ifIndex 映射...")
+        local_ifindex_entries = snmp_walk(ip, '1.0.8802.1.1.2.1.3.7.1.2', community, timeout=10, retries=3)
+        local_ifindex_map = {}
+        for oid_str, val in local_ifindex_entries:
+            parts = oid_str.split('.')
+            if parts:
+                lldp_port_num = parts[-1]  # LLDP 端口号
+                if isinstance(val, bytes):
+                    try:
+                        val_str = val.decode('utf-8', errors='replace')
+                    except UnicodeDecodeError:
+                        val_str = val.decode('latin1', errors='replace')
+                else:
+                    val_str = str(val)
+                local_ifindex_map[lldp_port_num] = val_str.strip('"').replace('\x00', '')
+        print(f"[DEBUG] LLDP 端口 ifIndex 映射: {local_ifindex_map}")
+        
+        # 构建邻居列表
+        neighbors = []
+        print(f"[DEBUG] 处理 LLDP 邻居数据，共 {len(raw_data)} 条")
+        
+        for composite_key, data in raw_data.items():
+            time_mark, lldp_port_num, remote_idx = composite_key
+            
+            # 从 data 中获取 ifIndex（lldpRemLocalPortNum 返回的是 ifIndex）
+            if_index = data.get('local_port_num', '')
+            if not if_index:
+                print(f"[WARN] LLDP 邻居 {lldp_port_num} 缺少 ifIndex，跳过")
+                continue
+            
+            print(f"[DEBUG] 处理邻居: LLDP端口={lldp_port_num}, ifIndex={if_index}")
+            
+            # 优先使用 lldpLocPortDesc 作为本地接口名称
+            local_interface = local_desc_map.get(lldp_port_num, '')
+            if not local_interface:
+                # 尝试从 local_ifindex_map 获取 ifIndex
+                if_index_alt = local_ifindex_map.get(lldp_port_num, '')
+                if if_index_alt:
+                    local_interface = f"Port-{if_index_alt}"
+                else:
+                    local_interface = f"Port-{if_index}"
+            
+            # 清理后缀
+            local_interface = re.sub(r'\s+Interface$', '', local_interface, flags=re.IGNORECASE).strip()
+            
+            # 目标端口处理
+            remote_port = data.get('remote_port', '').strip() or data.get('remote_port_desc', '').strip()
+            if isinstance(remote_port, bytes):
+                try:
+                    remote_port = remote_port.decode('utf-8')
+                except UnicodeDecodeError:
+                    remote_port = remote_port.decode('latin1', errors='replace')
+            remote_port = re.sub(r'\s+Interface$', '', remote_port, flags=re.IGNORECASE).strip()
+            if not remote_port:
+                remote_port = f"Port-{remote_idx}"
+            
+            neighbor = {
+                'local_lldp_port': lldp_port_num,  # LLDP 端口号
+                'local_ifindex': if_index,  # 实际 ifIndex
+                'local_interface_name': local_interface,
+                'remote_idx': remote_idx,
+                'remote_chassis': data.get('remote_chassis', ''),
+                'remote_port': remote_port,
+                'remote_port_desc': data.get('remote_port_desc', ''),
+                'remote_sysname': data.get('remote_sysname', ''),
+                'remote_sysdesc': data.get('remote_sysdesc', ''),
+                'cap_supported': data.get('cap_supported', ''),
+                'cap_enabled': data.get('cap_enabled', ''),
+            }
+            neighbors.append(neighbor)
+            print(f"[DEBUG] 添加邻居: {local_interface} ↔ {remote_port}")
+        
+        return neighbors
+
+    except Exception as e:
+        print(f"[ERROR] LLDP discovery failed on {ip}: {e}")
+        traceback.print_exc()
+        return []
+
+2. 修改 run_protocol_discovery中的 LLDP 处理
+在 run_protocol_discovery函数中，更新 LLDP 处理逻辑
+  
+   # 2. LLDP 发现
+if task.use_lldp:
+    try:
+        lldp_neighbors = discover_lldp_neighbors(ip, community)
+        print(f"[DEBUG] LLDP 发现 {len(lldp_neighbors)} 个邻居 on {ip}")
+        addr_map = get_lldp_management_addresses(ip, community)
+
+        for n in lldp_neighbors:
+            # 源接口名获取 - 使用新的字段结构
+            src_interface_name = n.get('local_interface_name', '')
+            
+            if not src_interface_name:
+                # 如果 LLDP 返回了接口名，但为空，尝试通过 ifIndex 映射
+                local_ifindex = n.get('local_ifindex', '')
+                if local_ifindex and local_ifindex in interface_map:
+                    src_interface_name = interface_map[local_ifindex]
+                else:
+                    # 最后尝试 LLDP 端口号
+                    local_lldp_port = n.get('local_lldp_port', '')
+                    if local_lldp_port in interface_map:
+                        src_interface_name = interface_map[local_lldp_port]
+            
+            if not src_interface_name:
+                src_interface_name = f"Port-{n.get('local_ifindex', 'unknown')}"
+                print(f"[WARN] 无法解析源接口名: ifIndex={n.get('local_ifindex')}, lldp_port={n.get('local_lldp_port')}，使用默认名称: {src_interface_name}")
+            
+            # 目标端口处理
+            dst_interface_name = n.get('remote_port', '').strip() or n.get('remote_port_desc', '').strip()
+            if isinstance(dst_interface_name, bytes):
+                try:
+                    dst_interface_name = dst_interface_name.decode('utf-8')
+                except UnicodeDecodeError:
+                    dst_interface_name = dst_interface_name.decode('latin1', errors='replace')
+            dst_interface_name = re.sub(r'\s+Interface$', '', dst_interface_name, flags=re.IGNORECASE).strip()
+            if not dst_interface_name:
+                dst_interface_name = f"Port-{n.get('remote_idx', '0')}"
+
+            neighbor_ip = resolve_neighbor_ip_enhanced(n, addr_map)
+
+            all_connections.append({
+                'source_ip': ip,
+                'source_port': src_interface_name,
+                'target_ip': neighbor_ip,
+                'target_port': dst_interface_name,
+                'protocol': 'lldp'
+            })
+
+            if neighbor_ip and neighbor_ip not in discovered_ips:
+                scan_queue.append((neighbor_ip, depth + 1))
+    except Exception as e:
+        print(f"LLDP 发现失败 {ip}: {str(e)}")
+        traceback.print_exc()
+
+               
+问题                   现象                                         原因                               解决方案
+ 
+LLDP 返回 ifIndex=5  实际接口映射 ifIndex=5 → GigabitEthernet1/0/5  设备 ifIndex 与接口名映射错误   通过 lldpLocPortDesc 获取正确接口名
+代码解析错误          从 OID 错误位置提取端口号                      OID 解析逻辑错误                修复 OID 解析，正确提取 LLDP 端口号
+
+接口映射矛盾          同一个 ifIndex 对应多个接口                    设备设计问题                     优先使用 LLDP 提供的接口描述
+	
+
+🔧 测试验证
+修改后，在运行前手动测试一下：
+
+
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.4.1.1.6
+iso.0.8802.1.1.2.1.4.1.1.6.1068876.2.1 = INTEGER: 5
+iso.0.8802.1.1.2.1.4.1.1.6.1086161.1.1 = INTEGER: 5
+
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.3.7.1.4
+iso.0.8802.1.1.2.1.3.7.1.4.1 = STRING: "GigabitEthernet1/0/1 Interface"
+iso.0.8802.1.1.2.1.3.7.1.4.2 = STRING: "GigabitEthernet1/0/2 Interface"
+
+C:\Users\pp>snmpwalk -v2c -c tcst 192.168.4.100 1.0.8802.1.1.2.1.4.1.1.7
+iso.0.8802.1.1.2.1.4.1.1.7.1068876.2.1 = STRING: "GigabitEthernet2/0/3"
+iso.0.8802.1.1.2.1.4.1.1.7.1086161.1.1 = STRING: "GigabitEthernet2/0/4"
+
+
+期望结果：
+
+    LLDP 端口 1 → ifIndex 5 → 接口描述 "GigabitEthernet1/0/1 Interface"
+    LLDP 端口 2 → ifIndex 5 → 接口描述 "GigabitEthernet1/0/2 Interface"
+    对端端口是 "GigabitEthernet2/0/3" 和 "GigabitEthernet2/0/4"
+
+修改后的代码应该能正确解析出：
+
+    192.168.4.100:GigabitEthernet1/0/1 ↔ 192.168.4.102:GigabitEthernet2/0/4
+    192.168.4.100:GigabitEthernet1/0/2 ↔ 192.168.4.102:GigabitEthernet2/0/3
+
+
+
+
+[DEBUG] 后台任务 1 已启动
+127.0.0.1 - - [05/Apr/2026 07:21:35] "POST /topology/api/discovery/tasks/1/run HTTP/1.1" 200 -
+[DEBUG] 开始执行协议发现
+127.0.0.1 - - [05/Apr/2026 07:21:35] "GET /topology/api/discovery/tasks HTTP/1.1" 200 -
+[DEBUG] discover_interfaces_via_snmp for 192.168.4.100 获取到 11 个接口
+[DEBUG] 接口索引 1: 'GigabitEthernet1/0/1'
+[DEBUG] 接口索引 2: 'GigabitEthernet1/0/2'
+[DEBUG] 接口索引 3: 'GigabitEthernet1/0/3'
+[DEBUG] 接口索引 4: 'GigabitEthernet1/0/4'
+[DEBUG] 接口索引 5: 'GigabitEthernet1/0/5'
+[DEBUG] 接口索引 6: 'GigabitEthernet1/0/6'
+[DEBUG] 接口索引 8: 'NULL0'
+[DEBUG] 跳过逻辑接口: NULL0 (索引 8)
+[DEBUG] 接口索引 9: 'InLoopBack0'
+[DEBUG] 跳过逻辑接口: InLoopBack0 (索引 9)
+[DEBUG] 接口索引 10: 'Bridge-Aggregation1'
+[DEBUG] 接口索引 11: 'Vlan-interface1'
+[DEBUG] 接口索引 12: 'Vlan-interface4094'
+[DEBUG] 最终保留 9 个物理接口
+[DEBUG] 设备 192.168.4.100 的接口映射: {'1': 'GigabitEthernet1/0/1', '2': 'GigabitEthernet1/0/2', '3': 'GigabitEthernet1/0/3', '4': 'GigabitEthernet1/0/4', '5': 'GigabitEthernet1/0/5', '6': 'GigabitEthernet1/0/6', '10': 'Bridge-Aggregation1', '11': 'Vlan-interface1', '12': 'Vlan-interface4094'}
+[DEBUG] 获取 LLDP 本地端口描述...
+[DEBUG] LLDP 端口描述映射: {'1': 'GigabitEthernet1/0/1 Interface', '2': 'GigabitEthernet1/0/2 Interface'}
+[DEBUG] 获取 LLDP 本地端口 ifIndex 映射...
+[DEBUG] LLDP 端口 ifIndex 映射: {'1': '5', '2': '5'}
+[DEBUG] 处理 LLDP 邻居数据，共 2 条
+[DEBUG] 处理邻居: LLDP端口=2, ifIndex=5
+[DEBUG] 添加邻居: GigabitEthernet1/0/2 ↔ GigabitEthernet2/0/3
+[DEBUG] 处理邻居: LLDP端口=1, ifIndex=5
+[DEBUG] 添加邻居: GigabitEthernet1/0/1 ↔ GigabitEthernet2/0/4
+[DEBUG] LLDP 发现 2 个邻居 on 192.168.4.100
+127.0.0.1 - - [05/Apr/2026 07:21:39] "GET /topology/api/discovery/tasks HTTP/1.1" 200 -
+=============开始发现snmp_mac=================
+2026-04-05 07:21:41,063 - app - INFO - [SNMP MAC] 开始发现邻居，目标IP: 192.168.4.100, community: tcst
+2026-04-05 07:21:41,079 - app - INFO - [SNMP MAC] 获取桥接表 (dot1dTpFdbTable)...
+2026-04-05 07:21:41,295 - app - INFO - [SNMP MAC] 桥接表无数据，尝试备用 OID (dot1qTpFdbPort)...
+2026-04-05 07:21:41,535 - app - INFO - [SNMP MAC] 获取 ARP 表 (ipNetToMediaPhysAddress)...
+2026-04-05 07:21:41,755 - app - WARNING - [SNMP MAC] 端口 Port-8 有 4 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:41,762 - app - WARNING - [SNMP MAC] 端口 Port-8 有 4 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:41,766 - app - WARNING - [SNMP MAC] 端口 Port-8 有 4 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:41,773 - app - WARNING - [SNMP MAC] 端口 Port-8 有 4 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:41,778 - app - INFO - [SNMP MAC] 共发现 0 个直连邻居
+[保存] 开始保存发现结果，任务ID=1，源IP=192.168.4.100
+[DEBUG] 总共发现 2 个连接
+[DEBUG] 处理连接 0: 192.168.4.100:GigabitEthernet1/0/2 ↔ 192.168.4.102:GigabitEthernet2/0/3 (协议: lldp)
+[保存] 添加新连接: H3C:GigabitEthernet1/0/2 ↔ 5130-B:GigabitEthernet2/0/3
+[DEBUG] 处理连接 1: 192.168.4.100:GigabitEthernet1/0/1 ↔ 192.168.4.102:GigabitEthernet2/0/4 (协议: lldp)
+[保存] 添加新连接: H3C:GigabitEthernet1/0/1 ↔ 5130-B:GigabitEthernet2/0/4
+[保存] 保存完成，任务ID=1
+[DEBUG] discover_interfaces_via_snmp for 192.168.4.102 获取到 35 个接口
+[DEBUG] 接口索引 66: 'GigabitEthernet2/0/1'
+[DEBUG] 接口索引 67: 'GigabitEthernet2/0/2'
+[DEBUG] 接口索引 68: 'GigabitEthernet2/0/3'
+[DEBUG] 接口索引 69: 'GigabitEthernet2/0/4'
+[DEBUG] 接口索引 70: 'GigabitEthernet2/0/5'
+[DEBUG] 接口索引 71: 'GigabitEthernet2/0/6'
+[DEBUG] 接口索引 72: 'GigabitEthernet2/0/7'
+[DEBUG] 接口索引 73: 'GigabitEthernet2/0/8'
+[DEBUG] 接口索引 74: 'GigabitEthernet2/0/9'
+[DEBUG] 接口索引 75: 'GigabitEthernet2/0/10'
+[DEBUG] 接口索引 76: 'GigabitEthernet2/0/11'
+[DEBUG] 接口索引 77: 'GigabitEthernet2/0/12'
+[DEBUG] 接口索引 78: 'GigabitEthernet2/0/13'
+[DEBUG] 接口索引 79: 'GigabitEthernet2/0/14'
+[DEBUG] 接口索引 80: 'GigabitEthernet2/0/15'
+[DEBUG] 接口索引 81: 'GigabitEthernet2/0/16'
+[DEBUG] 接口索引 82: 'GigabitEthernet2/0/17'
+[DEBUG] 接口索引 83: 'GigabitEthernet2/0/18'
+[DEBUG] 接口索引 84: 'GigabitEthernet2/0/19'
+[DEBUG] 接口索引 85: 'GigabitEthernet2/0/20'
+[DEBUG] 接口索引 86: 'GigabitEthernet2/0/21'
+[DEBUG] 接口索引 87: 'GigabitEthernet2/0/22'
+[DEBUG] 接口索引 88: 'GigabitEthernet2/0/23'
+[DEBUG] 接口索引 89: 'GigabitEthernet2/0/24'
+[DEBUG] 接口索引 90: 'Ten-GigabitEthernet2/0/25'
+[DEBUG] 接口索引 91: 'Ten-GigabitEthernet2/0/26'
+[DEBUG] 接口索引 92: 'Ten-GigabitEthernet2/0/27'
+[DEBUG] 接口索引 93: 'Ten-GigabitEthernet2/0/28'
+[DEBUG] 接口索引 716: 'NULL0'
+[DEBUG] 跳过逻辑接口: NULL0 (索引 716)
+[DEBUG] 接口索引 717: 'InLoopBack0'
+[DEBUG] 跳过逻辑接口: InLoopBack0 (索引 717)
+[DEBUG] 接口索引 908: 'Vlan-interface1'
+[DEBUG] 接口索引 909: 'Vlan-interface100'
+[DEBUG] 接口索引 910: 'Vlan-interface200'
+[DEBUG] 接口索引 911: 'Vlan-interface300'
+[DEBUG] 接口索引 912: 'Bridge-Aggregation1'
+[DEBUG] 最终保留 33 个物理接口
+[DEBUG] 设备 192.168.4.102 的接口映射: {'66': 'GigabitEthernet2/0/1', '67': 'GigabitEthernet2/0/2', '68': 'GigabitEthernet2/0/3', '69': 'GigabitEthernet2/0/4', '70': 'GigabitEthernet2/0/5', '71': 'GigabitEthernet2/0/6', '72': 'GigabitEthernet2/0/7', '73': 'GigabitEthernet2/0/8', '74': 'GigabitEthernet2/0/9', '75': 'GigabitEthernet2/0/10', '76': 'GigabitEthernet2/0/11', '77': 'GigabitEthernet2/0/12', '78': 'GigabitEthernet2/0/13', '79': 'GigabitEthernet2/0/14', '80': 'GigabitEthernet2/0/15', '81': 'GigabitEthernet2/0/16', '82': 'GigabitEthernet2/0/17', '83': 'GigabitEthernet2/0/18', '84': 'GigabitEthernet2/0/19', '85': 'GigabitEthernet2/0/20', '86': 'GigabitEthernet2/0/21', '87': 'GigabitEthernet2/0/22', '88': 'GigabitEthernet2/0/23', '89': 'GigabitEthernet2/0/24', '90': 'Ten-GigabitEthernet2/0/25', '91': 'Ten-GigabitEthernet2/0/26', '92': 'Ten-GigabitEthernet2/0/27', '93': 'Ten-GigabitEthernet2/0/28', '908': 'Vlan-interface1', '909': 'Vlan-interface100', '910': 'Vlan-interface200', '911': 'Vlan-interface300', '912': 'Bridge-Aggregation1'}
+127.0.0.1 - - [05/Apr/2026 07:21:45] "GET /topology/api/discovery/tasks HTTP/1.1" 200 -
+[DEBUG] 获取 LLDP 本地端口描述...
+[DEBUG] LLDP 端口描述映射: {'68': 'GigabitEthernet2/0/3 Interface', '69': 'GigabitEthernet2/0/4 Interface', '80': 'GigabitEthernet2/0/15 Interface', '86': 'GigabitEthernet2/0/21 Interface'}
+[DEBUG] 获取 LLDP 本地端口 ifIndex 映射...
+[DEBUG] LLDP 端口 ifIndex 映射: {'68': '5', '69': '5', '80': '5', '86': '5'}
+[DEBUG] 处理 LLDP 邻居数据，共 2 条
+[DEBUG] 处理邻居: LLDP端口=68, ifIndex=5
+[DEBUG] 添加邻居: GigabitEthernet2/0/3 ↔ GigabitEthernet1/0/2
+[DEBUG] 处理邻居: LLDP端口=69, ifIndex=5
+[DEBUG] 添加邻居: GigabitEthernet2/0/4 ↔ GigabitEthernet1/0/1
+[DEBUG] LLDP 发现 2 个邻居 on 192.168.4.102
+=============开始发现snmp_mac=================
+2026-04-05 07:21:48,193 - app - INFO - [SNMP MAC] 开始发现邻居，目标IP: 192.168.4.102, community: tcst
+2026-04-05 07:21:48,207 - app - INFO - [SNMP MAC] 获取桥接表 (dot1dTpFdbTable)...
+2026-04-05 07:21:48,474 - app - INFO - [SNMP MAC] 获取 ARP 表 (ipNetToMediaPhysAddress)...
+2026-04-05 07:21:48,679 - app - INFO - [SNMP MAC] 发现直连邻居: 本地接口 GigabitEthernet2/0/21 (86) 对端 IP 192.168.4.99 MAC 54:e1:ad:43:20:29
+127.0.0.1 - - [05/Apr/2026 07:21:50] "GET /topology/api/discovery/tasks HTTP/1.1" 200 -
+2026-04-05 07:21:51,687 - app - WARNING - 查询对端 192.168.4.99 接口信息超时
+2026-04-05 07:21:51,698 - app - WARNING - [SNMP MAC] 端口 Port-716 有 3 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:51,704 - app - WARNING - [SNMP MAC] 端口 Port-716 有 3 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:51,712 - app - WARNING - [SNMP MAC] 端口 Port-716 有 3 个 MAC，超过阈值 2，视为级联端口，跳过所有邻居
+2026-04-05 07:21:51,718 - app - INFO - [SNMP MAC] 共发现 1 个直连邻居
+[保存] 开始保存发现结果，任务ID=1，源IP=192.168.4.102
+[DEBUG] 总共发现 5 个连接
+[DEBUG] 处理连接 0: 192.168.4.100:GigabitEthernet1/0/2 ↔ 192.168.4.102:GigabitEthernet2/0/3 (协议: lldp)
+[保存] 更新现有连接: H3C:GigabitEthernet1/0/2 ↔ 5130-B:GigabitEthernet2/0/3
+[DEBUG] 处理连接 1: 192.168.4.100:GigabitEthernet1/0/1 ↔ 192.168.4.102:GigabitEthernet2/0/4 (协议: lldp)
+[保存] 更新现有连接: H3C:GigabitEthernet1/0/1 ↔ 5130-B:GigabitEthernet2/0/4
+[DEBUG] 处理连接 2: 192.168.4.102:GigabitEthernet2/0/3 ↔ 192.168.4.100:GigabitEthernet1/0/2 (协议: lldp)
+[保存] 更新现有连接: 5130-B:GigabitEthernet2/0/3 ↔ H3C:GigabitEthernet1/0/2
+[DEBUG] 处理连接 3: 192.168.4.102:GigabitEthernet2/0/4 ↔ 192.168.4.100:GigabitEthernet1/0/1 (协议: lldp)
+[保存] 更新现有连接: 5130-B:GigabitEthernet2/0/4 ↔ H3C:GigabitEthernet1/0/1
+[DEBUG] 处理连接 4: 192.168.4.102:GigabitEthernet2/0/21 ↔ 192.168.4.99:unknown (协议: snmp_mac)
+[保存] 更新现有连接: 5130-B:GigabitEthernet2/0/21 ↔ 发现设备_192.168.4.99:unknown
+[保存] 保存完成，任务ID=1
+
+我们已成功解决了问题。用户提供了详细的分析和日志，显示修改后的代码正确解析了LLDP邻居，生成了正确的两条连接（H3C GE1/0/1 ↔ 5130-B GE2/0/4 和 H3C GE1/0/2 ↔ 5130-B GE2/0/3），并且保存时更新了现有连接，没有产生重复或错误的Port-5连接。用户可能希望确认问题已解决并总结。因此，回答应肯定用户的修复，并总结关键点：修正OID解析、正确使用lldpLocPortDesc、优先使用接口描述而非ifIndex映射。
+
+太好了！问题已经成功解决！从您提供的日志可以看到，修复后的代码正确解析了 LLDP 邻居信息：
+
+    H3C 设备上，LLDP 端口 1 和 2 分别正确映射到 GigabitEthernet1/0/1 和 GigabitEthernet1/0/2
+
+    对端端口分别为 GigabitEthernet2/0/4 和 GigabitEthernet2/0/3
+
+    保存时成功添加了正确的连接，并更新了现有连接，没有产生重复或错误的 Port-5 连接
+
+总结：问题根本原因和修复关键
+根本原因
+
+    OID 解析错误：原代码从 OID 的 [-2] 位置提取 local_port，但实际应该提取 LLDP 端口号（即 OID 的倒数第三段？需要确认）——实际上您发现 lldpRemLocalPortNum 返回的值是 ifIndex（5），而正确的 LLDP 端口号（1,2）需要从 OID 索引中提取。
+
+    设备 ifIndex 映射异常：H3C 设备上，LLDP 端口 1 和 2 都映射到 ifIndex 5，而 ifIndex 5 对应 GigabitEthernet1/0/5，导致直接使用 ifIndex 无法得到正确接口名。
+
+    缺少对 lldpLocPortDesc 的优先使用：原代码未充分利用 LLDP 本地端口描述，该描述提供了正确的接口名（GigabitEthernet1/0/1 Interface）。
+
+修复关键
+
+    正确解析 OID：从 OID 中提取 LLDP 端口号（如 1、2），而不是错误地使用 lldpRemLocalPortNum 的值。
+
+    优先使用 lldpLocPortDesc：通过 lldpLocPortDesc OID 获取 LLDP 端口号对应的接口描述，这是最可靠的本地接口名来源。
+
+    建立 LLDP 端口号到接口名的映射：使用 lldpLocPortDesc 和 lldpLocPortIfIndex 辅助，在 run_protocol_discovery 中通过 local_interface_name 直接获取正确的接口名。
+
+最终结果
+
+    只生成两条正确的连接，方向从 H3C 到 5130-B，端口完全匹配。
+
+    双向 LLDP 发现虽然产生了两组连接（每个方向一组），但由于保存逻辑中的双向去重，最终数据库中只保留了正确的连接，没有重复。
+
+    SNMP MAC 发现也正常工作，发现了另一个邻居（192.168.4.99），但未影响交换机之间的连接。
+
+建议
+
+    将修复后的 discover_lldp_neighbors 和 run_protocol_discovery 中的 LLDP 处理部分合并到主代码库。
+
+    考虑将 CASCADE_THRESHOLD 调整为可配置，避免因级联端口误判而遗漏重要连接。
+
+    对于不支持 LLDP 或 LLDP 数据异常的设备，可以继续依赖 SNMP MAC 发现作为补充。
+
+现在拓扑发现功能已经完善，可以正确识别链路捆绑（两条独立的物理连接）。感谢您的详细分析和调试，这为后续类似问题的解决提供了宝贵经验！

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}编辑变更请求 - {{ cr.change_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-edit me-2"></i>编辑变更请求 #{{ cr.change_number }}</h2>
+        <span class="badge bg-info">状态: {{ cr.status }}</span>
+    </div>
+
+    <form method="post" class="needs-validation" novalidate>
+        {{ form.hidden_tag() }}
+        
+        <!-- 基本信息卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">基本信息</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.title.label(class="form-label") }}
+                        {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else "")) }}
+                        {% for error in form.title.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ form.change_type.label(class="form-label") }}
+                        {{ form.change_type(class="form-select" + (" is-invalid" if form.change_type.errors else "")) }}
+                        {% for error in form.change_type.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ form.category.label(class="form-label") }}
+                        {{ form.category(class="form-control" + (" is-invalid" if form.category.errors else "")) }}
+                        {% for error in form.category.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=3) }}
+                    {% for error in form.description.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 影响与风险卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">影响与风险</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.impact_level.label(class="form-label") }}
+                        {{ form.impact_level(class="form-select" + (" is-invalid" if form.impact_level.errors else "")) }}
+                        {% for error in form.impact_level.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ form.risk_level.label(class="form-label") }}
+                        {{ form.risk_level(class="form-select" + (" is-invalid" if form.risk_level.errors else "")) }}
+                        {% for error in form.risk_level.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ form.impact_description.label(class="form-label") }}
+                    {{ form.impact_description(class="form-control" + (" is-invalid" if form.impact_description.errors else ""), rows=2) }}
+                    {% for error in form.impact_description.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    {{ form.risk_description.label(class="form-label") }}
+                    {{ form.risk_description(class="form-control" + (" is-invalid" if form.risk_description.errors else ""), rows=2) }}
+                    {% for error in form.risk_description.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 计划信息卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">计划信息</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        {{ form.scheduled_date.label(class="form-label") }}
+                        {{ form.scheduled_date(class="form-control" + (" is-invalid" if form.scheduled_date.errors else ""), type="date") }}
+                        {% for error in form.scheduled_date.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ form.scheduled_start_time.label(class="form-label") }}
+                        {{ form.scheduled_start_time(class="form-control" + (" is-invalid" if form.scheduled_start_time.errors else ""), placeholder="HH:MM") }}
+                        {% for error in form.scheduled_start_time.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ form.scheduled_end_time.label(class="form-label") }}
+                        {{ form.scheduled_end_time(class="form-control" + (" is-invalid" if form.scheduled_end_time.errors else ""), placeholder="HH:MM") }}
+                        {% for error in form.scheduled_end_time.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ form.estimated_duration_hours.label(class="form-label") }}
+                        {{ form.estimated_duration_hours(class="form-control" + (" is-invalid" if form.estimated_duration_hours.errors else ""), step="0.5") }}
+                        {% for error in form.estimated_duration_hours.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ form.implementer_id.label(class="form-label") }}
+                    {{ form.implementer_id(class="form-select" + (" is-invalid" if form.implementer_id.errors else "")) }}
+                    {% for error in form.implementer_id.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 变更对象卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">变更对象</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {{ form.affected_devices_ids.label(class="form-label") }}
+                    {{ form.affected_devices_ids(class="form-select" + (" is-invalid" if form.affected_devices_ids.errors else ""), size=6) }}
+                    {% for error in form.affected_devices_ids.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                    <div class="form-text">选择受影响的配置项(CI)，将建立变更与CMDB的关联（支持影响分析）</div>
+                </div>
+                <div class="mb-3">
+                    {{ form.affected_services.label(class="form-label") }}
+                    {{ form.affected_services(class="form-control" + (" is-invalid" if form.affected_services.errors else ""), rows=2) }}
+                    {% for error in form.affected_services.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    {{ form.affected_users.label(class="form-label") }}
+                    {{ form.affected_users(class="form-control" + (" is-invalid" if form.affected_users.errors else ""), rows=2) }}
+                    {% for error in form.affected_users.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 详细计划卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">详细计划</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {{ form.implementation_plan.label(class="form-label") }}
+                    {{ form.implementation_plan(class="form-control" + (" is-invalid" if form.implementation_plan.errors else ""), rows=4) }}
+                    {% for error in form.implementation_plan.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    {{ form.rollback_plan.label(class="form-label") }}
+                    {{ form.rollback_plan(class="form-control" + (" is-invalid" if form.rollback_plan.errors else ""), rows=4) }}
+                    {% for error in form.rollback_plan.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    {{ form.test_plan.label(class="form-label") }}
+                    {{ form.test_plan(class="form-control" + (" is-invalid" if form.test_plan.errors else ""), rows=4) }}
+                    {% for error in form.test_plan.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- CAB评审卡片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">CAB评审</h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-3">
+                    {{ form.cab_review_required(class="form-check-input") }}
+                    {{ form.cab_review_required.label(class="form-check-label") }}
+                </div>
+            </div>
+        </div>
+
+        <!-- 提交按钮 -->
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('maintenance.view_change_request', change_id=cr.id) }}" class="btn btn-secondary">
+                <i class="fas fa-times me-1"></i>取消
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i>保存更改
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

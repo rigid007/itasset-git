@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+
+{% block title %}设备状态统计报表 - 数据中心管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 引入Chart.js用于图表 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .status-card {
+        transition: transform 0.3s;
+    }
+    .status-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .status-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .status-active { background-color: #d4edda; color: #155724; }
+    .status-inactive { background-color: #f8d7da; color: #721c24; }
+    .status-unknown { background-color: #e2e3e5; color: #383d41; }
+    .status-maintenance { background-color: #fff3cd; color: #856404; }
+    .status-offline { background-color: #cce5ff; color: #004085; }
+    .status-online { background-color: #d1ecf1; color: #0c5460; }
+    
+    .stat-card {
+        border-left: 4px solid #007bff;
+        background-color: #f8f9fa;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 30px;
+    }
+    .status-table th {
+        border-top: none;
+    }
+    .progress {
+        height: 20px;
+    }
+    .export-btn {
+        margin-right: 10px;
+    }
+    .status-filter {
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">设备状态统计报表</h1>
+            <p class="text-muted">统计系统中所有设备的状态分布情况</p>
+        </div>
+        <div>
+            <button onclick="exportToCSV()" class="btn btn-outline-success export-btn">
+                <i class="fas fa-file-csv"></i> 导出CSV
+            </button>
+            <button onclick="printReport()" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> 打印报表
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计概览卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                设备总数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_devices }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                在线设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set online_count = status_stats|selectattr('status', 'equalto', 'online')|map(attribute='count')|first|default(0) %}
+                                {{ online_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-wifi fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                维护中设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set maintenance_count = status_stats|selectattr('status', 'equalto', 'maintenance')|map(attribute='count')|first|default(0) %}
+                                {{ maintenance_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-tools fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                离线设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set offline_count = status_stats|selectattr('status', 'equalto', 'offline')|map(attribute='count')|first|default(0) %}
+                                {{ offline_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-plug fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 左侧：状态分布图表 -->
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">设备状态分布</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-7">
+                            <div class="chart-container">
+                                <canvas id="statusChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="table-responsive">
+                                <table class="table table-bordered status-table" width="100%" cellspacing="0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>状态</th>
+                                            <th>数量</th>
+                                            <th>占比</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for stat in status_stats %}
+                                        <tr>
+                                            <td>
+                                                <span class="status-badge status-{{ stat.status }}">
+                                                    {{ stat.status|upper }}
+                                                </span>
+                                            </td>
+                                            <td class="font-weight-bold">{{ stat.count }}</td>
+                                            <td>
+                                                <div class="progress">
+                                                    {% set percentage = (stat.count / total_devices * 100) if total_devices > 0 else 0 %}
+                                                    <div class="progress-bar bg-{{ get_status_color(stat.status) }}" 
+                                                         role="progressbar" 
+                                                         style="width: {{ percentage }}%"
+                                                         aria-valuenow="{{ percentage }}" 
+                                                         aria-valuemin="0" 
+                                                         aria-valuemax="100">
+                                                        {{ "%.1f"|format(percentage) }}%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：状态说明 -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">状态说明</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <span class="status-badge status-online mr-2">ONLINE</span>
+                        <span>设备在线运行正常</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="status-badge status-offline mr-2">OFFLINE</span>
+                        <span>设备离线无法连接</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="status-badge status-maintenance mr-2">MAINTENANCE</span>
+                        <span>设备正在维护中</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="status-badge status-inactive mr-2">INACTIVE</span>
+                        <span>设备已停用</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="status-badge status-unknown mr-2">UNKNOWN</span>
+                        <span>设备状态未知</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="status-badge status-active mr-2">ACTIVE</span>
+                        <span>设备活跃状态</span>
+                    </div>
+                    
+                    <hr>
+                    <div class="mt-3">
+                        <h6 class="font-weight-bold">报表说明</h6>
+                        <p class="small text-muted">
+                            本报表统计系统中所有设备的状态分布情况。
+                            数据实时更新，最后更新时间：<span id="currentTime"></span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速操作 -->
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">快速操作</h6>
+                </div>
+                <div class="card-body">
+                    <!-- 修改点1：检查你的设备列表路由名称 -->
+                    {% if url_for('device.device_list') %}
+                        <a href="{{ url_for('device.device_list') }}" class="btn btn-outline-primary btn-block mb-2">
+                            <i class="fas fa-list"></i> 查看设备列表
+                        </a>
+                    {% elif url_for('device.device_list') %}
+                        <a href="{{ url_for('device.device_list') }}" class="btn btn-outline-primary btn-block mb-2">
+                            <i class="fas fa-list"></i> 查看设备列表
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('main.device_list') }}" class="btn btn-outline-primary btn-block mb-2">
+                            <i class="fas fa-list"></i> 查看设备列表
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('report.device_status_report') }}?refresh=true" class="btn btn-outline-info btn-block mb-2">
+                        <i class="fas fa-sync-alt"></i> 刷新统计数据
+                    </a>
+                    
+                    <!-- 导出按钮，如果还没有导出路由，可以先注释掉 -->
+                    <!--
+                    <a href="{{ url_for('report.export_device_status') }}" class="btn btn-outline-success btn-block mb-2">
+                        <i class="fas fa-download"></i> 导出详细数据
+                    </a>
+                    -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详细设备列表 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">按状态查看设备</h6>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-toggle="dropdown">
+                            筛选状态
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            {% for stat in status_stats %}
+                            <!-- 修改点2：设备列表路由同样需要检查 -->
+                            {% if url_for('device.device_list') %}
+                                <a class="dropdown-item" href="{{ url_for('device.device_list') }}?status={{ stat.status }}">
+                                    <span class="status-badge status-{{ stat.status }} mr-2">{{ stat.status|upper }}</span>
+                                    ({{ stat.count }}个)
+                                </a>
+                            {% elif url_for('device.device_list') %}
+                                <a class="dropdown-item" href="{{ url_for('device.device_list') }}?status={{ stat.status }}">
+                                    <span class="status-badge status-{{ stat.status }} mr-2">{{ stat.status|upper }}</span>
+                                    ({{ stat.count }}个)
+                                </a>
+                            {% else %}
+                                <a class="dropdown-item" href="{{ url_for('main.device_list') }}?status={{ stat.status }}">
+                                    <span class="status-badge status-{{ stat.status }} mr-2">{{ stat.status|upper }}</span>
+                                    ({{ stat.count }}个)
+                                </a>
+                            {% endif %}
+                            {% endfor %}
+                            <div class="dropdown-divider"></div>
+                            {% if url_for('device.device_list') %}
+                                <a class="dropdown-item" href="{{ url_for('device.device_list') }}">查看所有设备</a>
+                            {% elif url_for('device.device_list') %}
+                                <a class="dropdown-item" href="{{ url_for('device.device_list') }}">查看所有设备</a>
+                            {% else %}
+                                <a class="dropdown-item" href="{{ url_for('main.device_list') }}">查看所有设备</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for stat in status_stats %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card status-card border-{{ get_status_color(stat.status) }}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="card-title mb-0">
+                                                <span class="status-badge status-{{ stat.status }}">
+                                                    {{ stat.status|upper }}
+                                                </span>
+                                            </h5>
+                                            <p class="card-text mt-2">
+                                                <span class="font-weight-bold">{{ stat.count }}</span> 台设备
+                                                <span class="text-muted">({{ "%.1f"|format(stat.count / total_devices * 100) if total_devices > 0 else 0 }}%)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <!-- 修改点3：设备列表路由同样需要检查 -->
+                                            {% if url_for('device.device_list') %}
+                                                <a href="{{ url_for('device.device_list') }}?status={{ stat.status }}" 
+                                                   class="btn btn-outline-{{ get_status_color(stat.status) }}">
+                                                    查看详情 <i class="fas fa-arrow-right"></i>
+                                                </a>
+                                            {% elif url_for('device.device_list') %}
+                                                <a href="{{ url_for('device.device_list') }}?status={{ stat.status }}" 
+                                                   class="btn btn-outline-{{ get_status_color(stat.status) }}">
+                                                    查看详情 <i class="fas fa-arrow-right"></i>
+                                                </a>
+                                            {% else %}
+                                                <a href="{{ url_for('main.device_list') }}?status={{ stat.status }}" 
+                                                   class="btn btn-outline-{{ get_status_color(stat.status) }}">
+                                                    查看详情 <i class="fas fa-arrow-right"></i>
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 获取状态统计数据
+    const statusStats = [
+        {% for stat in status_stats %}
+        {
+            status: '{{ stat.status }}',
+            count: {{ stat.count }},
+            percentage: {{ (stat.count / total_devices * 100) if total_devices > 0 else 0 }}
+        },
+        {% endfor %}
+    ];
+
+    // 状态颜色映射
+    const statusColors = {
+        'online': '#28a745',
+        'offline': '#dc3545',
+        'active': '#17a2b8',
+        'inactive': '#6c757d',
+        'maintenance': '#ffc107',
+        'unknown': '#6c757d'
+    };
+
+    // 准备图表数据
+    const labels = statusStats.map(stat => stat.status.toUpperCase());
+    const data = statusStats.map(stat => stat.count);
+    const backgroundColors = statusStats.map(stat => statusColors[stat.status] || '#6c757d');
+
+    // 绘制饼图
+    const ctx = document.getElementById('statusChart').getContext('2d');
+    const statusChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: '#fff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 更新当前时间
+    function updateCurrentTime() {
+        const now = new Date();
+        const options = { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            second: '2-digit'
+        };
+        document.getElementById('currentTime').textContent = now.toLocaleString('zh-CN', options);
+    }
+
+    // 导出CSV功能
+    function exportToCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        
+        // 添加标题行
+        csvContent += "状态,数量,百分比\r\n";
+        
+        // 添加数据行
+        statusStats.forEach(stat => {
+            const percentage = total_devices > 0 ? (stat.count / total_devices * 100).toFixed(2) : 0;
+            csvContent += `${stat.status.toUpperCase()},${stat.count},${percentage}%\r\n`;
+        });
+        
+        // 添加总计行
+        csvContent += `总计,${total_devices},100%\r\n`;
+        
+        // 创建下载链接
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `设备状态统计_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        
+        // 触发下载
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 打印报表功能
+    function printReport() {
+        const printContent = `
+            <html>
+            <head>
+                <title>设备状态统计报表</title>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .print-header { text-align: center; margin-bottom: 30px; }
+                    .print-header h1 { margin-bottom: 5px; }
+                    .print-header .date { color: #666; margin-bottom: 20px; }
+                    .status-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .status-table th, .status-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .status-table th { background-color: #f2f2f2; }
+                    .summary { margin-top: 30px; font-weight: bold; }
+                    .status-badge { padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="print-header">
+                    <h1>设备状态统计报表</h1>
+                    <div class="date">生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+                </div>
+                
+                <table class="status-table">
+                    <thead>
+                        <tr>
+                            <th>状态</th>
+                            <th>数量</th>
+                            <th>占比</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${statusStats.map(stat => `
+                            <tr>
+                                <td>${stat.status.toUpperCase()}</td>
+                                <td>${stat.count}</td>
+                                <td>${total_devices > 0 ? (stat.count / total_devices * 100).toFixed(1) : 0}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    设备总数: ${total_devices}<br>
+                    生成单位: 数据中心管理系统
+                </div>
+            </body>
+            </html>
+        `;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        updateCurrentTime();
+        // 每分钟更新时间
+        setInterval(updateCurrentTime, 60000);
+        
+        // 添加键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+P 打印
+            if (e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                printReport();
+            }
+            // Ctrl+E 导出
+            if (e.ctrlKey && e.key === 'e') {
+                e.preventDefault();
+                exportToCSV();
+            }
+        });
+    });
+</script>
+{% endblock %}

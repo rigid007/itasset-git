@@ -1,0 +1,956 @@
+{% extends "base.html" %}
+
+{% block title %}告警历史 - 监控系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 引入Chart.js图表库 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- 引入日期选择器 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<style>
+    /* 统计卡片样式 */
+    .stats-card {
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        color: white;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .stats-card.critical {
+        background: linear-gradient(135deg, #dc3545, #c82333);
+    }
+    
+    .stats-card.error {
+        background: linear-gradient(135deg, #fd7e14, #e66a00);
+    }
+    
+    .stats-card.warning {
+        background: linear-gradient(135deg, #ffc107, #e0a800);
+    }
+    
+    .stats-card.info {
+        background: linear-gradient(135deg, #0dcaf0, #0bb5d4);
+    }
+    
+    .stats-card.total {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+    }
+    
+    /* 图表容器样式 */
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 20px;
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    /* 筛选器样式 */
+    .filter-container {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* 标签页样式 */
+    .nav-tabs .nav-link {
+        color: #495057;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px 8px 0 0;
+    }
+    
+    .nav-tabs .nav-link.active {
+        background-color: #fff;
+        border-bottom: 3px solid #0d6efd;
+        color: #0d6efd;
+        font-weight: bold;
+    }
+    
+    .tab-content {
+        background-color: #fff;
+        border-radius: 0 0 8px 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    /* 时间范围选择器样式 */
+    .period-selector .btn-period {
+        border-radius: 20px;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .period-selector .btn-period.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    /* 表格样式 */
+    .alert-table th {
+        border-top: none;
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .severity-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .severity-critical {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .severity-error {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .severity-warning {
+        background-color: #e2f0ff;
+        color: #0c5460;
+    }
+    
+    .severity-info {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    /* 空状态样式 */
+    .empty-state {
+        padding: 40px 20px;
+        text-align: center;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
+    
+    /* 自定义日期选择器容器 */
+    .custom-date-container {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 10px;
+        display: none;
+    }
+    
+    .custom-date-container.show {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="h3 mb-2 text-gray-800">告警历史</h1>
+            <p class="text-muted">查看和分析历史告警数据，支持按时间范围和图表类型筛选</p>
+        </div>
+    </div>
+    
+    <!-- 筛选器区域 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="filter-container">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="mb-3">时间范围</h5>
+                        <div class="period-selector mb-3">
+                            <button class="btn btn-outline-primary btn-period {% if period == 'today' %}active{% endif %}" 
+                                    onclick="setPeriod('today')">今天</button>
+                            <button class="btn btn-outline-primary btn-period {% if period == 'yesterday' %}active{% endif %}" 
+                                    onclick="setPeriod('yesterday')">昨天</button>
+                            <button class="btn btn-outline-primary btn-period {% if period == 'week' %}active{% endif %}" 
+                                    onclick="setPeriod('week')">最近7天</button>
+                            <button class="btn btn-outline-primary btn-period {% if period == 'month' %}active{% endif %}" 
+                                    onclick="setPeriod('month')">最近30天</button>
+                            <button class="btn btn-outline-primary btn-period {% if period == 'custom' %}active{% endif %}" 
+                                    onclick="toggleCustomDate()">自定义</button>
+                        </div>
+                        
+                        <!-- 自定义日期选择器 -->
+                        <div id="customDateContainer" class="custom-date-container {% if period == 'custom' %}show{% endif %}">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="startDate">开始日期</label>
+                                    <input type="date" id="startDate" class="form-control" value="{{ start_date }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="endDate">结束日期</label>
+                                    <input type="date" id="endDate" class="form-control" value="{{ end_date }}">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-primary" onclick="applyCustomDate()">应用</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <h5 class="mb-3">图表类型</h5>
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-outline-secondary {% if chart_type == 'line' %}active{% endif %}">
+                                <input type="radio" name="chartType" value="line" autocomplete="off" 
+                                       {% if chart_type == 'line' %}checked{% endif %} onchange="setChartType('line')"> 折线图
+                            </label>
+                            <label class="btn btn-outline-secondary {% if chart_type == 'bar' %}active{% endif %}">
+                                <input type="radio" name="chartType" value="bar" autocomplete="off" 
+                                       {% if chart_type == 'bar' %}checked{% endif %} onchange="setChartType('bar')"> 柱状图
+                            </label>
+                            <label class="btn btn-outline-secondary {% if chart_type == 'pie' %}active{% endif %}">
+                                <input type="radio" name="chartType" value="pie" autocomplete="off" 
+                                       {% if chart_type == 'pie' %}checked{% endif %} onchange="setChartType('pie')"> 饼图
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card total">
+                <h5 class="font-weight-bold">告警总数</h5>
+                <h2 class="display-5">{{ historical_alerts|length }}</h2>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card critical">
+                <h5 class="font-weight-bold">紧急</h5>
+                <h2 class="display-5">{{ severity_counts.critical }}</h2>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card error">
+                <h5 class="font-weight-bold">错误</h5>
+                <h2 class="display-5">{{ severity_counts.error }}</h2>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card warning">
+                <h5 class="font-weight-bold">警告</h5>
+                <h2 class="display-5">{{ severity_counts.warning }}</h2>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card info">
+                <h5 class="font-weight-bold">信息</h5>
+                <h2 class="display-5">{{ severity_counts.info }}</h2>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6 mb-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #20c997, #17a2b8);">
+                <h5 class="font-weight-bold">已解决</h5>
+                <h2 class="display-5">{{ status_counts.resolved }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 图表区域 -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-line"></i> 告警趋势图
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                    <div class="text-center mt-2">
+                        <small class="text-muted">
+                            时间范围: 
+                            {% if period == 'today' %}今天
+                            {% elif period == 'yesterday' %}昨天
+                            {% elif period == 'week' %}最近7天
+                            {% elif period == 'month' %}最近30天
+                            {% else %}自定义时间范围
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-pie"></i> 告警级别分布
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 标签页: 更多统计信息 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="statTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="device-tab" data-toggle="tab" href="#device" role="tab">
+                                <i class="fas fa-server"></i> 设备类型分布
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="status-tab" data-toggle="tab" href="#status" role="tab">
+                                <i class="fas fa-tasks"></i> 告警状态分布
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="rules-tab" data-toggle="tab" href="#rules" role="tab">
+                                <i class="fas fa-list-alt"></i> 告警规则TOP10
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="statTabsContent">
+                        <!-- 设备类型分布 -->
+                        <div class="tab-pane fade show active" id="device" role="tabpanel">
+                            {% if device_type_counts %}
+                            <div class="row">
+                                <div class="col-md-7">
+                                    <div class="chart-container">
+                                        <canvas id="deviceChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>设备类型</th>
+                                                    <th>告警数量</th>
+                                                    <th>占比</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set total_alerts = historical_alerts|length %}
+                                                {% for device_type, count in device_type_counts.items() %}
+                                                <tr>
+                                                    <td>{{ device_type }}</td>
+                                                    <td>{{ count }}</td>
+                                                    <td>
+                                                        {% if total_alerts > 0 %}
+                                                        {{ "%.1f"|format(count / total_alerts * 100) }}%
+                                                        {% else %}0%{% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="empty-state">
+                                <i class="fas fa-chart-pie"></i>
+                                <h5>暂无设备类型数据</h5>
+                                <p class="text-muted">所选时间段内无设备类型信息</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 告警状态分布 -->
+                        <div class="tab-pane fade" id="status" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-7">
+                                    <div class="chart-container">
+                                        <canvas id="statusChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>状态</th>
+                                                    <th>数量</th>
+                                                    <th>占比</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set total_alerts = historical_alerts|length %}
+                                                {% for status, count in status_counts.items() %}
+                                                <tr>
+                                                    <td>
+                                                        {% if status == 'active' %}活跃
+                                                        {% elif status == 'acknowledged' %}已确认
+                                                        {% elif status == 'resolved' %}已解决
+                                                        {% elif status == 'suppressed' %}已抑制
+                                                        {% else %}{{ status }}{% endif %}
+                                                    </td>
+                                                    <td>{{ count }}</td>
+                                                    <td>
+                                                        {% if total_alerts > 0 %}
+                                                        {{ "%.1f"|format(count / total_alerts * 100) }}%
+                                                        {% else %}0%{% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 告警规则TOP10 -->
+                        <div class="tab-pane fade" id="rules" role="tabpanel">
+                            {% if top_rules %}
+                            <div class="row">
+                                <div class="col-md-7">
+                                    <div class="chart-container">
+                                        <canvas id="rulesChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>规则名称</th>
+                                                    <th>触发次数</th>
+                                                    <th>占比</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set total_alerts = historical_alerts|length %}
+                                                {% for rule_name, count in top_rules %}
+                                                <tr>
+                                                    <td>{{ rule_name }}</td>
+                                                    <td>{{ count }}</td>
+                                                    <td>
+                                                        {% if total_alerts > 0 %}
+                                                        {{ "%.1f"|format(count / total_alerts * 100) }}%
+                                                        {% else %}0%{% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="empty-state">
+                                <i class="fas fa-list-alt"></i>
+                                <h5>暂无告警规则数据</h5>
+                                <p class="text-muted">所选时间段内无告警规则信息</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 历史告警列表 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-history"></i> 历史告警列表
+                    </h6>
+                    <div>
+                        <small class="text-muted">共 {{ historical_alerts|length }} 条记录</small>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if historical_alerts %}
+                    <div class="table-responsive">
+                        <table class="table table-hover alert-table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>告警名称</th>
+                                    <th>严重级别</th>
+                                    <th>设备/来源</th>
+                                    <th>状态</th>
+                                    <th>持续时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in historical_alerts %}
+                                <tr>
+                                    <td>
+                                        <div>{{ alert.first_occurred.strftime('%Y-%m-%d') }}</div>
+                                        <small class="text-muted">{{ alert.first_occurred.strftime('%H:%M:%S') }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="font-weight-bold">{{ alert.title }}</div>
+                                        <small class="text-muted">{{ alert.description[:50] }}{% if alert.description|length > 50 %}...{% endif %}</small>
+                                    </td>
+                                    <td>
+                                        <span class="severity-badge severity-{{ alert.severity }}">
+                                            {% if alert.severity == 'critical' %}紧急
+                                            {% elif alert.severity == 'error' %}错误
+                                            {% elif alert.severity == 'warning' %}警告
+                                            {% else %}信息{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.source %}
+                                        <span class="badge badge-secondary">{{ alert.source }}</span>
+                                        {% endif %}
+                                        {% if alert.device and alert.device.name %}
+                                        <div class="mt-1"><small>{{ alert.device.name }}</small></div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.status == 'active' %}
+                                        <span class="badge badge-danger">活跃</span>
+                                        {% elif alert.status == 'acknowledged' %}
+                                        <span class="badge badge-warning">已确认</span>
+                                        {% elif alert.status == 'resolved' %}
+                                        <span class="badge badge-success">已解决</span>
+                                        {% elif alert.status == 'suppressed' %}
+                                        <span class="badge badge-secondary">已抑制</span>
+                                        {% else %}
+                                        <span class="badge badge-info">{{ alert.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.resolved_at %}
+                                        {% set duration = alert.resolved_at - alert.first_occurred %}
+                                        {% set hours = duration.total_seconds() // 3600 %}
+                                        {% set minutes = (duration.total_seconds() % 3600) // 60 %}
+                                        {% if hours > 0 %}
+                                        {{ hours|int }}小时{{ minutes|int }}分
+                                        {% else %}
+                                        {{ minutes|int }}分钟
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="viewAlertDetails('{{ alert.id }}')">
+                                            <i class="fas fa-eye"></i> 查看
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-history"></i>
+                        <h5>暂无历史告警</h5>
+                        <p class="text-muted">所选时间段内没有告警记录</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 图表实例
+    let trendChart = null;
+    let severityChart = null;
+    let deviceChart = null;
+    let statusChart = null;
+    let rulesChart = null;
+    
+    // 颜色定义
+    const chartColors = {
+        critical: '#dc3545',
+        error: '#fd7e14',
+        warning: '#ffc107',
+        info: '#0dcaf0',
+        resolved: '#20c997',
+        acknowledged: '#6f42c1',
+        active: '#dc3545',
+        suppressed: '#6c757d'
+    };
+    
+    // 初始化页面
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化图表
+        initTrendChart();
+        initSeverityChart();
+        initDeviceChart();
+        initStatusChart();
+        initRulesChart();
+        
+        // 初始化日期选择器
+        initDatePickers();
+        
+        // 如果URL中有自定义日期参数，显示自定义日期选择器
+        if (window.location.search.includes('period=custom')) {
+            document.getElementById('customDateContainer').classList.add('show');
+        }
+    });
+    
+    // 初始化趋势图表
+    function initTrendChart() {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        
+        // 准备数据
+        const labels = {{ time_series|tojson|safe }};
+        const data = {{ alert_counts_by_time|tojson|safe }};
+        
+        // 确定图表类型
+        const chartType = '{{ chart_type }}' === 'pie' ? 'line' : '{{ chart_type }}';
+        
+        trendChart = new Chart(ctx, {
+            type: chartType,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '告警数量',
+                    data: data,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: '时间'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '告警数量'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 初始化严重级别图表
+    function initSeverityChart() {
+        const ctx = document.getElementById('severityChart').getContext('2d');
+        
+        // 准备数据
+        const data = {
+            labels: ['紧急', '错误', '警告', '信息'],
+            datasets: [{
+                data: [
+                    {{ severity_counts.critical }},
+                    {{ severity_counts.error }},
+                    {{ severity_counts.warning }},
+                    {{ severity_counts.info }}
+                ],
+                backgroundColor: [
+                    chartColors.critical,
+                    chartColors.error,
+                    chartColors.warning,
+                    chartColors.info
+                ],
+                borderWidth: 1
+            }]
+        };
+        
+        severityChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 初始化设备类型图表
+    function initDeviceChart() {
+        const ctx = document.getElementById('deviceChart');
+        if (!ctx) return;
+        
+        // 准备数据
+        const deviceTypes = {{ device_type_counts.keys()|list|tojson|safe }};
+        const deviceCounts = {{ device_type_counts.values()|list|tojson|safe }};
+        
+        // 生成颜色
+        const backgroundColors = generateColors(deviceTypes.length);
+        
+        deviceChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: deviceTypes,
+                datasets: [{
+                    data: deviceCounts,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            boxWidth: 12
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 初始化状态图表
+    function initStatusChart() {
+        const ctx = document.getElementById('statusChart');
+        if (!ctx) return;
+        
+        // 准备数据
+        const statusLabels = ['活跃', '已确认', '已解决', '已抑制'];
+        const statusData = [
+            {{ status_counts.active }},
+            {{ status_counts.acknowledged }},
+            {{ status_counts.resolved }},
+            {{ status_counts.suppressed }}
+        ];
+        
+        statusChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusData,
+                    backgroundColor: [
+                        chartColors.active,
+                        chartColors.acknowledged,
+                        chartColors.resolved,
+                        chartColors.suppressed
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+    
+    // 初始化规则图表
+    function initRulesChart() {
+        const ctx = document.getElementById('rulesChart');
+        if (!ctx) return;
+        
+        // 准备数据
+        const ruleNames = {{ top_rules|map(attribute='0')|list|tojson|safe }};
+        const ruleCounts = {{ top_rules|map(attribute='1')|list|tojson|safe }};
+        
+        if (ruleNames.length === 0) return;
+        
+        // 生成颜色
+        const backgroundColors = generateColors(ruleNames.length);
+        
+        rulesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ruleNames,
+                datasets: [{
+                    label: '触发次数',
+                    data: ruleCounts,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y', // 水平条形图
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '触发次数'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 生成随机颜色
+    function generateColors(count) {
+        const colors = [];
+        const hueStep = 360 / count;
+        
+        for (let i = 0; i < count; i++) {
+            const hue = i * hueStep;
+            colors.push(`hsl(${hue}, 70%, 60%)`);
+        }
+        
+        return colors;
+    }
+    
+    // 设置时间范围
+    function setPeriod(period) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('period', period);
+        
+        // 如果是自定义范围，需要特殊处理
+        if (period === 'custom') {
+            toggleCustomDate();
+        } else {
+            // 移除自定义日期参数
+            url.searchParams.delete('start_date');
+            url.searchParams.delete('end_date');
+            window.location.href = url.toString();
+        }
+    }
+    
+    // 切换自定义日期选择器显示
+    function toggleCustomDate() {
+        const container = document.getElementById('customDateContainer');
+        container.classList.toggle('show');
+        
+        // 如果隐藏了自定义日期选择器，切换回今天
+        if (!container.classList.contains('show')) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('period', 'today');
+            url.searchParams.delete('start_date');
+            url.searchParams.delete('end_date');
+            window.location.href = url.toString();
+        }
+    }
+    
+    // 应用自定义日期
+    function applyCustomDate() {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        
+        if (!startDate || !endDate) {
+            alert('请选择开始日期和结束日期');
+            return;
+        }
+        
+        const url = new URL(window.location.href);
+        url.searchParams.set('period', 'custom');
+        url.searchParams.set('start_date', startDate);
+        url.searchParams.set('end_date', endDate);
+        window.location.href = url.toString();
+    }
+    
+    // 设置图表类型
+    function setChartType(chartType) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('chart', chartType);
+        window.location.href = url.toString();
+    }
+    
+    // 查看告警详情
+    function viewAlertDetails(alertId) {
+        window.location.href = `/alert/${alertId}`;
+    }
+    
+    // 初始化日期选择器
+    function initDatePickers() {
+        // 设置日期输入框的最大值为今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('endDate').max = today;
+        
+        // 当结束日期变化时，更新开始日期的最大值
+        document.getElementById('endDate').addEventListener('change', function() {
+            document.getElementById('startDate').max = this.value;
+        });
+        
+        // 当开始日期变化时，更新结束日期的最小值
+        document.getElementById('startDate').addEventListener('change', function() {
+            document.getElementById('endDate').min = this.value;
+        });
+    }
+    
+    // 导出数据为CSV
+    function exportToCSV() {
+        // 这里可以实现数据导出功能
+        alert('导出功能正在开发中...');
+    }
+</script>
+{% endblock %}

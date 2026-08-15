@@ -1,0 +1,1227 @@
+{% extends "base.html" %}
+
+{% block title %}审计日志 - 配置管理{% endblock %}
+
+{% block head %}
+<style>
+    .audit-action-create { color: #198754; }
+    .audit-action-update { color: #0d6efd; }
+    .audit-action-delete { color: #dc3545; }
+    .audit-action-read { color: #6c757d; }
+    .audit-action-login { color: #6f42c1; }
+    .audit-action-logout { color: #fd7e14; }
+    .audit-action-other { color: #20c997; }
+    
+    .audit-table tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+    }
+    
+    .audit-details {
+        background-color: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+    
+    .audit-details.expanded {
+        max-height: 1000px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    .audit-filter-card {
+        margin-bottom: 20px;
+    }
+    
+    .badge-resource {
+        background-color: #6f42c1;
+        color: white;
+    }
+    
+    .badge-action {
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+    
+    .badge-action-create { background-color: #d1e7dd; color: #0a3622; }
+    .badge-action-update { background-color: #cfe2ff; color: #084298; }
+    .badge-action-delete { background-color: #f8d7da; color: #842029; }
+    .badge-action-read { background-color: #e9ecef; color: #495057; }
+    .badge-action-login { background-color: #e0cffc; color: #4a1d96; }
+    .badge-action-logout { background-color: #ffe5d0; color: #984c0c; }
+    .badge-action-other { background-color: #d1f2eb; color: #0c5e4a; }
+    
+    .json-view {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        background-color: #f1f3f5;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .audit-message {
+        word-break: break-word;
+        line-height: 1.5;
+    }
+    
+    .filter-section {
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .export-btn {
+        margin-left: 10px;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .audit-timestamp {
+        white-space: nowrap;
+        font-size: 0.85rem;
+    }
+    
+    .user-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background-color: #0d6efd;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        margin-right: 8px;
+    }
+    
+    .changes-table {
+        font-size: 0.85rem;
+    }
+    
+    .changes-table .added {
+        background-color: #d1e7dd;
+    }
+    
+    .changes-table .removed {
+        background-color: #f8d7da;
+    }
+    
+    .changes-table .changed {
+        background-color: #fff3cd;
+    }
+    
+    .diff-view {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        padding: 5px;
+        border-radius: 3px;
+        margin-bottom: 5px;
+    }
+    
+    .diff-added {
+        background-color: #d1e7dd;
+        color: #0a3622;
+    }
+    
+    .diff-removed {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+    
+    .resource-link {
+        color: #0d6efd;
+        text-decoration: none;
+    }
+    
+    .resource-link:hover {
+        text-decoration: underline;
+    }
+    
+    .timeline-view {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .timeline-view::before {
+        content: '';
+        position: absolute;
+        left: 15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background-color: #dee2e6;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 15px;
+    }
+    
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -23px;
+        top: 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #0d6efd;
+        border: 2px solid white;
+    }
+    
+    .stat-card {
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card-primary {
+        background-color: #cfe2ff;
+        border-left: 4px solid #0d6efd;
+    }
+    
+    .stat-card-success {
+        background-color: #d1e7dd;
+        border-left: 4px solid #198754;
+    }
+    
+    .stat-card-danger {
+        background-color: #f8d7da;
+        border-left: 4px solid #dc3545;
+    }
+    
+    .stat-card-purple {
+        background-color: #e0cffc;
+        border-left: 4px solid #6f42c1;
+    }
+    
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .quick-filter-btn {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">审计日志</h1>
+        <div>
+            <button id="refresh-audit-logs" class="btn btn-outline-primary">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+            <button id="export-audit-logs" class="btn btn-outline-success export-btn" data-toggle="modal" data-target="#exportModal">
+                <i class="fas fa-download"></i> 导出
+            </button>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value" id="total-audits-count">{{ logs.total if logs.total else 0 }}</div>
+                <div class="stat-label">总审计记录</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card stat-card-success">
+                <div class="stat-value" id="today-audits-count">0</div>
+                <div class="stat-label">今日新增</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card stat-card-danger">
+                <div class="stat-value" id="delete-actions-count">0</div>
+                <div class="stat-label">删除操作</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card stat-card-purple">
+                <div class="stat-value" id="unique-users-count">0</div>
+                <div class="stat-label">操作用户</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 快速筛选 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">快速筛选</h6>
+        </div>
+        <div class="card-body">
+            <div class="mb-2">
+                <strong>操作类型:</strong>
+                {% for action in actions %}
+                <a href="{{ url_for('config.audit_logs', action=action, resource_type=current_resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) }}" 
+                   class="btn btn-sm quick-filter-btn {% if current_action == action %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    {{ action|replace('_', ' ')|title }}
+                </a>
+                {% endfor %}
+                <a href="{{ url_for('config.audit_logs', action='', resource_type=current_resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) }}" 
+                   class="btn btn-sm quick-filter-btn {% if not current_action %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    全部操作
+                </a>
+            </div>
+            <div class="mb-2">
+                <strong>资源类型:</strong>
+                {% for resource_type in resource_types %}
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) }}" 
+                   class="btn btn-sm quick-filter-btn {% if current_resource_type == resource_type %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    {{ resource_type|title }}
+                </a>
+                {% endfor %}
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type='', user_id=current_user_id, start_date=start_date, end_date=end_date) }}" 
+                   class="btn btn-sm quick-filter-btn {% if not current_resource_type %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    全部资源
+                </a>
+            </div>
+            <div>
+                <strong>时间范围:</strong>
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date='', end_date='') }}" 
+                   class="btn btn-sm quick-filter-btn {% if not start_date and not end_date %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    全部时间
+                </a>
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=today, end_date=today) }}" 
+                   class="btn btn-sm quick-filter-btn btn-outline-primary">
+                    今天
+                </a>
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=yesterday, end_date=yesterday) }}" 
+                   class="btn btn-sm quick-filter-btn btn-outline-primary">
+                    昨天
+                </a>
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=seven_days_ago, end_date='') }}" 
+                   class="btn btn-sm quick-filter-btn btn-outline-primary">
+                    最近7天
+                </a>
+                <a href="{{ url_for('config.audit_logs', action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=thirty_days_ago, end_date='') }}" 
+                   class="btn btn-sm quick-filter-btn btn-outline-primary">
+                    最近30天
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤条件 -->
+    <div class="card shadow mb-4 audit-filter-card">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">高级筛选</h6>
+        </div>
+        <div class="card-body">
+            <form id="audit-filter-form" method="get" action="{{ url_for('config.audit_logs') }}">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="action" class="form-label">操作类型</label>
+                        <select class="form-control" id="action" name="action">
+                            <option value="">全部操作</option>
+                            {% for action in actions %}
+                            <option value="{{ action }}" {% if current_action == action %}selected{% endif %}>
+                                {{ action|replace('_', ' ')|title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="resource_type" class="form-label">资源类型</label>
+                        <select class="form-control" id="resource_type" name="resource_type">
+                            <option value="">全部资源</option>
+                            {% for resource_type in resource_types %}
+                            <option value="{{ resource_type }}" {% if current_resource_type == resource_type %}selected{% endif %}>
+                                {{ resource_type|title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="user_id" class="form-label">操作用户</label>
+                        <select class="form-control" id="user_id" name="user_id">
+                            <option value="">全部用户</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if current_user_id == user.id %}selected{% endif %}>
+                                {{ user.username }} {% if user.email %}({{ user.email }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="resource_id" class="form-label">资源ID</label>
+                        <input type="number" class="form-control" id="resource_id" name="resource_id" 
+                               placeholder="输入资源ID" value="{{ request.args.get('resource_id', '') }}">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="start_date" class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="end_date" class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="search" class="form-label">关键词搜索</label>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               placeholder="搜索消息、详情、IP地址等" value="{{ request.args.get('search', '') }}">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button type="button" id="clear-filters" class="btn btn-outline-secondary">
+                        <i class="fas fa-filter-circle-xmark"></i> 清除筛选
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> 筛选日志
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 审计日志表格 -->
+    <div class="card shadow">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">审计记录列表</h6>
+            <div class="text-muted">
+                {% if logs.total > 0 %}
+                共 {{ logs.total }} 条记录，显示第 {{ logs.page }} 页 / 共 {{ logs.pages }} 页
+                {% else %}
+                暂无审计记录
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            {% if logs.total > 0 %}
+            <div class="table-responsive">
+                <table class="table table-hover audit-table">
+                    <thead>
+                        <tr>
+                            <th width="140">时间</th>
+                            <th width="100">操作</th>
+                            <th width="120">资源类型</th>
+                            <th>消息</th>
+                            <th width="150">用户</th>
+                            <th width="100">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs.items %}
+                        <tr class="audit-row" data-audit-id="{{ log.id }}">
+                            <td class="audit-timestamp">{{ log.local_timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.local_timestamp else '' }}</td>
+                            <td>
+                                {% if log.action == 'create' %}
+                                <span class="badge-action badge-action-create">CREATE</span>
+                                {% elif log.action == 'update' %}
+                                <span class="badge-action badge-action-update">UPDATE</span>
+                                {% elif log.action == 'delete' %}
+                                <span class="badge-action badge-action-delete">DELETE</span>
+                                {% elif log.action == 'read' %}
+                                <span class="badge-action badge-action-read">READ</span>
+                                {% elif log.action == 'login' %}
+                                <span class="badge-action badge-action-login">LOGIN</span>
+                                {% elif log.action == 'logout' %}
+                                <span class="badge-action badge-action-logout">LOGOUT</span>
+                                {% else %}
+                                <span class="badge-action badge-action-other">{{ log.action|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.resource_type %}
+                                <span class="badge badge-resource">{{ log.resource_type }}</span>
+                                {% if log.resource_id %}
+                                <small class="text-muted">#{{ log.resource_id }}</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="audit-message">{{ log.message|truncate(80) }}</td>
+                            <td>
+                                {% if log.user %}
+                                <div class="d-flex align-items-center">
+                                    <div class="user-avatar">
+                                        {{ log.user.username[:1]|upper }}
+                                    </div>
+                                    <div>
+                                        <div>{{ log.user.username }}</div>
+                                        <small class="text-muted">{{ log.user.email|truncate(20) if log.user.email else '' }}</small>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">系统/匿名</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary view-details-btn" data-audit-id="{{ log.id }}">
+                                    <i class="fas fa-eye"></i> 详情
+                                </button>
+                            </td>
+                        </tr>
+                        <tr class="audit-details-row" id="audit-details-{{ log.id }}" style="display: none;">
+                            <td colspan="6">
+                                <div class="audit-details p-3">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6>审计记录详情</h6>
+                                            <table class="table table-sm">
+                                                <tr>
+                                                    <th width="120">记录ID:</th>
+                                                    <td>{{ log.id }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>时间:</th>
+                                                    <td>{{ log.local_timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.local_timestamp else '' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>操作:</th>
+                                                    <td>
+                                                        {% if log.action == 'create' %}
+                                                        <span class="audit-action-create">{{ log.action|upper }}</span>
+                                                        {% elif log.action == 'update' %}
+                                                        <span class="audit-action-update">{{ log.action|upper }}</span>
+                                                        {% elif log.action == 'delete' %}
+                                                        <span class="audit-action-delete">{{ log.action|upper }}</span>
+                                                        {% elif log.action == 'read' %}
+                                                        <span class="audit-action-read">{{ log.action|upper }}</span>
+                                                        {% elif log.action == 'login' %}
+                                                        <span class="audit-action-login">{{ log.action|upper }}</span>
+                                                        {% elif log.action == 'logout' %}
+                                                        <span class="audit-action-logout">{{ log.action|upper }}</span>
+                                                        {% else %}
+                                                        <span class="audit-action-other">{{ log.action|upper }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>资源类型:</th>
+                                                    <td>{{ log.resource_type or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>资源ID:</th>
+                                                    <td>
+                                                        {% if log.resource_id %}
+                                                        {{ log.resource_id }}
+                                                        {% if log.resource_type and log.resource_id %}
+                                                        <a href="#" class="resource-link ml-2" data-resource-type="{{ log.resource_type }}" data-resource-id="{{ log.resource_id }}">
+                                                            <i class="fas fa-external-link-alt"></i> 查看资源
+                                                        </a>
+                                                        {% endif %}
+                                                        {% else %}
+                                                        N/A
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>状态:</th>
+                                                    <td>
+                                                        {% if log.status == 'success' %}
+                                                        <span class="badge bg-success">成功</span>
+                                                        {% elif log.status == 'failure' %}
+                                                        <span class="badge bg-danger">失败</span>
+                                                        {% elif log.status == 'partial' %}
+                                                        <span class="badge bg-warning">部分成功</span>
+                                                        {% else %}
+                                                        <span class="badge bg-secondary">{{ log.status or 'N/A' }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6>上下文信息</h6>
+                                            <table class="table table-sm">
+                                                <tr>
+                                                    <th width="120">用户:</th>
+                                                    <td>
+                                                        {% if log.user %}
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="user-avatar mr-2">
+                                                                {{ log.user.username[:1]|upper }}
+                                                            </div>
+                                                            <div>
+                                                                <div>{{ log.user.username }}</div>
+                                                                <small class="text-muted">{{ log.user.email or '' }}</small>
+                                                            </div>
+                                                        </div>
+                                                        {% else %}
+                                                        <span class="text-muted">系统/匿名</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>IP地址:</th>
+                                                    <td>{{ log.ip_address or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>用户代理:</th>
+                                                    <td>
+                                                        <small>{{ log.user_agent|truncate(50) if log.user_agent else 'N/A' }}</small>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>请求方法:</th>
+                                                    <td>{{ log.request_method or 'N/A' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>请求路径:</th>
+                                                    <td>{{ log.request_path or 'N/A' }}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <h6>完整消息</h6>
+                                            <div class="alert alert-light">
+                                                {{ log.message }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {% if log.details and log.details != '{}' %}
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <h6>详细数据</h6>
+                                            <div class="json-view" id="json-view-{{ log.id }}"></div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if log.changes and log.changes != '{}' %}
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <h6>变更记录</h6>
+                                            <div class="changes-container" id="changes-{{ log.id }}"></div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <small class="text-muted">
+                                                        记录ID: {{ log.id }} | 
+                                                        创建时间: {{ log.local_created_at.strftime('%Y-%m-%d %H:%M:%S') if log.local_created_at else '' }}
+                                                    </small>
+                                                </div>
+                                                <div>
+                                                    <button class="btn btn-sm btn-outline-secondary copy-audit-btn" data-audit-id="{{ log.id }}">
+                                                        <i class="fas fa-copy"></i> 复制记录
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger delete-audit-btn ml-2" data-audit-id="{{ log.id }}">
+                                                        <i class="fas fa-trash"></i> 删除
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页 -->
+            {% if logs.pages > 1 %}
+            <div class="pagination-container d-flex justify-content-center">
+                <nav aria-label="审计日志分页">
+                    <ul class="pagination">
+                        <li class="page-item {% if not logs.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('config.audit_logs', page=logs.prev_num, action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) if logs.has_prev else '#' }}">
+                                &laquo; 上一页
+                            </a>
+                        </li>
+                        
+                        {% for page_num in logs.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page_num %}
+                                {% if page_num == logs.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('config.audit_logs', page=page_num, action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('config.audit_logs', page=logs.next_num, action=current_action, resource_type=current_resource_type, user_id=current_user_id, start_date=start_date, end_date=end_date) if logs.has_next else '#' }}">
+                                下一页 &raquo;
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <div class="no-results">
+                <i class="fas fa-clipboard-check fa-3x mb-3"></i>
+                <h5>没有找到审计记录</h5>
+                <p class="text-muted">尝试调整筛选条件或进行一些系统操作来生成审计记录。</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 导出审计日志模态框 -->
+<div class="modal fade" id="exportModal" tabindex="-1" role="dialog" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">导出审计日志</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="export-form" method="post" action="{{ url_for('config.export_audit_logs') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="export-format">导出格式</label>
+                        <select class="form-control" id="export-format" name="format" required>
+                            <option value="csv">CSV (逗号分隔值)</option>
+                            <option value="json">JSON</option>
+                            <option value="txt">纯文本</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="export-limit">最大记录数 (0 表示无限制)</label>
+                        <input type="number" class="form-control" id="export-limit" name="limit" min="0" max="10000" value="1000">
+                        <small class="form-text text-muted">为避免导出文件过大，建议限制记录数。</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-details" name="include_details" checked>
+                            <label class="form-check-label" for="include-details">
+                                包含详细数据
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-changes" name="include_changes" checked>
+                            <label class="form-check-label" for="include-changes">
+                                包含变更记录
+                            </label>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 导出将基于当前筛选条件，包含 {{ logs.total }} 条审计记录。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download"></i> 开始导出
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 确认删除模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除这条审计记录吗？此操作将记录到系统日志中且无法撤销。</p>
+                <p class="text-muted" id="delete-audit-info"></p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>警告：</strong>删除审计记录可能会影响合规性要求，请谨慎操作。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                    <i class="fas fa-trash"></i> 确认删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 时间线视图模态框 -->
+<div class="modal fade" id="timelineModal" tabindex="-1" role="dialog" aria-labelledby="timelineModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="timelineModalLabel">资源变更时间线</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="timeline-view" id="timeline-content">
+                    <!-- 时间线内容将通过JS动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化变量
+        let auditToDelete = null;
+        
+        // 获取统计信息
+        fetchAuditStats();
+        
+        // 处理JSON数据展示
+        const jsonViews = document.querySelectorAll('.json-view');
+        jsonViews.forEach(view => {
+            const auditId = view.id.replace('json-view-', '');
+            // 将在详情展开时通过AJAX获取
+        });
+        
+        // 详情查看/隐藏功能
+        const viewDetailsButtons = document.querySelectorAll('.view-details-btn');
+        viewDetailsButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const auditId = this.getAttribute('data-audit-id');
+                const detailsRow = document.getElementById(`audit-details-${auditId}`);
+                const detailsDiv = detailsRow.querySelector('.audit-details');
+                
+                if (detailsRow.style.display === 'none') {
+                    // 显示详情
+                    detailsRow.style.display = 'table-row';
+                    detailsDiv.classList.add('expanded');
+                    this.innerHTML = '<i class="fas fa-eye-slash"></i> 隐藏';
+                    
+                    // 如果详情中有JSON数据，尝试获取并格式化
+                    const jsonView = document.getElementById(`json-view-${auditId}`);
+                    if (jsonView && !jsonView.hasChildNodes()) {
+                        fetch(`/config/api/audit-logs/${auditId}/details`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.details) {
+                                    jsonView.textContent = JSON.stringify(data.details, null, 2);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('获取审计详情失败:', error);
+                                jsonView.textContent = '无法加载详细数据';
+                            });
+                    }
+                    
+                    // 如果详情中有变更记录，尝试获取并格式化
+                    const changesContainer = document.getElementById(`changes-${auditId}`);
+                    if (changesContainer && !changesContainer.hasChildNodes()) {
+                        fetch(`/config/api/audit-logs/${auditId}/changes`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.changes) {
+                                    renderChanges(changesContainer, data.changes);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('获取变更记录失败:', error);
+                                changesContainer.innerHTML = '<div class="alert alert-warning">无法加载变更记录</div>';
+                            });
+                    }
+                } else {
+                    // 隐藏详情
+                    detailsDiv.classList.remove('expanded');
+                    setTimeout(() => {
+                        detailsRow.style.display = 'none';
+                        this.innerHTML = '<i class="fas fa-eye"></i> 详情';
+                    }, 300);
+                }
+            });
+        });
+        
+        // 点击行也可以展开/收起详情
+        const auditRows = document.querySelectorAll('.audit-row');
+        auditRows.forEach(row => {
+            row.addEventListener('click', function() {
+                const auditId = this.getAttribute('data-audit-id');
+                const viewBtn = this.querySelector(`.view-details-btn[data-audit-id="${auditId}"]`);
+                if (viewBtn) {
+                    viewBtn.click();
+                }
+            });
+        });
+        
+        // 清除筛选条件
+        document.getElementById('clear-filters').addEventListener('click', function() {
+            document.getElementById('action').value = '';
+            document.getElementById('resource_type').value = '';
+            document.getElementById('user_id').value = '';
+            document.getElementById('resource_id').value = '';
+            document.getElementById('start_date').value = '';
+            document.getElementById('end_date').value = '';
+            document.getElementById('search').value = '';
+            document.getElementById('audit-filter-form').submit();
+        });
+        
+        // 刷新按钮
+        document.getElementById('refresh-audit-logs').addEventListener('click', function() {
+            fetchAuditStats();
+            window.location.reload();
+        });
+        
+        // 复制审计记录功能
+        const copyAuditButtons = document.querySelectorAll('.copy-audit-btn');
+        copyAuditButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const auditId = this.getAttribute('data-audit-id');
+                
+                fetch(`/config/api/audit-logs/${auditId}`)
+                    .then(response => response.json())
+                    .then(audit => {
+                        const auditText = `
+审计记录ID: ${audit.id}
+时间: ${audit.timestamp}
+操作: ${audit.action}
+资源类型: ${audit.resource_type || 'N/A'}
+资源ID: ${audit.resource_id || 'N/A'}
+消息: ${audit.message}
+用户: ${audit.user_name || '系统/匿名'}
+IP地址: ${audit.ip_address || 'N/A'}
+用户代理: ${audit.user_agent || 'N/A'}
+状态: ${audit.status || 'N/A'}
+详细数据: ${JSON.stringify(audit.details, null, 2)}
+变更记录: ${JSON.stringify(audit.changes, null, 2)}
+                        `.trim();
+                        
+                        navigator.clipboard.writeText(auditText).then(() => {
+                            showToast('审计记录已复制到剪贴板', 'success');
+                        }).catch(err => {
+                            console.error('复制失败:', err);
+                            showToast('复制失败，请手动复制', 'error');
+                        });
+                    })
+                    .catch(error => {
+                        console.error('获取审计记录失败:', error);
+                        showToast('获取审计记录失败', 'error');
+                    });
+            });
+        });
+        
+        // 删除审计记录功能
+        const deleteAuditButtons = document.querySelectorAll('.delete-audit-btn');
+        deleteAuditButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                auditToDelete = this.getAttribute('data-audit-id');
+                
+                // 获取审计记录信息显示在确认框中
+                fetch(`/config/api/audit-logs/${auditToDelete}`)
+                    .then(response => response.json())
+                    .then(audit => {
+                        document.getElementById('delete-audit-info').textContent = 
+                            `记录ID: ${audit.id}, 时间: ${new Date(audit.timestamp).toLocaleString()}, 操作: ${audit.action}, 资源: ${audit.resource_type || 'N/A'} ${audit.resource_id ? '#' + audit.resource_id : ''}`;
+                        
+                        $('#deleteConfirmModal').modal('show');
+                    })
+                    .catch(error => {
+                        console.error('获取审计记录失败:', error);
+                        showToast('获取审计记录失败', 'error');
+                    });
+            });
+        });
+        
+        // 确认删除
+        document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+            if (!auditToDelete) return;
+            
+            fetch(`/config/api/audit-logs/${auditToDelete}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    showToast('审计记录删除成功', 'success');
+                    // 刷新页面
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '删除失败');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('删除审计记录失败:', error);
+                showToast(`删除失败: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                $('#deleteConfirmModal').modal('hide');
+                auditToDelete = null;
+            });
+        });
+        
+        // 查看资源链接
+        const resourceLinks = document.querySelectorAll('.resource-link');
+        resourceLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const resourceType = this.getAttribute('data-resource-type');
+                const resourceId = this.getAttribute('data-resource-id');
+                
+                // 根据资源类型跳转到相应的页面
+                // 这里可以根据您的应用逻辑实现
+                if (resourceType && resourceId) {
+                    // 示例：用户资源
+                    if (resourceType === 'user') {
+                        window.open(`/admin/users/${resourceId}`, '_blank');
+                    }
+                    // 可以添加更多资源类型的处理
+                    else {
+                        showToast(`查看 ${resourceType} #${resourceId} 功能暂未实现`, 'info');
+                    }
+                }
+            });
+        });
+        
+        // 导出表单提交
+        document.getElementById('export-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const params = new URLSearchParams();
+            
+            // 添加当前筛选条件
+            const action = document.getElementById('action').value;
+            const resourceType = document.getElementById('resource_type').value;
+            const userId = document.getElementById('user_id').value;
+            const resourceId = document.getElementById('resource_id').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const search = document.getElementById('search').value;
+            
+            if (action) params.append('action', action);
+            if (resourceType) params.append('resource_type', resourceType);
+            if (userId) params.append('user_id', userId);
+            if (resourceId) params.append('resource_id', resourceId);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            if (search) params.append('search', search);
+            
+            // 添加导出参数
+            for (const [key, value] of formData.entries()) {
+                params.append(key, value);
+            }
+            
+            // 创建导出请求
+            const exportUrl = `/config/api/audit-logs/export?${params.toString()}`;
+            
+            // 显示导出中提示
+            showToast('正在生成导出文件...', 'info');
+            
+            // 使用fetch下载文件
+            fetch(exportUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json, text/plain, */*'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '导出失败');
+                    });
+                }
+            })
+            .then(blob => {
+                // 创建下载链接
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // 从响应头获取文件名，或者使用默认文件名
+                const filename = `audit_logs_${new Date().toISOString().slice(0,10)}.${formData.get('format')}`;
+                a.download = filename;
+                
+                // 触发下载
+                document.body.appendChild(a);
+                a.click();
+                
+                // 清理
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('导出文件已生成', 'success');
+                $('#exportModal').modal('hide');
+            })
+            .catch(error => {
+                console.error('导出失败:', error);
+                showToast(`导出失败: ${error.message}`, 'error');
+            });
+        });
+        
+        // 自动设置结束日期为今天
+        if (!document.getElementById('end_date').value) {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('end_date').value = today;
+        }
+        
+        // 自动设置开始日期为30天前
+        if (!document.getElementById('start_date').value) {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            document.getElementById('start_date').value = thirtyDaysAgo.toISOString().split('T')[0];
+        }
+        
+        // 工具函数：渲染变更记录
+        function renderChanges(container, changes) {
+            if (!changes || Object.keys(changes).length === 0) {
+                container.innerHTML = '<div class="alert alert-info">无变更记录</div>';
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-sm changes-table">';
+            html += '<thead><tr><th width="200">字段</th><th>旧值</th><th>新值</th></tr></thead><tbody>';
+            
+            for (const [field, change] of Object.entries(changes)) {
+                const oldValue = change.old_value !== undefined ? String(change.old_value) : '';
+                const newValue = change.new_value !== undefined ? String(change.new_value) : '';
+                
+                let rowClass = '';
+                if (oldValue === '' && newValue !== '') {
+                    rowClass = 'added';
+                } else if (oldValue !== '' && newValue === '') {
+                    rowClass = 'removed';
+                } else {
+                    rowClass = 'changed';
+                }
+                
+                html += `<tr class="${rowClass}">`;
+                html += `<td><strong>${field}</strong></td>`;
+                html += `<td><code>${oldValue}</code></td>`;
+                html += `<td><code>${newValue}</code></td>`;
+                html += '</tr>';
+            }
+            
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+        
+        // 工具函数：获取审计统计信息
+        function fetchAuditStats() {
+            fetch('/config/api/audit-logs/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // 更新统计卡片
+                    if (data.today_count !== undefined) {
+                        document.getElementById('today-audits-count').textContent = data.today_count;
+                    }
+                    if (data.delete_count !== undefined) {
+                        document.getElementById('delete-actions-count').textContent = data.delete_count;
+                    }
+                    if (data.unique_users_count !== undefined) {
+                        document.getElementById('unique-users-count').textContent = data.unique_users_count;
+                    }
+                })
+                .catch(error => {
+                    console.error('获取统计信息失败:', error);
+                });
+        }
+        
+        // 工具函数：显示Toast提示
+        function showToast(message, type = 'info') {
+            // 检查是否已存在Toast容器
+            let toastContainer = document.getElementById('toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toast-container';
+                toastContainer.style.position = 'fixed';
+                toastContainer.style.top = '20px';
+                toastContainer.style.right = '20px';
+                toastContainer.style.zIndex = '9999';
+                document.body.appendChild(toastContainer);
+            }
+            
+            const toastId = 'toast-' + Date.now();
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+            
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // 初始化并显示Toast
+            const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+            bsToast.show();
+            
+            // 自动移除
+            toast.addEventListener('hidden.bs.toast', function () {
+                toast.remove();
+            });
+        }
+        
+        // 获取CSRF令牌（假设您的应用使用CSRF保护）
+        function getCsrfToken() {
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            return metaTag ? metaTag.content : '';
+        }
+    });
+</script>
+{% endblock %}

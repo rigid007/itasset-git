@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}趋势预测{% endblock %}
+{% block page_title %}性能趋势预测{% endblock %}
+{% block page_subtitle %}基于历史数据预测未来性能变化趋势{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-2 align-items-center" id="filterForm">
+            <div class="col-auto"><label class="form-label fw-bold mb-0">设备:</label></div>
+            <div class="col-auto">
+                <select name="device_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">全部设备</option>
+                    {% for d in devices %}
+                    <option value="{{ d.id }}" {% if selected_device_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto"><label class="form-label fw-bold mb-0">指标:</label></div>
+            <div class="col-auto">
+                <select name="metric" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="cpu_usage" {% if metric == 'cpu_usage' %}selected{% endif %}>CPU使用率</option>
+                    <option value="memory_usage" {% if metric == 'memory_usage' %}selected{% endif %}>内存使用率</option>
+                    <option value="disk_usage" {% if metric == 'disk_usage' %}selected{% endif %}>磁盘使用率</option>
+                </select>
+            </div>
+            <div class="col-auto"><label class="form-label fw-bold mb-0">天数:</label></div>
+            <div class="col-auto">
+                <select name="days" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="7" {% if days == 7 %}selected{% endif %}>7天</option>
+                    <option value="30" {% if days == 30 %}selected{% endif %}>30天</option>
+                    <option value="90" {% if days == 90 %}selected{% endif %}>90天</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary text-center h-100">
+            <div class="card-body py-3"><h4 class="text-primary mb-1" id="avgValue">-</h4><small>历史均值</small></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning text-center h-100">
+            <div class="card-body py-3"><h4 class="text-warning mb-1" id="maxValue">-</h4><small>历史峰值</small></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info text-center h-100">
+            <div class="card-body py-3"><h4 class="text-info mb-1" id="forecastAvg">-</h4><small>预测均值(7天)</small></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <canvas id="predictiveChart" height="100"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let predictiveChart = null;
+
+function loadPredictiveData() {
+    const params = new URLSearchParams(window.location.search);
+    const deviceId = params.get('device_id') || '';
+    const metric = params.get('metric') || 'cpu_usage';
+    const days = params.get('days') || '30';
+
+    fetch(`{{ url_for('monitoring_extra.api_predictive_data') }}?device_id=${deviceId}&metric=${metric}&days=${days}`)
+        .then(r => r.json())
+        .then(data => {
+            const history = data.history || [];
+            const forecast = data.forecast || [];
+
+            const histLabels = history.map(h => new Date(h.timestamp).toLocaleDateString());
+            const histValues = history.map(h => h.value);
+            const foreLabels = forecast.map(f => new Date(f.timestamp).toLocaleDateString());
+            const foreValues = forecast.map(f => f.value);
+
+            // 更新统计
+            const avg = (histValues.reduce((a, b) => a + b, 0) / histValues.length).toFixed(1);
+            const max = Math.max(...histValues).toFixed(1);
+            const foreAvg = (foreValues.reduce((a, b) => a + b, 0) / foreValues.length).toFixed(1);
+            document.getElementById('avgValue').textContent = avg + '%';
+            document.getElementById('maxValue').textContent = max + '%';
+            document.getElementById('forecastAvg').textContent = foreAvg + '%';
+
+            const ctx = document.getElementById('predictiveChart').getContext('2d');
+            if (predictiveChart) predictiveChart.destroy();
+
+            // 合并标签
+            const allLabels = [...histLabels, ...foreLabels];
+            const historyPadding = new Array(foreLabels.length).fill(null);
+            const forecastPadding = new Array(histLabels.length).fill(null);
+
+            predictiveChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allLabels,
+                    datasets: [
+                        {
+                            label: '历史数据',
+                            data: [...histValues, ...forecastPadding],
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                        },
+                        {
+                            label: '预测数据',
+                            data: [...forecastPadding, ...foreValues],
+                            borderColor: 'rgb(239, 68, 68)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderDash: [5, 5],
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + '%' } }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, title: { display: true, text: '使用率 (%)' } }
+                    }
+                }
+            });
+        });
+}
+
+document.addEventListener('DOMContentLoaded', loadPredictiveData);
+</script>
+{% endblock %}

@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}系统用户列表{% endblock %}
+
+{% block content %}
+<!-- 操作结果提示框 -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- 用户管理主卡片 -->
+<div class="card shadow-sm mb-5">
+    <!-- 卡片头部：标题 + 新增用户按钮 -->
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-dark fw-medium">用户信息管理</h5>
+        {% if has_permission(current_user, 'user:edit') %}
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            <i class="fas fa-user-plus me-1"></i> 新增用户
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- 用户列表表格 -->
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr class="text-center">
+                        <th width="5%">ID</th>
+                        <th width="15%">用户名</th>
+                        <th width="25%">邮箱</th>
+                        <th width="15%">用户类型</th>
+                        <th width="15%">账号状态</th>
+                        <th width="15%">创建时间</th>
+                        <th width="10%">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if users %}
+                        {% for user in users %}
+                        <tr class="text-center align-middle">
+                            <td>{{ user.id }}</td>
+                            <td>
+                                <span class="fw-medium">{{ user.username }}</span>
+                                {% if user.id == current_user.id %}
+                                <span class="badge bg-info ms-1">当前用户</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ user.email }}</small>
+                            </td>
+                            <td>
+                                {% if user.is_admin %}
+                                    <span class="badge bg-danger px-2 py-1">管理员</span>
+                                {% else %}
+                                    <span class="badge bg-primary px-2 py-1">普通用户</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.is_active %}
+                                    <span class="badge bg-success px-2 py-1">已启用</span>
+                                {% else %}
+                                    <span class="badge bg-secondary px-2 py-1">已禁用</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </td>
+                            <!-- 操作列：编辑 + 删除按钮 -->
+                            <td>
+                                <div class="d-flex justify-content-center gap-1">
+                                    {% if has_permission(current_user, 'user:edit') %}
+                                    <!-- 编辑按钮 -->
+                                    <button class="btn btn-xs btn-outline-primary edit-user-btn"
+                                            data-user-id="{{ user.id }}"
+                                            data-username="{{ user.username }}"
+                                            data-email="{{ user.email }}"
+                                            data-is-admin="{{ '1' if user.is_admin else '0' }}"
+                                            data-is-active="{{ '1' if user.is_active else '0' }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <!-- 删除按钮 -->
+                                    {% if user.id != current_user.id %}
+                                    <button class="btn btn-xs btn-outline-danger delete-user-btn"
+                                            data-user-id="{{ user.id }}"
+                                            data-username="{{ user.username }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-xs btn-outline-secondary" disabled
+                                            title="不能删除当前登录账号">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <!-- 无用户数据提示 -->
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-5">
+                                <i class="fas fa-users fs-3 mb-3"></i>
+                                <br>
+                                <h6 class="text-muted mb-1">暂无系统用户</h6>
+                                <small class="text-secondary">点击"新增用户"按钮创建首个系统账号</small>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 卡片底部：统计信息 -->
+    <div class="card-footer bg-light">
+        <small class="text-muted">
+            共 {{ users|length }} 个用户 | 
+            管理员 {{ users|selectattr('is_admin', 'equalto', true)|list|length }} 人 | 
+            普通用户 {{ users|selectattr('is_admin', 'equalto', false)|list|length }} 人 |
+            已启用 {{ users|selectattr('is_active', 'equalto', true)|list|length }} 人 |
+            已禁用 {{ users|selectattr('is_active', 'equalto', false)|list|length }} 人
+        </small>
+    </div>
+</div>
+
+<!-- 1. 新增用户弹窗 -->
+<div class="modal fade" id="addUserModal" tabindex="-1" aria-labelledby="addUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addUserModalLabel">新增系统用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('user.user_add') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="add-username" class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="add-username" name="username" 
+                               placeholder="请输入用户名（唯一）" required>
+                        <div class="form-text">用户名必须是唯一的，不能重复</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-email" class="form-label">邮箱 <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="add-email" name="email" 
+                               placeholder="请输入有效邮箱" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-password" class="form-label">密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="add-password" name="password" 
+                               placeholder="密码不少于6位" required minlength="6">
+                        <div class="form-text">密码长度至少6位</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">用户类型</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_admin" id="add-normal" value="0" checked>
+                            <label class="form-check-label" for="add-normal">普通用户</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_admin" id="add-admin" value="1">
+                            <label class="form-check-label" for="add-admin">管理员</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">账号状态</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_active" id="add-enabled" value="1" checked>
+                            <label class="form-check-label" for="add-enabled">已启用</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_active" id="add-disabled" value="0">
+                            <label class="form-check-label" for="add-disabled">已禁用</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">提交创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 编辑用户弹窗 -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">编辑用户信息</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('user.user_edit') }}" method="POST" id="editUserForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <!-- 隐藏域：用户ID -->
+                    <input type="hidden" id="edit-user-id" name="user_id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-username" class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit-username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-email" class="form-label">邮箱 <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="edit-email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-password" class="form-label">密码（留空则不修改）</label>
+                        <input type="password" class="form-control" id="edit-password" name="password" 
+                               placeholder="新密码不少于6位，留空不修改">
+                        <div class="form-text">留空表示不修改密码</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">用户类型</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_admin" id="edit-is-admin-0" value="0">
+                            <label class="form-check-label" for="edit-is-admin-0">普通用户</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_admin" id="edit-is-admin-1" value="1">
+                            <label class="form-check-label" for="edit-is-admin-1">管理员</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">账号状态</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_active" id="edit-is-active-1" value="1">
+                            <label class="form-check-label" for="edit-is-active-1">已启用</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="is_active" id="edit-is-active-0" value="0">
+                            <label class="form-check-label" for="edit-is-active-0">已禁用</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 3. 删除用户弹窗 -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteUserModalLabel">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除用户 <span id="delete-username" class="text-danger fw-bold"></span> 吗？</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 警告：此操作不可撤销，请谨慎操作！
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form method="POST" action="{{ url_for('user.user_delete') }}" id="deleteUserForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="user_id" id="delete-user-id">
+                    <button type="submit" class="btn btn-danger">确认删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // 编辑用户按钮点击事件
+        $('.edit-user-btn').click(function() {
+            var userId = $(this).data('user-id');
+            var username = $(this).data('username');
+            var email = $(this).data('email');
+            var isAdmin = $(this).data('is-admin');
+            var isActive = $(this).data('is-active');
+            
+            console.log('编辑用户数据:', {userId, username, email, isAdmin, isActive});
+            
+            // 填充表单数据
+            $('#edit-user-id').val(userId);
+            $('#edit-username').val(username);
+            $('#edit-email').val(email);
+            
+            // 设置用户类型单选框
+            if (isAdmin === '1' || isAdmin === 1) {
+                $('#edit-is-admin-1').prop('checked', true);
+                $('#edit-is-admin-0').prop('checked', false);
+            } else {
+                $('#edit-is-admin-0').prop('checked', true);
+                $('#edit-is-admin-1').prop('checked', false);
+            }
+            
+            // 设置账号状态单选框
+            if (isActive === '1' || isActive === 1) {
+                $('#edit-is-active-1').prop('checked', true);
+                $('#edit-is-active-0').prop('checked', false);
+            } else {
+                $('#edit-is-active-0').prop('checked', true);
+                $('#edit-is-active-1').prop('checked', false);
+            }
+            
+            // 显示编辑弹窗
+            var editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+            editModal.show();
+        });
+        
+        // 删除用户按钮点击事件
+        $('.delete-user-btn').click(function() {
+            var userId = $(this).data('user-id');
+            var username = $(this).data('username');
+            
+            console.log('删除用户数据:', {userId, username});
+            
+            // 填充删除弹窗数据
+            $('#delete-username').text(username);
+            $('#delete-user-id').val(userId);
+            
+            // 显示删除弹窗
+            var deleteModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+            deleteModal.show();
+        });
+        
+        // 编辑表单提交验证
+        $('#editUserForm').submit(function(e) {
+            var username = $('#edit-username').val().trim();
+            var email = $('#edit-email').val().trim();
+            var password = $('#edit-password').val().trim();
+            
+            if (!username) {
+                e.preventDefault();
+                alert('用户名不能为空');
+                $('#edit-username').focus();
+                return false;
+            }
+            
+            if (!email) {
+                e.preventDefault();
+                alert('邮箱不能为空');
+                $('#edit-email').focus();
+                return false;
+            }
+            
+            // 密码验证：如果填写了密码，长度必须至少6位
+            if (password && password.length < 6) {
+                e.preventDefault();
+                alert('密码长度不能少于6位');
+                $('#edit-password').focus();
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // 新增表单提交验证
+        $('#addUserModal form').submit(function(e) {
+            var username = $('#add-username').val().trim();
+            var email = $('#add-email').val().trim();
+            var password = $('#add-password').val().trim();
+            
+            if (!username) {
+                e.preventDefault();
+                alert('用户名不能为空');
+                $('#add-username').focus();
+                return false;
+            }
+            
+            if (!email) {
+                e.preventDefault();
+                alert('邮箱不能为空');
+                $('#add-email').focus();
+                return false;
+            }
+            
+            if (!password || password.length < 6) {
+                e.preventDefault();
+                alert('密码不能为空且长度不能少于6位');
+                $('#add-password').focus();
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // 自动填充示例数据（仅用于演示，实际环境中应移除）
+        if (window.location.href.includes('demo=true')) {
+            // 自动打开新增用户弹窗并填充示例数据
+            setTimeout(function() {
+                $('#add-username').val('testuser');
+                $('#add-email').val('test@example.com');
+                $('#add-password').val('password123');
+                $('#add-admin').prop('checked', true);
+            }, 500);
+        }
+    });
+</script>
+{% endblock %}

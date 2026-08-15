@@ -1,0 +1,170 @@
+{# templates/monitoring/notification_list.html #}
+{% extends "base.html" %}
+
+{% block title %}通知配置列表 - 监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bell me-2"></i>通知配置列表
+                    </h5>
+                    <a href="{{ url_for('monitoring.notification_create') }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg"></i> 新增配置
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if notifications %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>名称</th>
+                                    <th>类型</th>
+                                    <th>接收者</th>
+                                    <th>触发条件</th>
+                                    <th>状态</th>
+                                    <th>最后通知</th>
+                                    <th>通知次数</th>
+                                    <th>测试状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for n in notifications %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ n.name }}</strong>
+                                        {% if n.description %}
+                                        <br><small class="text-muted">{{ n.description | truncate(40) }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ n.notification_type | upper }}</span>
+                                    </td>
+                                    <td>
+                                        {% set receivers = n.get_receivers() %}
+                                        {% if receivers %}
+                                            <span class="badge bg-secondary">{{ receivers | length }} 个接收者</span>
+                                            <button class="btn btn-sm btn-link" data-bs-toggle="tooltip" 
+                                                    title="{{ receivers | join(', ') }}">
+                                                <i class="bi bi-info-circle"></i>
+                                            </button>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">未配置</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if n.trigger_on == 'all' %}
+                                            所有级别
+                                        {% elif n.trigger_on == 'critical' %}
+                                            严重
+                                        {% elif n.trigger_on == 'error' %}
+                                            错误
+                                        {% elif n.trigger_on == 'warning' %}
+                                            警告
+                                        {% elif n.trigger_on == 'info' %}
+                                            信息
+                                        {% else %}
+                                            {{ n.trigger_on }}
+                                        {% endif %}
+                                        {% if n.trigger_delay > 0 %}
+                                            <br><small class="text-muted">延迟 {{ n.trigger_delay }}秒</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if n.enabled %}
+                                            <span class="badge bg-success">启用</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if n.last_notified %}
+                                            {{ n.last_notified | strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ n.notification_count }}</td>
+                                    <td>
+                                        {% if n.test_status == 'success' %}
+                                            <span class="badge bg-success">成功</span>
+                                        {% elif n.test_status == 'failed' %}
+                                            <span class="badge bg-danger">失败</span>
+                                            {% if n.test_message %}
+                                            <button class="btn btn-sm btn-link" data-bs-toggle="tooltip" 
+                                                    title="{{ n.test_message }}">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                            </button>
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('monitoring.notification_edit', notification_id=n.id) }}" 
+                                               class="btn btn-outline-secondary" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{{ url_for('monitoring.notification_test', notification_id=n.id) }}" 
+                                               class="btn btn-outline-info" title="测试发送" onclick="return confirm('确定发送测试通知吗？')">
+                                                <i class="bi bi-send"></i>
+                                            </a>
+                                            {% if n.enabled %}
+                                            <a href="{{ url_for('monitoring.notification_toggle', notification_id=n.id) }}" 
+                                               class="btn btn-outline-warning" title="禁用" onclick="return confirm('确定要禁用该通知配置吗？')">
+                                                <i class="bi bi-pause-fill"></i>
+                                            </a>
+                                            {% else %}
+                                            <a href="{{ url_for('monitoring.notification_toggle', notification_id=n.id) }}" 
+                                               class="btn btn-outline-success" title="启用" onclick="return confirm('确定要启用该通知配置吗？')">
+                                                <i class="bi bi-play-fill"></i>
+                                            </a>
+                                            {% endif %}
+
+                                                <form method="POST" action="{{ url_for('monitoring.notification_delete', notification_id=n.id) }}" style="display:inline;">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('确定要删除该通知配置吗？此操作不可撤销。')">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+
+
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-bell-slash fs-1 text-muted"></i>
+                        <p class="mt-3 text-muted">暂无通知配置，请新增配置。</p>
+                        <a href="{{ url_for('monitoring.notification_create') }}" class="btn btn-primary">
+                            <i class="bi bi-plus-lg"></i> 新增配置
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 初始化 Bootstrap 工具提示
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+</script>
+{% endblock %}

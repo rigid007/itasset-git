@@ -1,0 +1,1991 @@
+{% extends 'base.html' %}
+
+{% block title %}仪表盘 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    /* ========== CSS Custom Properties ========== */
+    :root {
+        --viz-surface: #fcfcfb;
+        --viz-primary: #0b0b0b;
+        --viz-secondary: #52514e;
+        --viz-muted: #898781;
+        --viz-grid: #e1e0d9;
+        --categorical-1: #2a78d6;
+        --categorical-2: #eb6834;
+        --categorical-3: #1baf7a;
+        --categorical-4: #eda100;
+        --categorical-5: #e87ba4;
+        --categorical-6: #008300;
+        --categorical-7: #4a3aa7;
+        --categorical-8: #e34948;
+        --status-good: #0ca30c;
+        --status-warning: #fab219;
+        --status-serious: #ec835a;
+        --status-critical: #d03b3b;
+        --radius-sm: 8px;
+        --radius-md: 16px;
+        --radius-lg: 24px;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+        --shadow-lg: 0 8px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+        --shadow-xl: 0 16px 48px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.04);
+    }
+
+    /* ========== Dashboard Container ========== */
+    .dashboard {
+        padding: 24px 28px;
+        max-width: 1520px;
+        margin: 0 auto;
+    }
+
+    /* ========== Hero Banner ========== */
+    .hero-banner {
+        position: relative;
+        background: linear-gradient(135deg, #1a3a5c 0%, #1a5276 25%, #1a6d8a 50%, #1a5276 75%, #1a3a5c 100%);
+        background-size: 200% 200%;
+        animation: heroShimmer 8s ease infinite;
+        border-radius: var(--radius-lg);
+        padding: 36px 40px;
+        margin-bottom: 28px;
+        overflow: hidden;
+        box-shadow: var(--shadow-lg);
+    }
+    @keyframes heroShimmer {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+    }
+    .hero-banner::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(ellipse 80% 100% at 20% 50%, rgba(255,255,255,0.06) 0%, transparent 60%),
+            radial-gradient(circle 300px at 85% 20%, rgba(255,255,255,0.04) 0%, transparent 70%),
+            radial-gradient(circle 200px at 70% 80%, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .hero-banner::after {
+        content: '';
+        position: absolute;
+        top: -50%; right: -10%;
+        width: 500px; height: 500px;
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    /* Subtle dot pattern */
+    .hero-dots {
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+        background-size: 24px 24px;
+        pointer-events: none;
+        opacity: 0.6;
+    }
+    .hero-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 24px;
+    }
+    .hero-greeting h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin: 0 0 4px 0;
+        letter-spacing: -0.3px;
+    }
+    .hero-greeting .hero-date {
+        font-size: 0.9rem;
+        color: rgba(255,255,255,0.7);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .hero-greeting .hero-date i {
+        font-size: 0.8rem;
+        opacity: 0.6;
+    }
+    .hero-stats-row {
+        display: flex;
+        gap: 28px;
+        flex-wrap: wrap;
+    }
+    .hero-stat {
+        text-align: center;
+        min-width: 72px;
+    }
+    .hero-stat .hero-stat-value {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #fff;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+    .hero-stat .hero-stat-label {
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.6);
+        margin-top: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .hero-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .hero-btn {
+        padding: 10px 22px;
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .hero-btn-primary {
+        background: #fff;
+        color: #1a3a5c;
+    }
+    .hero-btn-primary:hover {
+        background: #f0f4f8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        color: #1a3a5c;
+    }
+    .hero-btn-outline {
+        background: transparent;
+        color: #fff;
+        border: 1.5px solid rgba(255,255,255,0.35);
+    }
+    .hero-btn-outline:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: rgba(255,255,255,0.6);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+
+    /* ========== KPI Stat Cards Row ========== */
+    .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    @media (max-width: 1400px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 768px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .kpi-row { grid-template-columns: 1fr; } }
+
+    .kpi-card {
+        background: #fff;
+        border-radius: var(--radius-md);
+        padding: 20px 22px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid rgba(0,0,0,0.06);
+        transition: all 0.25s ease;
+        position: relative;
+        overflow: hidden;
+        cursor: default;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lg);
+    }
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+    }
+    .kpi-card.accent-blue::before  { background: var(--categorical-1); }
+    .kpi-card.accent-green::before { background: var(--categorical-3); }
+    .kpi-card.accent-red::before   { background: var(--categorical-8); }
+    .kpi-card.accent-orange::before{ background: var(--categorical-2); }
+    .kpi-card.accent-violet::before{ background: var(--categorical-7); }
+    .kpi-card.accent-aqua::before  { background: #0dcaf0; }
+    .kpi-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .kpi-icon-circle {
+        width: 42px; height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+    .kpi-icon-circle.blue   { background: #e8f1fd; color: var(--categorical-1); }
+    .kpi-icon-circle.green  { background: #e6f7ee; color: var(--categorical-3); }
+    .kpi-icon-circle.red    { background: #fde8e8; color: var(--categorical-8); }
+    .kpi-icon-circle.orange { background: #fef3e6; color: var(--categorical-2); }
+    .kpi-icon-circle.violet { background: #eeebf9; color: var(--categorical-7); }
+    .kpi-icon-circle.aqua   { background: #e6f7f8; color: #0dcaf0; }
+    .kpi-trend-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 100px;
+    }
+    .kpi-trend-badge.up   { background: #e6f7ee; color: #0d7a3e; }
+    .kpi-trend-badge.down { background: #fde8e8; color: #b91c1c; }
+    .kpi-trend-badge.neutral { background: #f3f4f6; color: #52514e; }
+    .kpi-body { display: flex; flex-direction: column; gap: 2px; }
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--viz-primary);
+        line-height: 1;
+        letter-spacing: -0.5px;
+        font-variant-numeric: tabular-nums;
+    }
+    .kpi-label {
+        font-size: 0.82rem;
+        color: var(--viz-secondary);
+        font-weight: 500;
+    }
+    .kpi-footer {
+        font-size: 0.75rem;
+        color: var(--viz-muted);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    /* ========== Main Layout Grid ========== */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 24px;
+        margin-bottom: 28px;
+    }
+    @media (max-width: 1200px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+    /* ========== Panel / Card ========== */
+    .panel {
+        background: #fff;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
+        border: 1px solid rgba(0,0,0,0.06);
+        overflow: hidden;
+    }
+    .panel-header {
+        padding: 18px 24px;
+        border-bottom: 1px solid #f0f0ee;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .panel-header h5 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--viz-primary);
+        margin: 0;
+        letter-spacing: -0.2px;
+    }
+    .panel-header .panel-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 100px;
+        background: #f3f4f6;
+        color: var(--viz-secondary);
+    }
+    .panel-body {
+        padding: 20px 24px;
+    }
+    .panel-body.no-padding { padding: 0; }
+    .panel-footer {
+        padding: 12px 24px;
+        border-top: 1px solid #f0f0ee;
+        background: #fafaf8;
+    }
+
+    /* ========== Chart Containers ========== */
+    .chart-wrap {
+        position: relative;
+        width: 100%;
+    }
+    .chart-wrap-md { height: 280px; }
+    .chart-wrap-sm { height: 220px; }
+
+    /* ========== Activity Table ========== */
+    .activity-table { width: 100%; font-size: 0.84rem; }
+    .activity-table th {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--viz-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 10px 14px;
+        border-bottom: 2px solid #f0f0ee;
+    }
+    .activity-table td {
+        padding: 10px 14px;
+        vertical-align: middle;
+        border-bottom: 1px solid #f5f5f3;
+        color: var(--viz-primary);
+    }
+    .activity-table tbody tr {
+        transition: background 0.15s;
+    }
+    .activity-table tbody tr:hover {
+        background: #fafaf8;
+    }
+    .activity-device {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+    }
+    .activity-device i { font-size: 0.9rem; width: 18px; text-align: center; }
+    .activity-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 2px 10px;
+        border-radius: 100px;
+    }
+    .activity-badge.success { background: #e6f7ee; color: #0d7a3e; }
+    .activity-badge.warning { background: #fef3e6; color: #9a5d0b; }
+    .activity-badge.danger  { background: #fde8e8; color: #b91c1c; }
+    .activity-badge.info    { background: #e8f1fd; color: #1a56b8; }
+    .activity-badge.secondary { background: #f3f4f6; color: #52514e; }
+
+    /* ========== Quick Actions Grid ========== */
+    .quick-actions-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+    }
+    @media (max-width: 1400px) { .quick-actions-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 768px)  { .quick-actions-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    .quick-action-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 16px 8px;
+        border-radius: var(--radius-sm);
+        text-decoration: none;
+        transition: all 0.2s;
+        cursor: pointer;
+        border: 1px solid transparent;
+        background: #fafaf8;
+        color: var(--viz-primary);
+        text-align: center;
+    }
+    .quick-action-tile:hover {
+        background: #fff;
+        border-color: rgba(0,0,0,0.08);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+        color: var(--viz-primary);
+    }
+    .quick-action-tile .qa-icon {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.05rem;
+    }
+    .quick-action-tile .qa-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    /* ========== Cabinet Progress ========== */
+    .cabinet-item {
+        margin-bottom: 16px;
+    }
+    .cabinet-item:last-child { margin-bottom: 0; }
+    .cabinet-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 6px;
+    }
+    .cabinet-item-name {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: var(--viz-primary);
+    }
+    .cabinet-item-location {
+        font-size: 0.72rem;
+        color: var(--viz-muted);
+        margin-left: 6px;
+    }
+    .cabinet-item-pct {
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+    .cabinet-item-pct.low    { color: var(--status-good); }
+    .cabinet-item-pct.medium { color: #9a5d0b; }
+    .cabinet-item-pct.high   { color: var(--status-critical); }
+    .cabinet-progress {
+        height: 8px;
+        border-radius: 4px;
+        background: #f0f0ee;
+        overflow: hidden;
+    }
+    .cabinet-progress-bar {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.6s ease;
+    }
+    .cabinet-progress-bar.low    { background: var(--status-good); }
+    .cabinet-progress-bar.medium { background: var(--status-warning); }
+    .cabinet-progress-bar.high   { background: var(--status-critical); }
+
+    /* ========== System Status ========== */
+    .sys-status-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #f5f5f3;
+    }
+    .sys-status-item:last-child { border-bottom: none; }
+    .sys-status-label {
+        font-size: 0.84rem;
+        font-weight: 500;
+        color: var(--viz-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .sys-status-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .sys-status-dot.green  { background: var(--status-good); }
+    .sys-status-dot.red    { background: var(--status-critical); }
+    .sys-status-dot.orange { background: var(--status-warning); }
+    .sys-status-dot.green.pulse {
+        animation: statusPulse 2s infinite;
+    }
+    @keyframes statusPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0.4); }
+        50%      { box-shadow: 0 0 0 6px rgba(12,163,12,0); }
+    }
+    .sys-status-value {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--viz-secondary);
+    }
+    .sys-status-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 2px 10px;
+        border-radius: 100px;
+    }
+    .sys-status-badge.ok    { background: #e6f7ee; color: #0d7a3e; }
+    .sys-status-badge.warn  { background: #fef3e6; color: #9a5d0b; }
+    .sys-status-badge.error { background: #fde8e8; color: #b91c1c; }
+
+    /* ========== Alert Cards ========== */
+    .alert-section {
+        margin-bottom: 28px;
+    }
+    /* Alert card device row */
+    .alert-card-device {
+        font-size: 0.75rem;
+        color: var(--viz-secondary);
+        font-weight: 600;
+        margin: 2px 0 6px 0;
+    }
+    .alert-card-device a:hover { color: var(--categorical-1); }
+    /* Group chip hover */
+    .group-chip:hover {
+        background: #f5f7fa;
+        border-color: rgba(42,120,214,0.35) !important;
+        color: var(--categorical-1) !important;
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-sm);
+    }
+    .alert-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+    @media (max-width: 1200px) { .alert-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 768px)  { .alert-grid { grid-template-columns: 1fr; } }
+    .alert-card {
+        background: #fff;
+        border-radius: var(--radius-md);
+        padding: 18px 20px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid rgba(0,0,0,0.06);
+        border-left: 4px solid var(--status-critical);
+        transition: all 0.2s;
+    }
+    .alert-card:hover { box-shadow: var(--shadow-md); }
+    .alert-card.warning { border-left-color: var(--status-warning); }
+    .alert-card.info    { border-left-color: #0dcaf0; }
+    .alert-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    .alert-card-header h6 {
+        font-size: 0.88rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--viz-primary);
+    }
+    .alert-card-time {
+        font-size: 0.72rem;
+        color: var(--viz-muted);
+        white-space: nowrap;
+    }
+    .alert-card-desc {
+        font-size: 0.8rem;
+        color: var(--viz-secondary);
+        margin-bottom: 12px;
+        line-height: 1.5;
+    }
+    .alert-card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .alert-level-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 100px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .alert-level-badge.critical { background: #fde8e8; color: #b91c1c; }
+    .alert-level-badge.warning  { background: #fef3e6; color: #9a5d0b; }
+    .alert-level-badge.info     { background: #e8f1fd; color: #1a56b8; }
+
+    /* ========== Charts Row ========== */
+    .charts-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-bottom: 28px;
+    }
+    @media (max-width: 1200px) { .charts-row { grid-template-columns: 1fr; } }
+
+    /* ========== Empty State ========== */
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--viz-muted);
+    }
+    .empty-state i { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+    .empty-state p { font-size: 0.88rem; margin: 0; }
+
+    /* ========== Modal tweaks ========== */
+    .activity-modal-table { font-size: 0.84rem; }
+    .activity-modal-table th {
+        background: #fafaf8;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .activity-loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 200px;
+    }
+
+    /* ========== Counter animation ========== */
+    .kpi-value.count-up { transition: none; }
+
+    /* ========== Responsive refinements ========== */
+    @media (max-width: 768px) {
+        .dashboard { padding: 16px; }
+        .hero-banner { padding: 24px 20px; border-radius: var(--radius-md); }
+        .hero-content { flex-direction: column; align-items: flex-start; }
+        .hero-stats-row { gap: 16px; }
+        .hero-stat .hero-stat-value { font-size: 1.35rem; }
+        .hero-greeting h1 { font-size: 1.35rem; }
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+{% set stats = stats if stats is defined else {} %}
+{% set system_status = system_status if system_status is defined else {
+    'load_percent': 0,
+    'db_connected': false,
+    'monitoring_running': false,
+    'disk_usage': '0 GB / 0 GB',
+    'disk_percent': 0
+} %}
+{% set recent_activities = recent_activities if recent_activities is defined else [] %}
+{% set cabinet_status = cabinet_status if cabinet_status is defined else [] %}
+{% set alerts = alerts if alerts is defined else [] %}
+{% set device_type_distribution = device_type_distribution if device_type_distribution is defined else {} %}
+
+<div class="dashboard">
+
+    <!-- ====== HERO BANNER ====== -->
+    <div class="hero-banner">
+        <div class="hero-dots"></div>
+        <div class="hero-content">
+            <div class="hero-greeting">
+                <h1>欢迎回来，{{ current_user.username }}</h1>
+                <p class="hero-date">
+                    <i class="far fa-calendar-alt"></i>
+                    {{ current_date.strftime('%Y年%m月%d日') }} · 星期{{ ['一','二','三','四','五','六','日'][current_date.weekday()] }}
+                </p>
+            </div>
+            <div class="hero-stats-row">
+                <div class="hero-stat">
+                    <div class="hero-stat-value" data-count="{{ stats.get('total_devices', 0) }}">0</div>
+                    <div class="hero-stat-label">设备总数</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat-value" data-count="{{ stats.get('online_devices', 0) }}">0</div>
+                    <div class="hero-stat-label">在线设备</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat-value" data-count="{{ stats.get('today_alerts', 0) }}">0</div>
+                    <div class="hero-stat-label">今日告警</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat-value" data-count="{{ stats.get('total_cabinets', 0) }}">0</div>
+                    <div class="hero-stat-label">机柜总数</div>
+                </div>
+            </div>
+            <div class="hero-actions">
+                <a href="{{ url_for('device.device_list') }}" class="hero-btn hero-btn-primary">
+                    <i class="fas fa-server"></i> 设备管理
+                </a>
+                <a href="{{ url_for('device.device_add') }}" class="hero-btn hero-btn-outline">
+                    <i class="fas fa-plus"></i> 添加设备
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== KPI STAT CARDS ====== -->
+    <div class="kpi-row">
+        <!-- 设备总数 -->
+        <div class="kpi-card accent-blue">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle blue"><i class="fas fa-server"></i></div>
+                <span class="kpi-trend-badge up">
+                    <i class="fas fa-arrow-up me-1" style="font-size:0.6rem;"></i>{{ stats.get('new_devices_this_month', 0) }}
+                </span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('total_devices', 0) }}">0</div>
+                <div class="kpi-label">设备总数</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-plus-circle" style="font-size:0.65rem;"></i> 本月新增 {{ stats.get('new_devices_this_month', 0) }} 台
+            </div>
+        </div>
+
+        <!-- 在线设备 -->
+        <div class="kpi-card accent-green">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle green"><i class="fas fa-wifi"></i></div>
+                <span class="kpi-trend-badge up">
+                    {{ (stats.get('online_rate', 0))|round(1) }}%
+                </span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('online_devices', 0) }}">0</div>
+                <div class="kpi-label">在线设备</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-chart-line" style="font-size:0.65rem;"></i> 在线率 {{ (stats.get('online_rate', 0))|round(1) }}%
+            </div>
+        </div>
+
+        <!-- 离线设备 -->
+        <div class="kpi-card accent-red">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle red"><i class="fas fa-plug"></i></div>
+                {% if stats.get('offline_devices', 0) > 0 %}
+                <span class="kpi-trend-badge down">
+                    <i class="fas fa-exclamation-triangle" style="font-size:0.6rem;"></i> 需关注
+                </span>
+                {% else %}
+                <span class="kpi-trend-badge neutral">正常</span>
+                {% endif %}
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('offline_devices', 0) }}">0</div>
+                <div class="kpi-label">离线设备</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-clock" style="font-size:0.65rem;"></i> {{ stats.get('offline_devices', 0) }} 台需检查
+            </div>
+        </div>
+
+        <!-- 今日告警 -->
+        <div class="kpi-card accent-orange">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle orange"><i class="fas fa-bell"></i></div>
+                {% if stats.get('today_alerts', 0) > 0 %}
+                <span class="kpi-trend-badge down">{{ stats.get('today_alerts', 0) }} 条</span>
+                {% else %}
+                <span class="kpi-trend-badge neutral">无</span>
+                {% endif %}
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('today_alerts', 0) }}">0</div>
+                <div class="kpi-label">今日告警</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="far fa-clock" style="font-size:0.65rem;"></i> 最近: {{ stats.get('last_alert_time') or '无' }}
+            </div>
+        </div>
+
+        <!-- 位置总数 -->
+        <div class="kpi-card accent-violet">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle violet"><i class="fas fa-map-marker-alt"></i></div>
+                <span class="kpi-trend-badge neutral">
+                    {{ stats.get('data_center_locations', 0) }} DC
+                </span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('total_locations', 0) }}">0</div>
+                <div class="kpi-label">位置总数</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-building" style="font-size:0.65rem;"></i> 数据中心 {{ stats.get('data_center_locations', 0) }} 个
+            </div>
+        </div>
+
+        <!-- 机柜总数 -->
+        <div class="kpi-card accent-aqua">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle aqua"><i class="fas fa-archive"></i></div>
+                <span class="kpi-trend-badge neutral">
+                    {{ (stats.get('cabinet_avg_usage', 0))|round(1) }}%
+                </span>
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('total_cabinets', 0) }}">0</div>
+                <div class="kpi-label">机柜总数</div>
+            </div>
+            <div class="kpi-footer">
+                <i class="fas fa-chart-pie" style="font-size:0.65rem;"></i> 平均使用率 {{ (stats.get('cabinet_avg_usage', 0))|round(1) }}%
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== CHARTS ROW ====== -->
+    <div class="charts-row">
+        <!-- 设备类型分布 -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-chart-pie me-2" style="color:var(--categorical-1);"></i>设备类型分布</h5>
+                <span class="panel-badge">{{ device_type_distribution|length }} 种类型</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap chart-wrap-md">
+                    <canvas id="deviceTypeChart"></canvas>
+                </div>
+            </div>
+            {% if device_type_distribution %}
+            <div class="panel-footer">
+                <div class="d-flex flex-wrap gap-3 justify-content-center">
+                    {% set type_colors = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'] %}
+                    {% for type, count in device_type_distribution.items() %}
+                    <span style="font-size:0.78rem; font-weight:500; display:flex; align-items:center; gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:{{ type_colors[loop.index0 % 8] }};"></span>
+                        {{ type }}: {{ count }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 在线率趋势 (设备状态分布) -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-chart-bar me-2" style="color:var(--categorical-3);"></i>设备状态分布</h5>
+                <span class="panel-badge">实时</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap chart-wrap-md">
+                    <canvas id="deviceStatusChart"></canvas>
+                </div>
+            </div>
+            <div class="panel-footer">
+                <div class="d-flex justify-content-center gap-4" style="font-size:0.78rem;">
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--status-good);"></span>
+                        在线: {{ stats.get('online_devices', 0) }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--status-critical);"></span>
+                        离线: {{ stats.get('offline_devices', 0) }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--status-warning);"></span>
+                        告警: {{ stats.get('today_alerts', 0) }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== RELATION ROW: Groups + Monitor Trend ====== -->
+    <div class="charts-row">
+        <!-- 设备分组分布 -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-object-group me-2" style="color:var(--categorical-7);"></i>设备分组分布</h5>
+                <a href="{{ url_for('device_group.list_view') }}" class="panel-badge" style="text-decoration:none;">
+                    {{ stats.get('total_groups', 0) }} 个分组
+                </a>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap chart-wrap-md">
+                    <canvas id="groupChart"></canvas>
+                </div>
+            </div>
+            {% if top_groups %}
+            <div class="panel-footer">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for g in top_groups %}
+                    <a href="{{ url_for('device_group.detail', id=g.get('id')) }}" class="group-chip"
+                       style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:0.78rem;font-weight:500;color:var(--viz-secondary);border:1px solid rgba(0,0,0,0.08);border-radius:100px;padding:4px 12px;transition:all .15s;">
+                        <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:{{ g.get('color', '#2a78d6') }};"></span>
+                        {{ g.get('name', '未知') }}: {{ g.get('count', 0) }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 近7天监控记录 -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-wave-square me-2" style="color:var(--categorical-3);"></i>近7天监控记录</h5>
+                <a href="{{ url_for('monitoring.device_status') }}" class="panel-badge" style="text-decoration:none;">查看详情 →</a>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap chart-wrap-md">
+                    <canvas id="monitorTrendChart"></canvas>
+                </div>
+            </div>
+            <div class="panel-footer">
+                <div class="d-flex justify-content-center gap-4" style="font-size:0.78rem;flex-wrap:wrap;">
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--status-good);"></span>
+                        近7天在线: {{ stats.get('recent_online', 0) }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--status-critical);"></span>
+                        近7天离线: {{ stats.get('recent_offline', 0) }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i class="fas fa-database" style="font-size:0.7rem;color:var(--viz-muted);"></i>
+                        累计记录: {{ stats.get('total_monitor_logs', 0) }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i class="far fa-clock" style="font-size:0.7rem;color:var(--viz-muted);"></i>
+                        最近检测: {{ monitor_summary.get('last_check') if monitor_summary is defined else '从未检测' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== MAIN GRID: Activity + Sidebar ====== -->
+    <div class="dashboard-grid">
+        <!-- LEFT: Recent Activities -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-history me-2" style="color:var(--categorical-7);"></i>最近活动</h5>
+                <button type="button" class="btn btn-sm" style="font-size:0.78rem;font-weight:600;color:var(--categorical-1);border:1px solid rgba(42,120,214,0.2);border-radius:100px;padding:4px 16px;" data-bs-toggle="modal" data-bs-target="#allActivitiesModal">
+                    <i class="fas fa-list-ul me-1"></i> 查看全部
+                </button>
+            </div>
+            <div class="panel-body no-padding">
+                <table class="activity-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>设备/位置</th>
+                            <th>操作</th>
+                            <th>状态</th>
+                            <th>操作人</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if recent_activities %}
+                            {% for activity in recent_activities[:8] %}
+                            <tr>
+                                <td style="white-space:nowrap;">
+                                    {% if activity.timestamp %}
+                                    <span style="font-size:0.8rem;">{{ activity.timestamp }}</span>
+                                    {% else %}
+                                    <span style="color:var(--viz-muted);">--:--</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="activity-device">
+                                        {% if activity.type == 'device' %}
+                                            {% if activity.device_type == 'router' %}
+                                            <i class="fas fa-router" style="color:var(--categorical-1);"></i>
+                                            {% elif activity.device_type == 'switch' %}
+                                            <i class="fas fa-network-wired" style="color:#0dcaf0;"></i>
+                                            {% elif activity.device_type == 'firewall' %}
+                                            <i class="fas fa-shield-alt" style="color:var(--categorical-2);"></i>
+                                            {% elif activity.device_type == 'server' %}
+                                            <i class="fas fa-server" style="color:var(--viz-secondary);"></i>
+                                            {% else %}
+                                            <i class="fas fa-cube" style="color:var(--viz-muted);"></i>
+                                            {% endif %}
+                                        {% elif activity.type == 'location' %}
+                                            <i class="fas fa-map-marker-alt" style="color:var(--categorical-7);"></i>
+                                        {% elif activity.type == 'cabinet' %}
+                                            <i class="fas fa-archive" style="color:var(--viz-secondary);"></i>
+                                        {% else %}
+                                            <i class="fas fa-tasks" style="color:var(--viz-muted);"></i>
+                                        {% endif %}
+                                        <span>{{ activity.get('name')|default('未知', boolean=True)|truncate(18) }}</span>
+                                    </div>
+                                </td>
+                                <td>{{ activity.get('action', '未知操作') }}</td>
+                                <td>
+                                    {% set status_color = activity.get('status_color', 'secondary') %}
+                                    <span class="activity-badge {{ status_color }}">{{ activity.get('status', '未知') }}</span>
+                                </td>
+                                <td style="color:var(--viz-secondary);">{{ activity.get('user', '未知用户') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <i class="fas fa-history"></i>
+                                        <p>暂无活动记录</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LEFT: Recent Status Changes -->
+        <div class="panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-exchange-alt me-2" style="color:var(--status-warning);"></i>最近状态变更</h5>
+                <a href="{{ url_for('monitoring.history_data') }}" class="panel-badge" style="text-decoration:none;">历史记录 →</a>
+            </div>
+            <div class="panel-body no-padding">
+                {% if recent_status_changes %}
+                <div class="table-responsive">
+                    <table class="activity-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>设备</th>
+                                <th>状态变化</th>
+                                <th>原因</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for change in recent_status_changes[:8] %}
+                            <tr>
+                                <td style="white-space:nowrap;font-size:0.8rem;color:var(--viz-muted);">{{ change.get('time', '--:--') }}</td>
+                                <td>
+                                    <a href="{{ url_for('device.device_detail', id=change.get('device_id')) }}" class="activity-device" style="text-decoration:none;color:inherit;">
+                                        <i class="fas fa-server" style="color:var(--categorical-1);"></i>
+                                        <span>{{ change.get('device_name', '未知') }}</span>
+                                    </a>
+                                    <div style="font-size:0.72rem;color:var(--viz-muted);">{{ change.get('device_ip', '') }}</div>
+                                </td>
+                                <td style="white-space:nowrap;">
+                                    <span class="activity-badge {{ 'success' if change.get('online') else 'danger' }}">
+                                        {{ change.get('old_status', '未知') }} → {{ change.get('new_status', '未知') }}
+                                    </span>
+                                </td>
+                                <td style="font-size:0.75rem;color:var(--viz-muted);max-width:200px;">
+                                    {{ change.get('error', '')|truncate(24) if change.get('error') else '—' }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-exchange-alt"></i>
+                    <p>暂无状态变更记录</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- RIGHT: Sidebar -->
+        <div style="display:flex;flex-direction:column;gap:24px;">
+
+            <!-- Quick Actions -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h5><i class="fas fa-bolt me-2" style="color:var(--categorical-4);"></i>快速操作</h5>
+                </div>
+                <div class="panel-body">
+                    <div class="quick-actions-grid">
+                        <a href="{{ url_for('device.device_add') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#e8f1fd;color:var(--categorical-1);">
+                                <i class="fas fa-plus"></i>
+                            </div>
+                            <span class="qa-label">添加设备</span>
+                        </a>
+                        <button class="quick-action-tile border-0 w-100" data-bs-toggle="modal" data-bs-target="#dashboardImportModal" style="font-family:inherit;">
+                            <div class="qa-icon" style="background:#e6f7ee;color:var(--status-good);">
+                                <i class="fas fa-file-import"></i>
+                            </div>
+                            <span class="qa-label">导入设备</span>
+                        </button>
+                        <a href="{{ url_for('location.location_list') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#e6f7f8;color:#0dcaf0;">
+                                <i class="fas fa-map-marker-alt"></i>
+                            </div>
+                            <span class="qa-label">位置管理</span>
+                        </a>
+                        <a href="{{ url_for('cabinet.cabinet_list') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#fef3e6;color:var(--categorical-2);">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <span class="qa-label">机柜管理</span>
+                        </a>
+                        <button class="quick-action-tile border-0 w-100" onclick="location.href='{{ url_for('device.device_list') }}?show_scan_modal=true'" style="font-family:inherit;">
+                            <div class="qa-icon" style="background:#f3f4f6;color:var(--viz-secondary);">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <span class="qa-label">扫描设备</span>
+                        </button>
+                        <a href="{{ url_for('cabinet.cabinet_rack_view') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#eeebf9;color:var(--categorical-7);">
+                                <i class="fas fa-project-diagram"></i>
+                            </div>
+                            <span class="qa-label">机柜视图</span>
+                        </a>
+                        <a href="{{ url_for('location.location_viz') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#e6f7f8;color:#0dcaf0;">
+                                <i class="fas fa-map"></i>
+                            </div>
+                            <span class="qa-label">机房视图</span>
+                        </a>
+                        <a href="{{ url_for('monitoring.real_time_monitor') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#e8f1fd;color:var(--categorical-1);">
+                                <i class="fas fa-desktop"></i>
+                            </div>
+                            <span class="qa-label">实时监控</span>
+                        </a>
+                        <a href="{{ url_for('report.comprehensive_report') }}" class="quick-action-tile">
+                            <div class="qa-icon" style="background:#e6f7ee;color:var(--categorical-3);">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <span class="qa-label">综合报表</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Asset Relations -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h5><i class="fas fa-link me-2" style="color:var(--categorical-1);"></i>资产关联</h5>
+                </div>
+                <div class="panel-body">
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <i class="fas fa-object-group" style="color:var(--categorical-7);"></i>
+                            设备分组
+                        </span>
+                        <a href="{{ url_for('device_group.list_view') }}" class="sys-status-badge ok" style="text-decoration:none;">{{ stats.get('total_groups', 0) }} 组</a>
+                    </div>
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <i class="fas fa-tag" style="color:#0dcaf0;"></i>
+                            接口数量
+                        </span>
+                        <a href="{{ url_for('monitoring.interface_monitor') }}" class="sys-status-badge ok" style="text-decoration:none;">{{ stats.get('interface_count', 0) }}</a>
+                    </div>
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <i class="fas fa-shield-alt" style="color:var(--categorical-3);"></i>
+                            90天内维保到期
+                        </span>
+                        {% if stats.get('warranty_expiring_count', 0) > 0 %}
+                        <span class="sys-status-badge warn">{{ stats.get('warranty_expiring_count', 0) }} 台</span>
+                        {% else %}
+                        <span class="sys-status-badge ok">0 台</span>
+                        {% endif %}
+                    </div>
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <i class="fas fa-times-circle" style="color:var(--status-critical);"></i>
+                            维保已过期
+                        </span>
+                        {% if stats.get('warranty_expired_count', 0) > 0 %}
+                        <span class="sys-status-badge error">{{ stats.get('warranty_expired_count', 0) }} 台</span>
+                        {% else %}
+                        <span class="sys-status-badge ok">0 台</span>
+                        {% endif %}
+                    </div>
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <i class="fas fa-question-circle" style="color:var(--status-warning);"></i>
+                            未分组设备
+                        </span>
+                        {% if stats.get('ungrouped_devices', 0) > 0 %}
+                        <a href="{{ url_for('device_group.list_view') }}" class="sys-status-badge warn" style="text-decoration:none;">{{ stats.get('ungrouped_devices', 0) }} 台</a>
+                        {% else %}
+                        <span class="sys-status-badge ok">0 台</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cabinet Usage -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h5><i class="fas fa-archive me-2" style="color:var(--categorical-2);"></i>机柜使用情况</h5>
+                    <a href="{{ url_for('cabinet.cabinet_list') }}" class="panel-badge" style="text-decoration:none;">查看全部 →</a>
+                </div>
+                <div class="panel-body">
+                    {% if cabinet_status %}
+                        {% for cabinet in cabinet_status[:5] %}
+                        <div class="cabinet-item">
+                            <div class="cabinet-item-header">
+                                <span>
+                                    <span class="cabinet-item-name">{{ cabinet.get('name', '未知') }}</span>
+                                    <span class="cabinet-item-location">{{ cabinet.get('location', '') }}</span>
+                                </span>
+                                {% set pct = cabinet.get('usage_percent', 0)|round(1) %}
+                                {% if pct < 70 %}
+                                <span class="cabinet-item-pct low">{{ pct }}%</span>
+                                {% elif pct < 90 %}
+                                <span class="cabinet-item-pct medium">{{ pct }}%</span>
+                                {% else %}
+                                <span class="cabinet-item-pct high">{{ pct }}%</span>
+                                {% endif %}
+                            </div>
+                            <div class="cabinet-progress">
+                                {% set pct = cabinet.get('usage_percent', 0) %}
+                                {% if pct < 70 %}
+                                <div class="cabinet-progress-bar low" style="width:{{ pct }}%;"></div>
+                                {% elif pct < 90 %}
+                                <div class="cabinet-progress-bar medium" style="width:{{ pct }}%;"></div>
+                                {% else %}
+                                <div class="cabinet-progress-bar high" style="width:{{ pct }}%;"></div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-server"></i>
+                            <p>暂无机柜数据</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Discovery Tasks -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h5><i class="fas fa-radar me-2" style="color:var(--categorical-4);"></i>发现任务</h5>
+                    <a href="{{ url_for('device.device_discovery') }}" class="panel-badge" style="text-decoration:none;">任务中心 →</a>
+                </div>
+                <div class="panel-body">
+                    {% if recent_discovery %}
+                        {% for task in recent_discovery[:3] %}
+                        <div class="sys-status-item">
+                            <span class="sys-status-label" style="gap:8px;">
+                                {% if task.get('status') == 'completed' and task.get('enabled') %}
+                                <span class="sys-status-dot green"></span>
+                                {% elif task.get('status') == 'completed' %}
+                                <span class="sys-status-dot orange"></span>
+                                {% else %}
+                                <span class="sys-status-dot red"></span>
+                                {% endif %}
+                                <span style="display:flex;flex-direction:column;line-height:1.35;">
+                                    <a href="{{ url_for('device.discovery_task_detail', task_id=task.get('id')) }}" style="text-decoration:none;color:inherit;font-weight:600;">{{ task.get('name', '未知任务') }}</a>
+                                    <small style="font-weight:400;color:var(--viz-muted);">
+                                        {{ task.get('last_run') or '未运行' }} · 发现 {{ task.get('discovered_count', 0) }} 台
+                                    </small>
+                                </span>
+                            </span>
+                            <span class="sys-status-value">{{ task.get('status') }}</span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-radar"></i>
+                            <p>暂无发现任务</p>
+                        </div>
+                    {% endif %}
+                    <div class="d-flex gap-2 mt-3 pt-3" style="border-top:1px solid #f5f5f3;">
+                        <a href="{{ url_for('device.device_discovery') }}" class="btn btn-sm flex-fill" style="font-size:0.78rem;font-weight:600;color:var(--categorical-1);border:1px solid rgba(42,120,214,0.2);border-radius:100px;">
+                            <i class="fas fa-plus me-1"></i> 新建任务
+                        </a>
+                        <a href="{{ url_for('device.device_scan') }}" class="btn btn-sm flex-fill" style="font-size:0.78rem;font-weight:600;color:var(--viz-secondary);border:1px solid rgba(0,0,0,0.1);border-radius:100px;">
+                            <i class="fas fa-search me-1"></i> 设备扫描
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h5><i class="fas fa-heartbeat me-2" style="color:var(--status-critical);"></i>系统状态</h5>
+                </div>
+                <div class="panel-body">
+                    <!-- CPU / Load -->
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <span class="sys-status-dot green pulse"></span> 系统负载
+                        </span>
+                        <span class="sys-status-value">{{ system_status.get('load_percent', 0) }}%</span>
+                    </div>
+                    <div style="padding:0 0 12px 0;">
+                        <div class="cabinet-progress">
+                            {% set lp = system_status.get('load_percent', 0) %}
+                            {% if lp < 70 %}
+                            <div class="cabinet-progress-bar low" style="width:{{ lp }}%;"></div>
+                            {% elif lp < 90 %}
+                            <div class="cabinet-progress-bar medium" style="width:{{ lp }}%;"></div>
+                            {% else %}
+                            <div class="cabinet-progress-bar high" style="width:{{ lp }}%;"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- DB -->
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            {% if system_status.get('db_connected', false) %}
+                            <span class="sys-status-dot green"></span>
+                            {% else %}
+                            <span class="sys-status-dot red"></span>
+                            {% endif %}
+                            数据库连接
+                        </span>
+                        {% if system_status.get('db_connected', false) %}
+                        <span class="sys-status-badge ok">正常</span>
+                        {% else %}
+                        <span class="sys-status-badge error">异常</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Monitoring -->
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            {% if system_status.get('monitoring_running', false) %}
+                            <span class="sys-status-dot green pulse"></span>
+                            {% else %}
+                            <span class="sys-status-dot orange"></span>
+                            {% endif %}
+                            监控服务
+                        </span>
+                        {% if system_status.get('monitoring_running', false) %}
+                        <span class="sys-status-badge ok">运行中</span>
+                        {% else %}
+                        <span class="sys-status-badge warn">已停止</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Disk -->
+                    <div class="sys-status-item">
+                        <span class="sys-status-label">
+                            <span class="sys-status-dot green"></span> 存储空间
+                        </span>
+                        <span class="sys-status-value">{{ system_status.get('disk_usage', '0 GB / 0 GB') }}</span>
+                    </div>
+                    <div style="padding: 8px 0 4px 0;">
+                        <div class="cabinet-progress">
+                            {% set dp = system_status.get('disk_percent', 0) %}
+                            {% if dp < 70 %}
+                            <div class="cabinet-progress-bar low" style="width:{{ dp }}%;"></div>
+                            {% elif dp < 90 %}
+                            <div class="cabinet-progress-bar medium" style="width:{{ dp }}%;"></div>
+                            {% else %}
+                            <div class="cabinet-progress-bar high" style="width:{{ dp }}%;"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3 pt-3" style="border-top:1px solid #f5f5f3;">
+                        <a href="{{ url_for('monitoring.monitor_settings') }}" class="btn btn-sm flex-fill" style="font-size:0.78rem;font-weight:600;color:var(--viz-secondary);border:1px solid rgba(0,0,0,0.1);border-radius:100px;">
+                            <i class="fas fa-cogs me-1"></i> 系统设置
+                        </a>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-sm flex-fill" style="font-size:0.78rem;font-weight:600;color:#fff;background:var(--categorical-1);border-radius:100px;">
+                            <i class="fas fa-sync me-1"></i> 刷新状态
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== ALERTS SECTION ====== -->
+    {% if alerts %}
+    <div class="alert-section">
+        <div class="panel" style="border-top:3px solid var(--status-critical);">
+            <div class="panel-header">
+                <h5>
+                    <i class="fas fa-exclamation-triangle me-2" style="color:var(--status-critical);"></i>未处理告警
+                </h5>
+                <span class="panel-badge" style="background:#fde8e8;color:#b91c1c;">{{ alerts|length }} 个</span>
+            </div>
+            <div class="panel-body">
+                <div class="alert-grid">
+                    {% for alert in alerts %}
+                    <div class="alert-card {% if alert.get('level') == 'warning' %}warning{% elif alert.get('level') == 'info' %}info{% endif %}">
+                        <div class="alert-card-header">
+                            <h6>{{ alert.get('title', '未知告警') }}</h6>
+                            <span class="alert-card-time">{{ alert.get('time', '--:--') }}</span>
+                        </div>
+                        {% if alert.get('device_name') %}
+                        <div class="alert-card-device">
+                            <a href="{{ alert.get('device_link', '#') }}" style="text-decoration:none;color:inherit;">
+                                <i class="fas fa-server me-1" style="font-size:0.7rem;"></i>
+                                {{ alert.get('device_name') }}
+                                {% if alert.get('occurrence_count', 1) > 1 %}
+                                <span class="text-muted">· 已发生 {{ alert.get('occurrence_count') }} 次</span>
+                                {% endif %}
+                            </a>
+                        </div>
+                        {% endif %}
+                        <div class="alert-card-desc">{{ alert.get('description', '无描述')|truncate(80) }}</div>
+                        <div class="alert-card-footer">
+                            <span class="alert-level-badge {{ alert.get('level_class', alert.get('level', 'critical')) }}">
+                                {{ alert.get('level_display', alert.get('level', '未知')) }}
+                            </span>
+                            <a href="{{ alert.get('device_link', '#') }}" class="btn btn-sm" style="font-size:0.75rem;font-weight:600;color:var(--categorical-1);">查看设备 →</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="text-center mt-3 pt-3" style="border-top:1px solid #f5f5f3;">
+                    <a href="{{ url_for('alert.active_alerts') }}" class="btn btn-sm" style="font-size:0.78rem;font-weight:600;color:#fff;background:var(--status-critical);border-radius:100px;padding:6px 20px;">
+                        <i class="fas fa-check-double me-1"></i> 处理所有告警
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ====== IMPORT MODAL ====== -->
+<div class="modal fade" id="dashboardImportModal" tabindex="-1" aria-labelledby="dashboardImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border-radius:var(--radius-md);border:none;box-shadow:var(--shadow-xl);">
+            <div class="modal-header" style="border-bottom:1px solid #f0f0ee;">
+                <h5 class="modal-title" id="dashboardImportModalLabel" style="font-weight:700;font-size:1rem;">
+                    <i class="fas fa-file-import me-2" style="color:var(--categorical-3);"></i>导入设备
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dashboardImportForm" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="dashboardImportFile" class="form-label" style="font-weight:600;font-size:0.85rem;">选择文件 <span style="color:var(--status-critical);">*</span></label>
+                        <input class="form-control" type="file" id="dashboardImportFile" name="file" accept=".csv,.xlsx,.xls" required style="border-radius:var(--radius-sm);">
+                        <div class="form-text" style="font-size:0.75rem;">支持CSV、Excel格式。文件大小不超过10MB。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight:600;font-size:0.85rem;">下载模板</label>
+                        <div>
+                            <a href="{{ url_for('device.download_device_template') }}" class="btn btn-sm" style="font-size:0.78rem;font-weight:600;color:var(--categorical-3);border:1px solid rgba(27,175,122,0.3);border-radius:100px;">
+                                <i class="fas fa-download me-1"></i> 下载导入模板
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f0f0ee;">
+                <button type="button" class="btn btn-sm" data-bs-dismiss="modal" style="font-weight:600;color:var(--viz-secondary);border-radius:100px;">取消</button>
+                <button type="button" class="btn btn-sm" id="dashboardSubmitImportBtn" style="font-weight:600;color:#fff;background:var(--categorical-3);border-radius:100px;padding:6px 18px;">
+                    <i class="fas fa-file-import me-1"></i> 开始导入
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== ALL ACTIVITIES MODAL ====== -->
+<div class="modal fade" id="allActivitiesModal" tabindex="-1" aria-labelledby="allActivitiesModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:var(--radius-md);border:none;box-shadow:var(--shadow-xl);">
+            <div class="modal-header" style="background:linear-gradient(135deg,#1a3a5c,#1a5276);color:#fff;border-bottom:none;">
+                <h5 class="modal-title" id="allActivitiesModalLabel" style="font-weight:700;font-size:1rem;">
+                    <i class="fas fa-history me-2"></i>全部活动记录
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="activitiesLoading" class="activity-loading py-5">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status" style="color:var(--categorical-1);width:2.5rem;height:2.5rem;">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-3" style="color:var(--viz-secondary);">正在加载活动记录...</p>
+                    </div>
+                </div>
+                <div id="activitiesTableContainer" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="table table-hover activity-modal-table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:160px;">时间</th>
+                                    <th style="width:200px;">设备/位置</th>
+                                    <th style="width:120px;">操作</th>
+                                    <th style="width:100px;">状态</th>
+                                    <th style="width:120px;">操作人</th>
+                                    <th>详情</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activitiesTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center p-3 bg-light border-top">
+                        <div id="activitiesTotalInfo" class="text-muted" style="font-size:0.8rem;"></div>
+                        <button class="btn btn-sm" id="refreshActivitiesBtn" style="font-weight:600;color:var(--categorical-1);border:1px solid rgba(42,120,214,0.2);border-radius:100px;">
+                            <i class="fas fa-sync-alt me-1"></i> 刷新
+                        </button>
+                    </div>
+                </div>
+                <div id="activitiesError" class="text-center py-5" style="display:none;color:var(--status-critical);">
+                    <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                    <p id="activitiesErrorMessage">加载活动记录失败，请稍后重试。</p>
+                    <button class="btn btn-sm mt-2" style="font-weight:600;color:var(--status-critical);border:1px solid rgba(208,59,59,0.3);border-radius:100px;" onclick="loadAllActivities()">
+                        重新加载
+                    </button>
+                </div>
+                <div id="activitiesEmpty" class="text-center py-5" style="display:none;color:var(--viz-muted);">
+                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                    <p>暂无活动记录</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f0f0ee;">
+                <button type="button" class="btn btn-sm" data-bs-dismiss="modal" style="font-weight:600;color:var(--viz-secondary);border-radius:100px;">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // ========== UTILS ==========
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    function showToast(type, message) {
+        const toastId = 'toast-' + Date.now();
+        const colors = {
+            success: 'var(--status-good)',
+            error: 'var(--status-critical)',
+            warning: 'var(--status-warning)',
+            info: 'var(--categorical-1)'
+        };
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle',
+            info: 'fa-info-circle'
+        };
+        const html = `
+            <div id="${toastId}" class="toast align-items-center border-0 position-fixed"
+                 style="top:20px;right:20px;z-index:1060;background:${colors[type]||colors.info};color:#fff;border-radius:var(--radius-sm);" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body" style="font-weight:500;font-size:0.88rem;">
+                        <i class="fas ${icons[type]||icons.info} me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', html);
+        var el = document.getElementById(toastId);
+        var toast = new bootstrap.Toast(el, { delay: 3000 });
+        toast.show();
+        el.addEventListener('hidden.bs.toast', function() { el.remove(); });
+    }
+
+    // ========== COUNTER ANIMATION ==========
+    function animateCounters() {
+        document.querySelectorAll('.kpi-value[data-count], .hero-stat-value[data-count]').forEach(function(el) {
+            var target = parseInt(el.getAttribute('data-count')) || 0;
+            var current = 0;
+            var duration = 800;
+            var step = Math.max(1, Math.floor(target / (duration / 16)));
+            if (target === 0) { el.textContent = '0'; return; }
+            var timer = setInterval(function() {
+                current += step;
+                if (current >= target) { current = target; clearInterval(timer); }
+                el.textContent = current.toLocaleString();
+            }, 16);
+        });
+    }
+
+    // ========== CHARTS ==========
+    function initCharts() {
+        // Type colors from the categorical palette
+        var TYPE_COLORS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+
+        // --- Device Type Doughnut ---
+        var typeLabels = {{ device_type_distribution.keys()|list|tojson }};
+        var typeData = {{ device_type_distribution.values()|list|tojson }};
+        var typeCtx = document.getElementById('deviceTypeChart');
+        if (typeCtx && typeLabels.length > 0) {
+            new Chart(typeCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: typeLabels,
+                    datasets: [{
+                        data: typeData,
+                        backgroundColor: TYPE_COLORS.slice(0, typeLabels.length),
+                        borderColor: '#fcfcfb',
+                        borderWidth: 2,
+                        hoverBorderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '62%',
+                    plugins: {
+                        legend: {
+                            display: false  // Using custom footer legend
+                        },
+                        tooltip: {
+                            backgroundColor: '#fff',
+                            titleColor: '#0b0b0b',
+                            bodyColor: '#52514e',
+                            titleFont: { weight: '700', size: 13 },
+                            bodyFont: { size: 12 },
+                            borderColor: 'rgba(0,0,0,0.08)',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            boxPadding: 4,
+                            callbacks: {
+                                label: function(ctx) {
+                                    var total = ctx.dataset.data.reduce(function(a,b) { return a+b; }, 0);
+                                    var pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                    return ' ' + ctx.label + ': ' + ctx.raw + ' 台 (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        } else if (typeCtx) {
+            typeCtx.parentNode.innerHTML = '<div class="empty-state"><i class="fas fa-chart-pie"></i><p>暂无设备类型数据</p></div>';
+        }
+
+        // --- Device Status Bar Chart ---
+        var statusCtx = document.getElementById('deviceStatusChart');
+        if (statusCtx) {
+            var onlineVal = {{ stats.get('online_devices', 0) }};
+            var offlineVal = {{ stats.get('offline_devices', 0) }};
+            var alertVal = {{ stats.get('today_alerts', 0) }};
+            var otherVal = {{ stats.get('total_devices', 0) }} - onlineVal - offlineVal;
+            if (otherVal < 0) otherVal = 0;
+
+            new Chart(statusCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['在线', '离线', '告警', '其他'],
+                    datasets: [{
+                        data: [onlineVal, offlineVal, alertVal, otherVal],
+                        backgroundColor: ['#0ca30c', '#d03b3b', '#fab219', '#c3c2b7'],
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        barThickness: 48,
+                        maxBarThickness: 64
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#fff',
+                            titleColor: '#0b0b0b',
+                            bodyColor: '#52514e',
+                            borderColor: 'rgba(0,0,0,0.08)',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 8,
+                            titleFont: { weight: '700', size: 13 },
+                            bodyFont: { size: 12 }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                font: { size: 12, weight: '600' },
+                                color: '#52514e'
+                            },
+                            border: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#e1e0d9',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: { size: 11 },
+                                color: '#898781',
+                                padding: 8,
+                                callback: function(v) { return v === Math.floor(v) ? v : ''; }
+                            },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Device Group Horizontal Bar ---
+        var groupCtx = document.getElementById('groupChart');
+        if (groupCtx) {
+            var groupLabels = {{ top_groups|map(attribute='name')|list|tojson }};
+            var groupData = {{ top_groups|map(attribute='count')|list|tojson }};
+            var groupColors = {{ top_groups|map(attribute='color')|list|tojson }};
+            if (groupLabels.length > 0) {
+                new Chart(groupCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: groupLabels,
+                        datasets: [{
+                            data: groupData,
+                            backgroundColor: groupColors,
+                            borderRadius: 5,
+                            borderSkipped: false,
+                            barThickness: 16,
+                            maxBarThickness: 20
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#fff',
+                                titleColor: '#0b0b0b',
+                                bodyColor: '#52514e',
+                                borderColor: 'rgba(0,0,0,0.08)',
+                                borderWidth: 1,
+                                padding: 12,
+                                cornerRadius: 8,
+                                titleFont: { weight: '700', size: 13 },
+                                bodyFont: { size: 12 },
+                                callbacks: {
+                                    label: function(ctx) { return ' ' + ctx.raw + ' 台设备'; }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                grid: { color: '#e1e0d9', drawBorder: false },
+                                ticks: {
+                                    font: { size: 11 },
+                                    color: '#898781',
+                                    padding: 8,
+                                    callback: function(v) { return v === Math.floor(v) ? v : ''; }
+                                },
+                                border: { display: false }
+                            },
+                            y: {
+                                grid: { display: false },
+                                ticks: { font: { size: 11, weight: '600' }, color: '#52514e' },
+                                border: { display: false }
+                            }
+                        }
+                    }
+                });
+            } else {
+                groupCtx.parentNode.innerHTML = '<div class="empty-state"><i class="fas fa-object-group"></i><p>暂无设备分组数据</p></div>';
+            }
+        }
+
+        // --- 近7天监控趋势 Line ---
+        var trendCtx = document.getElementById('monitorTrendChart');
+        if (trendCtx) {
+            var trendLabels = {{ monitor_trend|map(attribute='date')|list|tojson }};
+            var trendOnline = {{ monitor_trend|map(attribute='online')|list|tojson }};
+            var trendOffline = {{ monitor_trend|map(attribute='offline')|list|tojson }};
+            var hasTrendData = trendOnline.some(function(v) { return v > 0; }) ||
+                               trendOffline.some(function(v) { return v > 0; });
+            if (hasTrendData) {
+                new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: trendLabels,
+                        datasets: [
+                            {
+                                label: '在线记录',
+                                data: trendOnline,
+                                borderColor: '#0ca30c',
+                                backgroundColor: 'rgba(12,163,12,0.12)',
+                                fill: true,
+                                tension: 0.35,
+                                pointRadius: 3,
+                                pointBackgroundColor: '#0ca30c',
+                                borderWidth: 2
+                            },
+                            {
+                                label: '离线记录',
+                                data: trendOffline,
+                                borderColor: '#d03b3b',
+                                backgroundColor: 'rgba(208,59,59,0.10)',
+                                fill: true,
+                                tension: 0.35,
+                                pointRadius: 3,
+                                pointBackgroundColor: '#d03b3b',
+                                borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 11 }, color: '#52514e' }
+                            },
+                            tooltip: {
+                                backgroundColor: '#fff',
+                                titleColor: '#0b0b0b',
+                                bodyColor: '#52514e',
+                                borderColor: 'rgba(0,0,0,0.08)',
+                                borderWidth: 1,
+                                padding: 12,
+                                cornerRadius: 8,
+                                titleFont: { weight: '700', size: 13 },
+                                bodyFont: { size: 12 }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: { font: { size: 11 }, color: '#898781' },
+                                border: { display: false }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#e1e0d9', drawBorder: false },
+                                ticks: { font: { size: 11 }, color: '#898781', padding: 8 },
+                                border: { display: false }
+                            }
+                        }
+                    }
+                });
+            } else {
+                trendCtx.parentNode.innerHTML = '<div class="empty-state"><i class="fas fa-wave-square"></i><p>近7天暂无监控记录</p></div>';
+            }
+        }
+    }
+
+    // ========== ACTIVITIES MODAL ==========
+    var fallbackActivities = {{ recent_activities|tojson }};
+
+    function renderActivitiesTable(activities) {
+        var tbody = document.getElementById('activitiesTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        activities.forEach(function(a) {
+            var timeStr = '--:--';
+            if (a.timestamp) {
+                try {
+                    var d = new Date(a.timestamp);
+                    if (isNaN(d.getTime()) && typeof a.timestamp === 'string') {
+                        d = new Date(a.timestamp.replace(' ', 'T'));
+                    }
+                    timeStr = isNaN(d.getTime()) ? a.timestamp : d.toLocaleString('zh-CN', { hour12: false });
+                } catch(e) { timeStr = a.timestamp; }
+            }
+
+            var type = a.type || 'device';
+            var dtype = a.device_type || '';
+            var name = a.name || a.device_name || a.location_name || a.cabinet_name || '未知';
+            var iconColor = '';
+
+            if (type === 'device') {
+                if (dtype === 'router')       iconColor = 'color:#2a78d6;';
+                else if (dtype === 'switch')  iconColor = 'color:#0dcaf0;';
+                else if (dtype === 'firewall') iconColor = 'color:#eb6834;';
+                else if (dtype === 'server')  iconColor = 'color:#52514e;';
+                else                           iconColor = 'color:#898781;';
+            } else if (type === 'location')    iconColor = 'color:#4a3aa7;';
+            else if (type === 'cabinet')       iconColor = 'color:#52514e;';
+            else                               iconColor = 'color:#898781;';
+
+            var status = a.status || '未知';
+            var sc = a.status_color || 'secondary';
+            var detail = a.detail || a.description || '-';
+            if (detail.length > 50) detail = detail.substring(0, 50) + '...';
+
+            var row = document.createElement('tr');
+            row.innerHTML =
+                '<td style="white-space:nowrap;">' + escapeHtml(timeStr) + '</td>' +
+                '<td><div class="activity-device"><i class="fas ' +
+                    (type === 'device' ? (dtype === 'router' ? 'fa-router' : dtype === 'switch' ? 'fa-network-wired' : dtype === 'firewall' ? 'fa-shield-alt' : dtype === 'server' ? 'fa-server' : 'fa-cube') :
+                     type === 'location' ? 'fa-map-marker-alt' : type === 'cabinet' ? 'fa-archive' : 'fa-tasks') +
+                    '" style="' + iconColor + '"></i><span>' + escapeHtml(name) + '</span></div></td>' +
+                '<td>' + escapeHtml(a.action || '未知操作') + '</td>' +
+                '<td><span class="activity-badge ' + sc + '">' + escapeHtml(status) + '</span></td>' +
+                '<td style="color:#52514e;">' + escapeHtml(a.user || a.operator || '系统') + '</td>' +
+                '<td><small style="color:#898781;">' + escapeHtml(detail) + '</small></td>';
+            tbody.appendChild(row);
+        });
+    }
+
+    window.loadAllActivities = function() {
+        var loadingDiv = document.getElementById('activitiesLoading');
+        var tableContainer = document.getElementById('activitiesTableContainer');
+        var errorDiv = document.getElementById('activitiesError');
+        var emptyDiv = document.getElementById('activitiesEmpty');
+        var totalInfoSpan = document.getElementById('activitiesTotalInfo');
+
+        // 直接用服务端渲染好的数据，最可靠
+        loadingDiv.style.display = 'none';
+
+        if (fallbackActivities && fallbackActivities.length > 0) {
+            renderActivitiesTable(fallbackActivities);
+            totalInfoSpan.textContent = '共 ' + fallbackActivities.length + ' 条活动记录';
+            tableContainer.style.display = 'block';
+            errorDiv.style.display = 'none';
+            emptyDiv.style.display = 'none';
+        } else {
+            tableContainer.style.display = 'none';
+            errorDiv.style.display = 'none';
+            emptyDiv.style.display = 'block';
+        }
+    };
+
+    // ========== INIT ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        animateCounters();
+        initCharts();
+
+        // Import button
+        var importBtn = document.getElementById('dashboardSubmitImportBtn');
+        if (importBtn) {
+            importBtn.addEventListener('click', function() {
+                var fileInput = document.getElementById('dashboardImportFile');
+                if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                    showToast('warning', '请选择要导入的文件');
+                    return;
+                }
+                var file = fileInput.files[0];
+                var formData = new FormData();
+                formData.append('file', file);
+
+                var importModal = bootstrap.Modal.getInstance(document.getElementById('dashboardImportModal'));
+                var btn = this;
+                var originalHtml = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 导入中...';
+
+                fetch('{{ url_for("device.device_import") }}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                    }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    if (res.success) {
+                        showToast('success', res.message || '设备导入成功');
+                        if (importModal) importModal.hide();
+                        setTimeout(function() { window.location.href = '{{ url_for("device.device_list") }}'; }, 1500);
+                    } else {
+                        showToast('error', '导入失败：' + (res.message || '未知错误'));
+                    }
+                })
+                .catch(function(err) {
+                    showToast('error', '导入失败：' + (err.message || '请求失败'));
+                })
+                .finally(function() {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                });
+            });
+        }
+
+        // Activities modal
+        var allActivitiesModal = document.getElementById('allActivitiesModal');
+        if (allActivitiesModal) {
+            allActivitiesModal.addEventListener('show.bs.modal', function() {
+                loadAllActivities();
+            });
+            var refreshBtn = document.getElementById('refreshActivitiesBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    loadAllActivities();
+                });
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

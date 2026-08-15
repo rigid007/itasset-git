@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}备件申请 - 资产管理{% endblock %}
+
+{% block head %}
+{{ super() }}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 标题行 -->
+    <div class="row mb-3 align-items-center">
+        <div class="col">
+            <h2>备件申请管理</h2>
+        </div>
+        <div class="col text-right">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#requestModal" onclick="clearRequestForm()">
+                <i class="fas fa-plus"></i> 新增申请
+            </button>
+        </div>
+    </div>
+
+    <!-- 申请列表卡片 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">申请列表</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0" id="requestsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>申请单号</th>
+                            <th>备件</th>
+                            <th>数量</th>
+                            <th>紧急程度</th>
+                            <th>申请人</th>
+                            <th>部门</th>
+                            <th>申请时间</th>
+                            <th>状态</th>
+                            <th>审批状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in requests %}
+                        <tr data-id="{{ req.id }}">
+                            <td>{{ req.request_number }}</td>
+                            <td>{{ req.spare_part.name if req.spare_part else '—' }}</td>
+                            <td>{{ req.quantity }}</td>
+                            <td>
+                                {% if req.urgency == 'low' %}
+                                    <span class="badge bg-info">低</span>
+                                {% elif req.urgency == 'medium' %}
+                                    <span class="badge bg-warning">中</span>
+                                {% elif req.urgency == 'high' %}
+                                    <span class="badge bg-danger">高</span>
+                                {% elif req.urgency == 'critical' %}
+                                    <span class="badge bg-dark">紧急</span>
+                                {% else %}
+                                    {{ req.urgency }}
+                                {% endif %}
+                            </td>
+                            <td>{{ req.requester_name }}</td>
+                            <td>{{ req.department or '—' }}</td>
+                            <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                {% if req.status == 'pending' %}
+                                    <span class="badge bg-warning">待审批</span>
+                                {% elif req.status == 'approved' %}
+                                    <span class="badge bg-success">已审批</span>
+                                {% elif req.status == 'issued' %}
+                                    <span class="badge bg-primary">已发放</span>
+                                {% elif req.status == 'completed' %}
+                                    <span class="badge bg-secondary">已完成</span>
+                                {% elif req.status == 'cancelled' %}
+                                    <span class="badge bg-danger">已取消</span>
+                                {% else %}
+                                    {{ req.status }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if req.approval_status == 'approved' %}
+                                    <span class="badge bg-success">通过</span>
+                                {% elif req.approval_status == 'rejected' %}
+                                    <span class="badge bg-danger">拒绝</span>
+                                {% elif req.approval_status == 'partially_approved' %}
+                                    <span class="badge bg-info">部分通过</span>
+                                {% else %}
+                                    <span class="badge bg-warning">待审批</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if req.status == 'pending' %}
+                                    <!-- 编辑和删除按钮（仅申请人可操作？此处保留原逻辑） -->
+                                    <button class="btn btn-sm btn-warning" onclick="editRequest({{ req.id }})" title="编辑">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteRequest({{ req.id }})" title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <!-- 审批按钮：仅管理员可见（需要后端传递 is_admin 变量或通过 JavaScript 判断） -->
+                                    {% if current_user.is_authenticated and current_user.is_admin %}
+                                    <button class="btn btn-sm btn-success" onclick="approveRequest({{ req.id }})" title="审批">
+                                        <i class="fas fa-check-circle"></i>
+                                    </button>
+                                    {% endif %}
+                                {% else %}
+                                    <button class="btn btn-sm btn-secondary" disabled title="不可编辑">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-secondary" disabled title="不可删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% if current_user.is_authenticated and current_user.is_admin and req.status == 'approved' %}
+                                    <!-- 已审批的申请可以发放等，但此处保留扩展 -->
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center">暂无申请记录</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer text-muted">
+            共 {{ requests|length }} 条记录
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑申请模态框（保持不变） -->
+<div class="modal fade" id="requestModal" tabindex="-1" aria-labelledby="requestModalLabel" aria-hidden="true">
+    <!-- ... 原有内容 ... -->
+</div>
+
+<!-- 审批模态框（新增） -->
+<div class="modal fade" id="approveModal" tabindex="-1" aria-labelledby="approveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="approveModalLabel">审批申请</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="approveForm">
+                    <input type="hidden" id="approveRequestId" name="id">
+                    <div class="mb-3">
+                        <label class="form-label">审批结果</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="approval_status" id="approveApprove" value="approved" checked>
+                                <label class="form-check-label" for="approveApprove">通过</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="approval_status" id="approveReject" value="rejected">
+                                <label class="form-check-label" for="approveReject">拒绝</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="approval_status" id="approvePartial" value="partially_approved">
+                                <label class="form-check-label" for="approvePartial">部分通过</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="approval_notes" class="form-label">审批意见</label>
+                        <textarea class="form-control" id="approval_notes" name="approval_notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitApproval()">提交审批</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 获取 CSRF token
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    }
+
+    // 清空新增表单（保持不变）
+    function clearRequestForm() {
+        // ... 原有代码 ...
+    }
+
+    // 编辑申请（保持不变）
+    function editRequest(id) {
+        // ... 原有代码 ...
+    }
+
+    // 保存申请（新增或编辑，保持不变）
+    function saveRequest() {
+        // ... 原有代码 ...
+    }
+
+    // 删除申请（保持不变）
+    function deleteRequest(id) {
+        // ... 原有代码 ...
+    }
+
+    // 打开审批模态框
+    function approveRequest(id) {
+        document.getElementById('approveRequestId').value = id;
+        document.getElementById('approval_notes').value = '';
+        document.querySelector('input[name="approval_status"][value="approved"]').checked = true;
+        new bootstrap.Modal(document.getElementById('approveModal')).show();
+    }
+
+    // 提交审批
+    function submitApproval() {
+        const id = document.getElementById('approveRequestId').value;
+        const approvalStatus = document.querySelector('input[name="approval_status"]:checked').value;
+        const approvalNotes = document.getElementById('approval_notes').value;
+
+        fetch(`/asset/spare_part_request/approve/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                approval_status: approvalStatus,
+                approval_notes: approvalNotes
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('approveModal')).hide();
+                location.reload();
+            } else {
+                alert('审批失败：' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('请求失败');
+        });
+    }
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table td, .table th {
+        vertical-align: middle;
+    }
+    .btn-sm {
+        margin: 0 2px;
+    }
+    .badge {
+        font-size: 0.9em;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}资产盘点{% endblock %}
+{% block page_title %}资产盘点{% endblock %}
+{% block page_subtitle %}资产盘点任务管理与差异追踪{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('asset_extra.audit_create') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> 创建盘点任务
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title text-primary">{{ audits.total }}</h5>
+                <small class="text-muted">盘点总数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title text-warning">{{ draft_count }}</h5>
+                <small class="text-muted">待开始</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h5 class="card-title text-info">{{ in_progress_count }}</h5>
+                <small class="text-muted">进行中</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title text-success">{{ completed_count }}</h5>
+                <small class="text-muted">已完成</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>盘点编号</th>
+                    <th>盘点名称</th>
+                    <th>类型</th>
+                    <th>状态</th>
+                    <th>计划日期</th>
+                    <th>进度</th>
+                    <th>一致/差异/缺失</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for audit in audits.items %}
+                <tr>
+                    <td><code>{{ audit.audit_no }}</code></td>
+                    <td><a href="{{ url_for('asset_extra.audit_detail', id=audit.id) }}">{{ audit.name }}</a></td>
+                    <td>
+                        {% if audit.audit_type == 'annual' %}<span class="badge bg-danger">年度</span>
+                        {% elif audit.audit_type == 'quarterly' %}<span class="badge bg-warning">季度</span>
+                        {% elif audit.audit_type == 'monthly' %}<span class="badge bg-info">月度</span>
+                        {% else %}<span class="badge bg-secondary">抽查</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if audit.status == 'draft' %}<span class="badge bg-secondary">待开始</span>
+                        {% elif audit.status == 'in_progress' %}<span class="badge bg-warning">进行中</span>
+                        {% elif audit.status == 'completed' %}<span class="badge bg-success">已完成</span>
+                        {% else %}<span class="badge bg-danger">已取消</span>{% endif %}
+                    </td>
+                    <td>{{ audit.scheduled_date or '-' }}</td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height:8px;width:100px">
+                                <div class="progress-bar {% if audit.progress_percent() == 100 %}bg-success{% else %}bg-info{% endif %}"
+                                     style="width:{{ audit.progress_percent() }}%"></div>
+                            </div>
+                            <small class="ms-2">{{ audit.scanned_assets }}/{{ audit.total_assets }}</small>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="text-success">{{ audit.matched_count }}</span>/
+                        <span class="text-warning">{{ audit.discrepancy_count }}</span>/
+                        <span class="text-danger">{{ audit.missing_count }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('asset_extra.audit_detail', id=audit.id) }}" class="btn btn-sm btn-outline-info" title="详情"><i class="fas fa-eye"></i></a>
+                        {% if audit.status == 'completed' %}
+                        <a href="{{ url_for('asset_extra.audit_report', id=audit.id) }}" class="btn btn-sm btn-outline-success" title="报告"><i class="fas fa-file-alt"></i></a>
+                        {% endif %}
+                        {% if has_permission(current_user, 'asset:edit') %}
+                        <form method="POST" action="{{ url_for('asset_extra.audit_delete', id=audit.id) }}" style="display:inline"
+                              onsubmit="return confirm('确定要删除盘点任务「{{ audit.name }}」吗？其盘点明细将同时被删除。')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" title="删除"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">暂无盘点任务</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if audits.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in range(1, audits.pages + 1) %}
+    <li class="page-item {% if p == audits.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('asset_extra.audit_list', page=p) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}

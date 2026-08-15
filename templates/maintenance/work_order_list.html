@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}工单列表 - 运维管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <h4 class="page-title">工单列表</h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">总工单</h5>
+                    <h2>{{ total_orders }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">开放工单</h5>
+                    <h2>{{ open_orders }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">进行中</h5>
+                    <h2>{{ in_progress_orders }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">已关闭</h5>
+                    <h2>{{ closed_orders }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 筛选表单（Bootstrap 5 布局） -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('maintenance.work_order_list') }}" class="d-flex flex-wrap align-items-center gap-2">
+                        <div class="d-flex align-items-center">
+                            <label for="status" class="me-2">状态：</label>
+                            <select name="status" id="status" class="form-select" style="width: auto;">
+                                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>全部</option>
+                                <option value="open" {% if status_filter == 'open' %}selected{% endif %}>开放</option>
+                                <option value="assigned" {% if status_filter == 'assigned' %}selected{% endif %}>已分配</option>
+                                <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>进行中</option>
+                                <option value="on_hold" {% if status_filter == 'on_hold' %}selected{% endif %}>挂起</option>
+                                <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>已解决</option>
+                                <option value="closed" {% if status_filter == 'closed' %}selected{% endif %}>已关闭</option>
+                                <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>已取消</option>
+                            </select>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <label for="priority" class="me-2">优先级：</label>
+                            <select name="priority" id="priority" class="form-select" style="width: auto;">
+                                <option value="all" {% if priority_filter == 'all' %}selected{% endif %}>全部</option>
+                                <option value="low" {% if priority_filter == 'low' %}selected{% endif %}>低</option>
+                                <option value="medium" {% if priority_filter == 'medium' %}selected{% endif %}>中</option>
+                                <option value="high" {% if priority_filter == 'high' %}selected{% endif %}>高</option>
+                                <option value="critical" {% if priority_filter == 'critical' %}selected{% endif %}>紧急</option>
+                            </select>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <label for="category" class="me-2">类别：</label>
+                            <select name="category" id="category" class="form-select" style="width: auto;">
+                                <option value="all" {% if category_filter == 'all' %}selected{% endif %}>全部</option>
+                                <option value="incident" {% if category_filter == 'incident' %}selected{% endif %}>事件</option>
+                                <option value="request" {% if category_filter == 'request' %}selected{% endif %}>服务请求</option>
+                                <option value="problem" {% if category_filter == 'problem' %}selected{% endif %}>问题</option>
+                                <option value="change" {% if category_filter == 'change' %}selected{% endif %}>变更</option>
+                                <option value="task" {% if category_filter == 'task' %}selected{% endif %}>任务</option>
+                            </select>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <label for="major" class="me-2">重大事件：</label>
+                            <select name="major" id="major" class="form-select" style="width: auto;">
+                                <option value="all" {% if major_filter == 'all' %}selected{% endif %}>全部</option>
+                                <option value="1" {% if major_filter == '1' %}selected{% endif %}>仅重大</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">筛选</button>
+                        <a href="{{ url_for('maintenance.work_order_list') }}" class="btn btn-secondary">重置</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 工单列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>工单编号</th>
+                                    <th>标题</th>
+                                    <th>状态</th>
+                                    <th>优先级</th>
+                                    <th>请求人</th>
+                                    <th>创建时间</th>
+                                    <th>分配工程师</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if work_orders %}
+                                    {% for order in work_orders %}
+                                    <tr>
+                                        <td>{{ order.work_order_number }}{% if order.is_major %} <span class="badge bg-danger" title="重大事件">重大</span>{% endif %}</td>
+                                        <td>{{ order.title }}</td>
+                                        <td>
+                                            {% if order.status == 'open' %}
+                                                <span class="badge bg-danger">开放</span>
+                                            {% elif order.status == 'assigned' %}
+                                                <span class="badge bg-primary">已分配</span>
+                                            {% elif order.status == 'in_progress' %}
+                                                <span class="badge bg-warning">进行中</span>
+                                            {% elif order.status == 'on_hold' %}
+                                                <span class="badge bg-secondary">挂起</span>
+                                            {% elif order.status == 'resolved' %}
+                                                <span class="badge bg-success">已解决</span>
+                                            {% elif order.status == 'closed' %}
+                                                <span class="badge bg-dark">已关闭</span>
+                                            {% elif order.status == 'cancelled' %}
+                                                <span class="badge bg-light text-dark">已取消</span>
+                                            {% else %}
+                                                <span class="badge bg-info">{{ order.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if order.priority == 'low' %}
+                                                <span class="badge bg-success">低</span>
+                                            {% elif order.priority == 'medium' %}
+                                                <span class="badge bg-info">中</span>
+                                            {% elif order.priority == 'high' %}
+                                                <span class="badge bg-warning">高</span>
+                                            {% elif order.priority == 'critical' %}
+                                                <span class="badge bg-danger">紧急</span>
+                                            {% else %}
+                                                {{ order.priority }}
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ order.requester_name or '未知' }}</td>
+                                        <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else '' }}</td>
+                                        <td>{{ order.assigned_to_name or '未分配' }}</td>
+                                        <td>
+                                            <div class="btn-group" role="group" aria-label="工单操作">
+                                                {% if order.status == 'open' %}
+                                                    <button type="button" class="btn btn-sm btn-primary" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="assign"
+                                                            data-url="{{ url_for('maintenance.assign_work_order', id=order.id) }}">
+                                                        分配
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-warning" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="process"
+                                                            data-url="{{ url_for('maintenance.process_work_order', id=order.id) }}">
+                                                        处理
+                                                    </button>
+                                                {% elif order.status == 'assigned' %}
+                                                    <button type="button" class="btn btn-sm btn-warning" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="process"
+                                                            data-url="{{ url_for('maintenance.process_work_order', id=order.id) }}">
+                                                        处理
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-success" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="resolve"
+                                                            data-url="{{ url_for('maintenance.resolve_work_order', id=order.id) }}">
+                                                        解决
+                                                    </button>
+                                                {% elif order.status == 'in_progress' %}
+                                                    <button type="button" class="btn btn-sm btn-success" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="resolve"
+                                                            data-url="{{ url_for('maintenance.resolve_work_order', id=order.id) }}">
+                                                        解决
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-secondary" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="hold"
+                                                            data-url="{{ url_for('maintenance.hold_work_order', id=order.id) }}">
+                                                        挂起
+                                                    </button>
+                                                {% elif order.status == 'resolved' %}
+                                                    <button type="button" class="btn btn-sm btn-dark" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="close"
+                                                            data-url="{{ url_for('maintenance.close_work_order', id=order.id) }}">
+                                                        关闭
+                                                    </button>
+                                                {% elif order.status == 'on_hold' %}
+                                                    <button type="button" class="btn btn-sm btn-info" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="resume"
+                                                            data-url="{{ url_for('maintenance.resume_work_order', id=order.id) }}">
+                                                        恢复
+                                                    </button>
+                                                {% elif order.status == 'closed' %}
+                                                    <button type="button" class="btn btn-sm btn-danger" 
+                                                            data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                            data-order-id="{{ order.id }}"
+                                                            data-action="reopen"
+                                                            data-url="{{ url_for('maintenance.reopen_work_order', id=order.id) }}">
+                                                        重新打开
+                                                    </button>
+                                                {% endif %}
+                                                <button type="button" class="btn btn-sm btn-info" 
+                                                        data-bs-toggle="modal" data-bs-target="#actionModal"
+                                                        data-order-id="{{ order.id }}"
+                                                        data-action="view"
+                                                        data-url="{{ url_for('maintenance.view_work_order', id=order.id) }}">
+                                                    详情
+                                                </button>
+
+                                                {% if current_user.is_admin %}
+                                                <form method="post" action="{{ url_for('maintenance.delete_work_order', id=order.id) }}" style="display: inline;" onsubmit="return confirm('确定要永久删除该工单吗？此操作不可恢复。');">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                                                </form>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="8" class="text-center">暂无工单数据</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 通用操作模态框（Bootstrap 5 结构） -->
+<div class="modal fade" id="actionModal" tabindex="-1" role="dialog" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="actionModalLabel">操作确认</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="actionForm" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="order_id" id="modalOrderId" value="">
+
+                    <div id="assignFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="engineer" class="form-label">分配工程师</label>
+                            <select class="form-select" id="engineer" name="engineer_id" required>
+                                <option value="">请选择工程师</option>
+                                {% for engineer in engineers %}
+                                <option value="{{ engineer.id }}">{{ engineer.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="assignNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="assignNotes" name="notes" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="processFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="processNotes" class="form-label">处理备注</label>
+                            <textarea class="form-control" id="processNotes" name="notes" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="actualStart" class="form-label">实际开始时间</label>
+                            <input type="datetime-local" class="form-control" id="actualStart" name="actual_start_date">
+                        </div>
+                    </div>
+
+                    <div id="resolveFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="resolution" class="form-label">解决方案</label>
+                            <textarea class="form-control" id="resolution" name="resolution" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="actualHours" class="form-label">实际工时（小时）</label>
+                            <input type="number" step="0.1" class="form-control" id="actualHours" name="actual_hours">
+                        </div>
+                        <div class="mb-3">
+                            <label for="resolveNotes" class="form-label">解决备注</label>
+                            <textarea class="form-control" id="resolveNotes" name="notes" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="simpleConfirmFields" style="display: none;">
+                        <p id="confirmMessage">确定执行此操作吗？</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="modalSubmitBtn">确认</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    $(document).ready(function() {
+        // 确保 Bootstrap 模态框组件已加载
+        if (typeof bootstrap === 'undefined') {
+            console.error('Bootstrap is not loaded. Please include Bootstrap JS.');
+        }
+
+        $('#actionModal').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget);
+            var orderId = button.data('order-id');
+            var action = button.data('action');
+            var url = button.data('url');
+
+            var modal = $(this);
+            var form = modal.find('#actionForm');
+            var modalTitle = modal.find('.modal-title');
+
+            modal.find('#assignFields, #processFields, #resolveFields, #simpleConfirmFields').hide();
+            modal.find('#assignFields input, #processFields input, #resolveFields input, #simpleConfirmFields input').prop('required', false);
+            modal.find('#assignFields select, #processFields textarea, #resolveFields textarea').prop('required', false);
+
+            form.attr('action', url);
+            modal.find('#modalOrderId').val(orderId);
+
+            if (action === 'assign') {
+                modalTitle.text('分配工单');
+                modal.find('#assignFields').show();
+                modal.find('#assignFields select, #assignFields textarea').prop('required', true);
+            } else if (action === 'process') {
+                modalTitle.text('处理工单');
+                modal.find('#processFields').show();
+                modal.find('#processFields textarea').prop('required', true);
+            } else if (action === 'resolve') {
+                modalTitle.text('解决工单');
+                modal.find('#resolveFields').show();
+                modal.find('#resolveFields textarea, #resolveFields input').prop('required', true);
+            } else if (action === 'hold') {
+                modalTitle.text('挂起工单');
+                modal.find('#simpleConfirmFields').show();
+                modal.find('#confirmMessage').text('确定要挂起此工单吗？');
+            } else if (action === 'close') {
+                modalTitle.text('关闭工单');
+                modal.find('#simpleConfirmFields').show();
+                modal.find('#confirmMessage').text('确定要关闭此工单吗？');
+            } else if (action === 'resume') {
+                modalTitle.text('恢复工单');
+                modal.find('#simpleConfirmFields').show();
+                modal.find('#confirmMessage').text('确定要恢复此工单吗？');
+            } else if (action === 'reopen') {
+                modalTitle.text('重新打开工单');
+                modal.find('#simpleConfirmFields').show();
+                modal.find('#confirmMessage').text('确定要重新打开此工单吗？');
+            } else if (action === 'view') {
+                modalTitle.text('查看工单详情');
+                modal.find('#simpleConfirmFields').show();
+                modal.find('#confirmMessage').text('即将查看工单详情，点击确认跳转。');
+                form.attr('method', 'get');
+                modal.find('#modalSubmitBtn').text('跳转');
+            }
+
+            if (action !== 'view') {
+                form.attr('method', 'post');
+                modal.find('#modalSubmitBtn').text('确认');
+            }
+        });
+
+        $('#actionModal').on('hidden.bs.modal', function () {
+            var form = $(this).find('#actionForm');
+            form.attr('method', 'post');
+            form.attr('action', '');
+            form.find('input, select, textarea').val('').prop('required', false);
+            form.find('#assignFields, #processFields, #resolveFields, #simpleConfirmFields').hide();
+        });
+    });
+</script>
+{% endblock %}

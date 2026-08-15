@@ -1,0 +1,6 @@
+﻿id,source_device_id,source_port,target_device_id,target_port,link_status,discovered_by,discovery_protocol,link_role,discovery_time
+1261,34,GigabitEthernet1/0/24,102,GigabitEthernet2/0/45,down,lldp,lldp,normal,2026-08-03 11:05:44
+1346,34,GigabitEthernet1/0/19,107,GigabitEthernet2/0/45,down,lldp,lldp,normal,2026-08-03 11:05:48
+1361,34,Ethernet1/0/8,109,GigabitEthernet2/0/45,down,lldp,lldp,normal,2026-08-03 11:05:48
+1374,34,GigabitEthernet1/0/23,105,GigabitEthernet2/0/45,down,lldp,lldp,normal,2026-08-03 11:05:49
+1499,34,Ethernet1/0/12,108,GigabitEthernet3/0/45,down,lldp,lldp,normal,2026-08-03 11:05:55

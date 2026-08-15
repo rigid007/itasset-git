@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}服务满意度(CSAT)仪表盘{% endblock %}
+{% block page_title %}服务满意度(CSAT) 度量{% endblock %}
+{% block page_subtitle %}按服务目录聚合客户满意度(1-5)与评分分布{% endblock %}
+
+{% block content %}
+<!-- 总体 -->
+<div class="row mb-4">
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-danger mb-1">{{ overall.avg or '-' }}</h4><small>总体CSAT (满分5)</small></div></div></div>
+  <div class="col-md-3"><div class="card text-center h-100"><div class="card-body py-3">
+    <h4 class="text-secondary mb-1">{{ overall.count }}</h4><small>评价总数</small></div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <h6 class="mb-1">总体评分分布</h6>
+    <div class="d-flex align-items-end" style="height:60px">
+      {% for i in range(5,0,-1) %}
+      <div class="text-center mx-1" style="flex:1">
+        <div style="background:#0d6efd;height:{{ overall.distribution.get(i|string,0)/overall.count*60 if overall.count else 0 }}px"></div>
+        <small>{{ i }}★</small>
+      </div>
+      {% endfor %}
+    </div>
+  </div></div></div>
+</div>
+
+<!-- 按服务 -->
+<div class="card">
+  <div class="card-header"><h5 class="mb-0">各服务目录满意度</h5></div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light"><tr>
+        <th>服务</th><th>平均</th><th>样本</th><th>分布(5→1★)</th><th>操作</th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><strong>{{ row.service.name }}</strong></td>
+          <td>
+            {% if row.avg is not none %}
+              <span class="badge {% if row.avg >= 4 %}bg-success{% elif row.avg >= 3 %}bg-warning{% else %}bg-danger{% endif %}">{{ row.avg }}</span>
+            {% else %}<span class="text-muted">-</span>{% endif %}
+          </td>
+          <td>{{ row.count }}</td>
+          <td>
+            {% for i in range(5,0,-1) %}
+              <span class="badge bg-light text-dark me-1">{{ i }}★:{{ row.distribution.get(i|string,0) }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-danger" onclick="openCsat({{ row.service.id }})"><i class="fas fa-plus"></i> 评价</button>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">暂无服务目录</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 评价弹窗 -->
+<div class="modal fade" id="csatModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('itsm_adv.csat_submit') }}" class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">提交满意度评价</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="service_catalog_id" id="csatService">
+        <div class="mb-3">
+          <label class="form-label">评分</label>
+          <select name="rating" class="form-select" required>
+            <option value="5">5 - 非常满意</option>
+            <option value="4">4 - 满意</option>
+            <option value="3">3 - 一般</option>
+            <option value="2">2 - 不满意</option>
+            <option value="1">1 - 非常不满意</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">意见</label>
+          <textarea name="comment" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">渠道</label>
+          <select name="channel" class="form-select">
+            <option value="portal">门户</option>
+            <option value="email">邮件</option>
+            <option value="manual">人工录入</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-danger">提交</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function openCsat(serviceId){
+  document.getElementById('csatService').value = serviceId;
+  new bootstrap.Modal(document.getElementById('csatModal')).show();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1270 @@
+{% extends "base.html" %}
+
+{% block title %}API设置 - 系统管理{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .api-settings-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .api-key-display {
+        font-family: 'Courier New', monospace;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 10px 15px;
+        font-size: 0.9rem;
+        word-break: break-all;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .api-key-masked {
+        color: #6c757d;
+        font-style: italic;
+    }
+    
+    .copy-btn {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .copy-btn:hover {
+        background-color: #5a6268;
+    }
+    
+    .copy-btn.copied {
+        background-color: #198754;
+    }
+    
+    .status-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    .status-active {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .status-inactive {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+    
+    .status-expired {
+        background-color: #fff3cd;
+        color: #664d03;
+    }
+    
+    .settings-table {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+    
+    .table-header {
+        background-color: #f8f9fa;
+        padding: 15px 20px;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .table-body {
+        overflow-x: auto;
+    }
+    
+    .table {
+        margin-bottom: 0;
+    }
+    
+    .table th {
+        font-weight: 600;
+        color: #495057;
+        border-top: none;
+        border-bottom: 2px solid #e9ecef;
+        padding: 12px 16px;
+        white-space: nowrap;
+    }
+    
+    .table td {
+        padding: 12px 16px;
+        vertical-align: middle;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .table tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 5px;
+    }
+    
+    .btn-icon {
+        padding: 5px 8px;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .btn-icon i {
+        margin-right: 0;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #dee2e6;
+    }
+    
+    .form-section {
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .form-section-title {
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #495057;
+        font-size: 1.1rem;
+    }
+    
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+    }
+    
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+    
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+        background-color: #0d6efd;
+    }
+    
+    input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+    }
+    
+    .permissions-preview {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 80px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+    }
+    
+    .json-preview {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 80px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+    }
+    
+    .modal-lg {
+        max-width: 900px;
+    }
+    
+    .json-editor {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        min-height: 100px;
+    }
+    
+    .info-tooltip {
+        color: #6c757d;
+        margin-left: 5px;
+        cursor: help;
+    }
+    
+    .api-key-modal .modal-body {
+        text-align: center;
+        padding: 30px 20px;
+    }
+    
+    .api-key-modal .api-key-display {
+        font-size: 1.1rem;
+        padding: 15px;
+        margin: 20px 0;
+        text-align: center;
+        background-color: #f8f9fa;
+        border: 2px dashed #6c757d;
+    }
+    
+    .warning-box {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 20px;
+        color: #856404;
+    }
+    
+    .warning-box i {
+        margin-right: 8px;
+    }
+    
+    .last-used {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="api-settings-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">API设置</h1>
+            <p class="text-muted">管理API密钥、权限、访问控制和限流设置</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary me-2" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+            <button class="btn btn-primary" id="createApiBtn">
+                <i class="fas fa-plus me-1"></i> 创建API密钥
+            </button>
+        </div>
+    </div>
+    
+    {% if settings %}
+    <div class="settings-table">
+        <div class="table-header">
+            <h5 class="mb-0">API密钥列表</h5>
+            <div class="text-muted">
+                共 <span id="apiCount">{{ settings|length }}</span> 个API密钥
+            </div>
+        </div>
+        
+        <div class="table-body">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th width="180">名称</th>
+                        <th width="200">API密钥</th>
+                        <th width="100">状态</th>
+                        <th width="120">限流</th>
+                        <th width="150">过期时间</th>
+                        <th width="120">最后使用</th>
+                        <th width="150">允许的方法</th>
+                        <th>权限</th>
+                        <th width="120">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for setting in settings %}
+                    <tr data-setting-id="{{ setting.id }}">
+                        <td>
+                            <div class="fw-medium">{{ setting.name }}</div>
+                            {% if setting.description %}
+                            <div class="text-muted small mt-1">{{ setting.description[:50] }}{% if setting.description|length > 50 %}...{% endif %}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="api-key-display">
+                                <span class="api-key-masked">
+                                    {{ setting.api_key[:8] }}...{{ setting.api_key[-4:] }}
+                                </span>
+                                <button class="copy-btn" data-api-key="{{ setting.api_key }}">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            {% if setting.enabled %}
+                                {% if setting.expires_at and setting.expires_at < now %}
+                                <span class="status-badge status-expired">已过期</span>
+                                {% else %}
+                                <span class="status-badge status-active">已启用</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="status-badge status-inactive">已禁用</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-medium">{{ setting.rate_limit }} 次</div>
+                            <div class="text-muted small">每 {{ setting.rate_limit_period }} 秒</div>
+                        </td>
+                        <td>
+                            {% if setting.expires_at %}
+                                <div>{{ setting.expires_at.strftime('%Y-%m-%d') }}</div>
+                                <div class="text-muted small">{{ setting.expires_at.strftime('%H:%M') }}</div>
+                            {% else %}
+                                <span class="text-muted">永不过期</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if setting.last_used_at %}
+                                <div class="last-used">{{ setting.last_used_at.strftime('%Y-%m-%d') }}</div>
+                                <div class="last-used">{{ setting.last_used_at.strftime('%H:%M') }}</div>
+                            {% else %}
+                                <span class="text-muted">从未使用</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for method in setting.allowed_methods %}
+                                {% if method == 'GET' %}
+                                <span class="badge bg-primary">{{ method }}</span>
+                                {% elif method == 'POST' %}
+                                <span class="badge bg-success">{{ method }}</span>
+                                {% elif method == 'PUT' %}
+                                <span class="badge bg-warning text-dark">{{ method }}</span>
+                                {% elif method == 'DELETE' %}
+                                <span class="badge bg-danger">{{ method }}</span %}
+                                {% else %}
+                                <span class="badge bg-secondary">{{ method }}</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="permissions-preview">
+                                {% if setting.permissions %}
+                                {{ setting.permissions|tojson|safe }}
+                                {% else %}
+                                [全部权限]
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-sm btn-outline-primary btn-icon view-api-btn" 
+                                        data-setting-id="{{ setting.id }}"
+                                        title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary btn-icon edit-api-btn" 
+                                        data-setting-id="{{ setting.id }}"
+                                        title="编辑">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input toggle-api-status" 
+                                           type="checkbox" 
+                                           data-setting-id="{{ setting.id }}"
+                                           {% if setting.enabled %}checked{% endif %}
+                                           title="启用/禁用">
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="empty-state">
+            <i class="fas fa-key"></i>
+            <h4 class="h5 mt-3">暂无API设置</h4>
+            <p class="text-muted mb-4">您还没有创建任何API密钥，点击"创建API密钥"按钮开始</p>
+            <button class="btn btn-primary" id="createApiBtnEmpty">
+                <i class="fas fa-plus me-1"></i> 创建API密钥
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 创建API密钥模态框 -->
+<div class="modal fade" id="createApiModal" tabindex="-1" aria-labelledby="createApiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createApiModalLabel">创建API密钥</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createApiForm">
+                    <div class="form-section">
+                        <div class="form-section-title">基本信息</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="apiName" class="form-label">名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="apiName" name="name" required>
+                                <div class="form-text">用于识别此API密钥的用途</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="apiDescription" class="form-label">描述</label>
+                                <textarea class="form-control" id="apiDescription" name="description" rows="2"></textarea>
+                                <div class="form-text">可选，描述此API密钥的使用场景</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="apiSecretKey" class="form-label">密钥（可选）</label>
+                                <input type="password" class="form-control" id="apiSecretKey" name="secret_key">
+                                <div class="form-text">用于API签名的密钥，留空将自动生成</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="apiExpiresAt" class="form-label">过期时间</label>
+                                <input type="datetime-local" class="form-control" id="apiExpiresAt" name="expires_at">
+                                <div class="form-text">留空表示永不过期</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label d-block">启用状态</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="apiEnabled" name="enabled" checked>
+                                    <label class="form-check-label" for="apiEnabled">启用此API密钥</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">访问控制</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="apiAllowedIps" class="form-label">允许的IP地址</label>
+                                <textarea class="form-control json-editor" id="apiAllowedIps" name="allowed_ips" rows="3" placeholder='例如: ["192.168.1.1", "10.0.0.0/24"]'></textarea>
+                                <div class="form-text">JSON格式的IP地址列表，留空表示允许所有IP</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="apiAllowedEndpoints" class="form-label">允许的端点</label>
+                                <textarea class="form-control json-editor" id="apiAllowedEndpoints" name="allowed_endpoints" rows="3" placeholder='例如: ["/api/v1/users", "/api/v1/products/*"]'></textarea>
+                                <div class="form-text">JSON格式的端点路径列表，留空表示允许所有端点</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="apiAllowedMethods" class="form-label">允许的HTTP方法</label>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodGet" name="allowed_methods" value="GET" checked>
+                                        <label class="form-check-label" for="methodGet">
+                                            GET <span class="text-muted">- 获取资源</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPost" name="allowed_methods" value="POST" checked>
+                                        <label class="form-check-label" for="methodPost">
+                                            POST <span class="text-muted">- 创建资源</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPut" name="allowed_methods" value="PUT">
+                                        <label class="form-check-label" for="methodPut">
+                                            PUT <span class="text-muted">- 更新资源</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodDelete" name="allowed_methods" value="DELETE">
+                                        <label class="form-check-label" for="methodDelete">
+                                            DELETE <span class="text-muted">- 删除资源</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPatch" name="allowed_methods" value="PATCH">
+                                        <label class="form-check-label" for="methodPatch">
+                                            PATCH <span class="text-muted">- 部分更新</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">限流设置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="apiRateLimit" class="form-label">请求限制</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="apiRateLimit" name="rate_limit" value="100" min="1" max="10000">
+                                    <span class="input-group-text">次请求</span>
+                                </div>
+                                <div class="form-text">在指定周期内允许的最大请求次数</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="apiRateLimitPeriod" class="form-label">限流周期</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="apiRateLimitPeriod" name="rate_limit_period" value="60" min="1" max="86400">
+                                    <span class="input-group-text">秒</span>
+                                </div>
+                                <div class="form-text">请求限制的时间周期（秒）</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">权限设置</div>
+                        
+                        <div class="mb-3">
+                            <label for="apiPermissions" class="form-label">API权限</label>
+                            <textarea class="form-control json-editor" id="apiPermissions" name="permissions" rows="4" placeholder='例如: {"users": ["read", "create"], "products": ["read"]}'></textarea>
+                            <div class="form-text">JSON格式的权限对象，留空表示授予所有权限</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveApiBtn">创建API密钥</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 查看/编辑API密钥模态框 -->
+<div class="modal fade" id="editApiModal" tabindex="-1" aria-labelledby="editApiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editApiModalLabel">编辑API设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editApiForm">
+                    <input type="hidden" id="editApiId" name="id">
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">基本信息</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editApiName" class="form-label">名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="editApiName" name="name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editApiDescription" class="form-label">描述</label>
+                                <textarea class="form-control" id="editApiDescription" name="description" rows="2"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editApiSecretKey" class="form-label">密钥</label>
+                                <input type="password" class="form-control" id="editApiSecretKey" name="secret_key" placeholder="输入新密钥或留空保持不变">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editApiExpiresAt" class="form-label">过期时间</label>
+                                <input type="datetime-local" class="form-control" id="editApiExpiresAt" name="expires_at">
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label d-block">启用状态</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="editApiEnabled" name="enabled">
+                                    <label class="form-check-label" for="editApiEnabled">启用此API密钥</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">访问控制</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editApiAllowedIps" class="form-label">允许的IP地址</label>
+                                <textarea class="form-control json-editor" id="editApiAllowedIps" name="allowed_ips" rows="3"></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editApiAllowedEndpoints" class="form-label">允许的端点</label>
+                                <textarea class="form-control json-editor" id="editApiAllowedEndpoints" name="allowed_endpoints" rows="3"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label">允许的HTTP方法</label>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="editMethodGet" name="allowed_methods" value="GET">
+                                        <label class="form-check-label" for="editMethodGet">GET</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="editMethodPost" name="allowed_methods" value="POST">
+                                        <label class="form-check-label" for="editMethodPost">POST</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="editMethodPut" name="allowed_methods" value="PUT">
+                                        <label class="form-check-label" for="editMethodPut">PUT</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="editMethodDelete" name="allowed_methods" value="DELETE">
+                                        <label class="form-check-label" for="editMethodDelete">DELETE</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="editMethodPatch" name="allowed_methods" value="PATCH">
+                                        <label class="form-check-label" for="editMethodPatch">PATCH</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">限流设置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editApiRateLimit" class="form-label">请求限制</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="editApiRateLimit" name="rate_limit" min="1" max="10000">
+                                    <span class="input-group-text">次请求</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editApiRateLimitPeriod" class="form-label">限流周期</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="editApiRateLimitPeriod" name="rate_limit_period" min="1" max="86400">
+                                    <span class="input-group-text">秒</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">权限设置</div>
+                        
+                        <div class="mb-3">
+                            <label for="editApiPermissions" class="form-label">API权限</label>
+                            <textarea class="form-control json-editor" id="editApiPermissions" name="permissions" rows="4"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="updateApiBtn">保存更改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API密钥创建成功模态框 -->
+<div class="modal fade api-key-modal" id="apiKeyCreatedModal" tabindex="-1" aria-labelledby="apiKeyCreatedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="apiKeyCreatedModalLabel">API密钥创建成功</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="warning-box">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>重要提示：</strong>请立即复制并保存您的API密钥。出于安全考虑，此密钥将只显示一次，之后将无法查看完整密钥。
+                </div>
+                
+                <p>API密钥已成功创建，请使用以下密钥进行API调用：</p>
+                
+                <div class="api-key-display" id="newApiKeyDisplay">
+                    <!-- API密钥将在这里显示 -->
+                </div>
+                
+                <p class="text-muted mt-3">请将此密钥保存在安全的地方。在API请求中，使用以下Header进行身份验证：</p>
+                
+                <div class="bg-light p-3 rounded mb-3">
+                    <code>Authorization: Bearer <span id="apiKeyExample"></span></code>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-success" id="copyNewApiKeyBtn">
+                    <i class="fas fa-copy me-1"></i> 复制API密钥
+                </button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">完成</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 刷新按钮
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // 创建API按钮（页面顶部）
+        document.getElementById('createApiBtn').addEventListener('click', showCreateModal);
+        
+        // 创建API按钮（空状态）
+        const createApiBtnEmpty = document.getElementById('createApiBtnEmpty');
+        if (createApiBtnEmpty) {
+            createApiBtnEmpty.addEventListener('click', showCreateModal);
+        }
+        
+        // 保存API按钮
+        document.getElementById('saveApiBtn').addEventListener('click', createApiSetting);
+        
+        // 更新API按钮
+        document.getElementById('updateApiBtn').addEventListener('click', updateApiSetting);
+        
+        // 复制新API密钥按钮
+        document.getElementById('copyNewApiKeyBtn').addEventListener('click', copyNewApiKey);
+        
+        // 查看API详情按钮
+        document.querySelectorAll('.view-api-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                loadApiSetting(settingId, true); // true表示查看模式
+            });
+        });
+        
+        // 编辑API按钮
+        document.querySelectorAll('.edit-api-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                loadApiSetting(settingId, false); // false表示编辑模式
+            });
+        });
+        
+        // 切换API状态
+        document.querySelectorAll('.toggle-api-status').forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                const enabled = this.checked;
+                updateApiStatus(settingId, enabled);
+            });
+        });
+        
+        // 复制API密钥按钮
+        document.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const apiKey = this.getAttribute('data-api-key');
+                copyToClipboard(apiKey, this);
+            });
+        });
+        
+        // 显示创建模态框
+        function showCreateModal() {
+            // 重置表单
+            document.getElementById('createApiForm').reset();
+            
+            // 设置默认值
+            document.getElementById('apiRateLimit').value = 100;
+            document.getElementById('apiRateLimitPeriod').value = 60;
+            document.getElementById('apiEnabled').checked = true;
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('createApiModal'));
+            modal.show();
+        }
+        
+        // 创建API设置
+        function createApiSetting() {
+            // 收集表单数据
+            const formData = {
+                name: document.getElementById('apiName').value,
+                description: document.getElementById('apiDescription').value,
+                secret_key: document.getElementById('apiSecretKey').value || '',
+                enabled: document.getElementById('apiEnabled').checked,
+                rate_limit: parseInt(document.getElementById('apiRateLimit').value),
+                rate_limit_period: parseInt(document.getElementById('apiRateLimitPeriod').value),
+                expires_at: document.getElementById('apiExpiresAt').value || null
+            };
+            
+            // 处理允许的IP地址
+            const allowedIpsText = document.getElementById('apiAllowedIps').value.trim();
+            if (allowedIpsText) {
+                try {
+                    formData.allowed_ips = JSON.parse(allowedIpsText);
+                } catch (e) {
+                    alert('允许的IP地址格式错误，请输入有效的JSON数组');
+                    return;
+                }
+            } else {
+                formData.allowed_ips = [];
+            }
+            
+            // 处理允许的端点
+            const allowedEndpointsText = document.getElementById('apiAllowedEndpoints').value.trim();
+            if (allowedEndpointsText) {
+                try {
+                    formData.allowed_endpoints = JSON.parse(allowedEndpointsText);
+                } catch (e) {
+                    alert('允许的端点格式错误，请输入有效的JSON数组');
+                    return;
+                }
+            } else {
+                formData.allowed_endpoints = [];
+            }
+            
+            // 处理允许的HTTP方法
+            const allowedMethods = [];
+            document.querySelectorAll('input[name="allowed_methods"]:checked').forEach(checkbox => {
+                allowedMethods.push(checkbox.value);
+            });
+            formData.allowed_methods = allowedMethods;
+            
+            // 处理权限
+            const permissionsText = document.getElementById('apiPermissions').value.trim();
+            if (permissionsText) {
+                try {
+                    formData.permissions = JSON.parse(permissionsText);
+                } catch (e) {
+                    alert('权限格式错误，请输入有效的JSON对象');
+                    return;
+                }
+            } else {
+                formData.permissions = {};
+            }
+            
+            // 验证必填字段
+            if (!formData.name) {
+                alert('请填写API密钥名称');
+                return;
+            }
+            
+            // 显示加载状态
+            const saveBtn = document.getElementById('saveApiBtn');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 创建中...';
+            saveBtn.disabled = true;
+            
+            // 发送创建请求
+            fetch('/config/api/api-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 关闭创建模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('createApiModal'));
+                    modal.hide();
+                    
+                    // 显示API密钥创建成功模态框
+                    document.getElementById('newApiKeyDisplay').textContent = result.api_key;
+                    document.getElementById('apiKeyExample').textContent = result.api_key;
+                    
+                    const apiKeyModal = new bootstrap.Modal(document.getElementById('apiKeyCreatedModal'));
+                    apiKeyModal.show();
+                    
+                    // 等待用户查看API密钥后刷新页面
+                    document.getElementById('apiKeyCreatedModal').addEventListener('hidden.bs.modal', function() {
+                        location.reload();
+                    });
+                } else {
+                    alert('创建失败: ' + (result.message || '未知错误'));
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('创建失败:', error);
+                alert('创建失败: ' + error.message);
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            });
+        }
+        
+        // 加载API设置到模态框
+        function loadApiSetting(settingId, viewOnly) {
+            // 获取表格行数据
+            const row = document.querySelector(`tr[data-setting-id="${settingId}"]`);
+            if (!row) return;
+            
+            // 从表格中获取数据
+            const name = row.cells[0].querySelector('.fw-medium').textContent.trim();
+            const description = row.cells[0].querySelector('.text-muted')?.textContent.trim() || '';
+            const apiKey = row.cells[1].querySelector('.copy-btn').getAttribute('data-api-key');
+            const enabled = row.cells[2].querySelector('.status-active') ? true : false;
+            const rateLimitText = row.cells[3].querySelector('.fw-medium').textContent;
+            const rateLimit = parseInt(rateLimitText.replace(' 次', ''));
+            const rateLimitPeriodText = row.cells[3].querySelector('.text-muted').textContent;
+            const rateLimitPeriod = parseInt(rateLimitPeriodText.replace('每 ', '').replace(' 秒', ''));
+            
+            // 过期时间
+            let expiresAt = null;
+            const expiresAtCell = row.cells[4];
+            if (!expiresAtCell.querySelector('.text-muted')) {
+                const dateText = expiresAtCell.querySelector('div').textContent.trim();
+                const timeText = expiresAtCell.querySelector('.text-muted').textContent.trim();
+                expiresAt = `${dateText}T${timeText}:00`;
+            }
+            
+            // 权限（从预览中获取，可能需要从服务器获取完整数据）
+            const permissionsPreview = row.cells[7].querySelector('.permissions-preview').textContent.trim();
+            
+            // 填充表单
+            document.getElementById('editApiId').value = settingId;
+            document.getElementById('editApiName').value = name;
+            document.getElementById('editApiDescription').value = description;
+            document.getElementById('editApiEnabled').checked = enabled;
+            document.getElementById('editApiRateLimit').value = rateLimit;
+            document.getElementById('editApiRateLimitPeriod').value = rateLimitPeriod;
+            
+            if (expiresAt) {
+                document.getElementById('editApiExpiresAt').value = expiresAt;
+            } else {
+                document.getElementById('editApiExpiresAt').value = '';
+            }
+            
+            // 从服务器获取完整数据（包括JSON字段）
+            fetch(`/config/api/api-settings/${settingId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // 填充JSON字段
+                    if (data.allowed_ips) {
+                        document.getElementById('editApiAllowedIps').value = JSON.stringify(data.allowed_ips, null, 2);
+                    }
+                    
+                    if (data.allowed_endpoints) {
+                        document.getElementById('editApiAllowedEndpoints').value = JSON.stringify(data.allowed_endpoints, null, 2);
+                    }
+                    
+                    if (data.allowed_methods) {
+                        // 清除所有复选框
+                        document.querySelectorAll('input[name="allowed_methods"]').forEach(checkbox => {
+                            checkbox.checked = false;
+                        });
+                        
+                        // 选中允许的方法
+                        data.allowed_methods.forEach(method => {
+                            const checkbox = document.getElementById(`editMethod${method.charAt(0).toUpperCase() + method.slice(1).toLowerCase()}`);
+                            if (checkbox) {
+                                checkbox.checked = true;
+                            }
+                        });
+                    }
+                    
+                    if (data.permissions) {
+                        document.getElementById('editApiPermissions').value = JSON.stringify(data.permissions, null, 2);
+                    }
+                    
+                    // 如果是查看模式，禁用所有表单字段
+                    if (viewOnly) {
+                        document.querySelectorAll('#editApiForm input, #editApiForm textarea, #editApiForm select').forEach(element => {
+                            element.disabled = true;
+                        });
+                        document.querySelectorAll('#editApiForm input[type="checkbox"]').forEach(checkbox => {
+                            checkbox.disabled = true;
+                        });
+                        document.getElementById('updateApiBtn').style.display = 'none';
+                        document.getElementById('editApiModalLabel').textContent = '查看API设置';
+                    } else {
+                        document.querySelectorAll('#editApiForm input, #editApiForm textarea, #editApiForm select').forEach(element => {
+                            element.disabled = false;
+                        });
+                        document.querySelectorAll('#editApiForm input[type="checkbox"]').forEach(checkbox => {
+                            checkbox.disabled = false;
+                        });
+                        document.getElementById('updateApiBtn').style.display = 'inline-block';
+                        document.getElementById('editApiModalLabel').textContent = '编辑API设置';
+                    }
+                    
+                    // 显示模态框
+                    const modal = new bootstrap.Modal(document.getElementById('editApiModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('获取API设置失败:', error);
+                    alert('获取API设置失败: ' + error.message);
+                });
+        }
+        
+        // 更新API设置
+        function updateApiSetting() {
+            const settingId = document.getElementById('editApiId').value;
+            
+            // 收集表单数据
+            const formData = {
+                name: document.getElementById('editApiName').value,
+                description: document.getElementById('editApiDescription').value,
+                enabled: document.getElementById('editApiEnabled').checked,
+                rate_limit: parseInt(document.getElementById('editApiRateLimit').value),
+                rate_limit_period: parseInt(document.getElementById('editApiRateLimitPeriod').value)
+            };
+            
+            // 处理密钥（如果提供了新密钥）
+            const secretKey = document.getElementById('editApiSecretKey').value;
+            if (secretKey) {
+                formData.secret_key = secretKey;
+            }
+            
+            // 处理过期时间
+            const expiresAt = document.getElementById('editApiExpiresAt').value;
+            if (expiresAt) {
+                formData.expires_at = expiresAt;
+            } else {
+                formData.expires_at = null;
+            }
+            
+            // 处理允许的IP地址
+            const allowedIpsText = document.getElementById('editApiAllowedIps').value.trim();
+            if (allowedIpsText) {
+                try {
+                    formData.allowed_ips = JSON.parse(allowedIpsText);
+                } catch (e) {
+                    alert('允许的IP地址格式错误，请输入有效的JSON数组');
+                    return;
+                }
+            } else {
+                formData.allowed_ips = [];
+            }
+            
+            // 处理允许的端点
+            const allowedEndpointsText = document.getElementById('editApiAllowedEndpoints').value.trim();
+            if (allowedEndpointsText) {
+                try {
+                    formData.allowed_endpoints = JSON.parse(allowedEndpointsText);
+                } catch (e) {
+                    alert('允许的端点格式错误，请输入有效的JSON数组');
+                    return;
+                }
+            } else {
+                formData.allowed_endpoints = [];
+            }
+            
+            // 处理允许的HTTP方法
+            const allowedMethods = [];
+            document.querySelectorAll('#editApiForm input[name="allowed_methods"]:checked').forEach(checkbox => {
+                allowedMethods.push(checkbox.value);
+            });
+            formData.allowed_methods = allowedMethods;
+            
+            // 处理权限
+            const permissionsText = document.getElementById('editApiPermissions').value.trim();
+            if (permissionsText) {
+                try {
+                    formData.permissions = JSON.parse(permissionsText);
+                } catch (e) {
+                    alert('权限格式错误，请输入有效的JSON对象');
+                    return;
+                }
+            } else {
+                formData.permissions = {};
+            }
+            
+            // 验证必填字段
+            if (!formData.name) {
+                alert('请填写API密钥名称');
+                return;
+            }
+            
+            // 显示加载状态
+            const updateBtn = document.getElementById('updateApiBtn');
+            const originalText = updateBtn.innerHTML;
+            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 保存中...';
+            updateBtn.disabled = true;
+            
+            // 发送更新请求（假设有更新路由）
+            fetch(`/config/api/api-settings/${settingId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 关闭模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editApiModal'));
+                    modal.hide();
+                    
+                    // 显示成功消息
+                    showAlert('API设置已成功更新', 'success');
+                    
+                    // 重新加载页面以获取最新数据
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert('更新失败: ' + (result.message || '未知错误'));
+                    updateBtn.innerHTML = originalText;
+                    updateBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('更新失败:', error);
+                alert('更新失败: ' + error.message);
+                updateBtn.innerHTML = originalText;
+                updateBtn.disabled = false;
+            });
+        }
+        
+        // 更新API状态（启用/禁用）
+        function updateApiStatus(settingId, enabled) {
+            fetch(`/config/api/api-settings/${settingId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({ enabled: enabled })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(`API密钥已${enabled ? '启用' : '禁用'}`, 'success');
+                } else {
+                    alert('操作失败: ' + (result.message || '未知错误'));
+                    // 恢复切换状态
+                    const toggle = document.querySelector(`.toggle-api-status[data-setting-id="${settingId}"]`);
+                    if (toggle) {
+                        toggle.checked = !enabled;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('操作失败:', error);
+                alert('操作失败: ' + error.message);
+                // 恢复切换状态
+                const toggle = document.querySelector(`.toggle-api-status[data-setting-id="${settingId}"]`);
+                if (toggle) {
+                    toggle.checked = !enabled;
+                }
+            });
+        }
+        
+        // 复制API密钥到剪贴板
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                // 显示复制成功反馈
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check"></i>';
+                button.classList.add('copied');
+                
+                // 3秒后恢复原状
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('copied');
+                }, 3000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制');
+            });
+        }
+        
+        // 复制新API密钥
+        function copyNewApiKey() {
+            const apiKey = document.getElementById('newApiKeyDisplay').textContent;
+            const button = document.getElementById('copyNewApiKeyBtn');
+            
+            navigator.clipboard.writeText(apiKey).then(() => {
+                // 显示复制成功反馈
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check me-1"></i> 已复制';
+                button.classList.add('copied');
+                
+                // 3秒后恢复原状
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('copied');
+                }, 3000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制');
+            });
+        }
+        
+        // 显示提示消息
+        function showAlert(message, type) {
+            // 移除现有的提示
+            const existingAlert = document.querySelector('.alert-dismissible');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+            
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', alertHtml);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                const alert = document.querySelector('.alert-dismissible');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

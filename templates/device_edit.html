@@ -1,0 +1,1029 @@
+{% extends "base.html" %}
+
+{% block title %}编辑设备 - {{ device.name }} - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    /* 自定义样式 */
+    .form-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 4px solid #007bff;
+    }
+
+    .form-section h5 {
+        color: #495057;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+
+    /* 表单验证样式 */
+    .is-invalid {
+        border-color: #dc3545 !important;
+    }
+
+    .is-valid {
+        border-color: #28a745 !important;
+    }
+
+    .invalid-feedback {
+        display: none;
+        color: #dc3545;
+        font-size: 0.875em;
+        margin-top: 0.25rem;
+    }
+
+    .was-validated .form-control:invalid ~ .invalid-feedback,
+    .was-validated .form-control:invalid:focus ~ .invalid-feedback,
+    .form-control.is-invalid ~ .invalid-feedback {
+        display: block;
+    }
+
+    /* 帮助文本样式 */
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+
+    /* 机柜预览样式 */
+    .cabinet-preview {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+        background-color: white;
+        margin-top: 10px;
+        display: none;
+    }
+
+    .u-preview {
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 2px;
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        margin-top: 10px;
+    }
+
+    .u-slot {
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        border: 1px solid #dee2e6;
+        background-color: white;
+        position: relative;
+    }
+
+    .u-slot.available {
+        background-color: #d1e7dd;
+        border-color: #badbcc;
+    }
+
+    .u-slot.occupied {
+        background-color: #f8d7da;
+        border-color: #f5c2c7;
+    }
+
+    .u-slot.selected {
+        background-color: #cce5ff;
+        border-color: #b8daff;
+        font-weight: bold;
+    }
+
+    .u-slot-number {
+        position: absolute;
+        left: 2px;
+        font-size: 8px;
+        color: #6c757d;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .form-section {
+            padding: 15px;
+        }
+        
+        .u-preview {
+            max-height: 150px;
+        }
+    }
+
+    /* 密码显示/隐藏切换 */
+    .password-toggle {
+        cursor: pointer;
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+
+    .password-container {
+        position: relative;
+    }
+
+    /* 调试信息样式 */
+    .debug-info {
+        font-size: 0.75rem;
+        background-color: #f8f9fa;
+        border: 1px dashed #dee2e6;
+        padding: 5px;
+        border-radius: 4px;
+        margin-top: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+编辑设备: {{ device.name }}
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('device.device_detail', id=device.id) }}" class="btn btn-secondary btn-sm me-2">
+        <i class="fas fa-eye"></i> 查看详情
+    </a>
+    <a href="{{ url_for('device.device_list') }}" class="btn btn-secondary btn-sm">
+        <i class="fas fa-arrow-left"></i> 返回列表
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <form method="POST" action="{{ url_for('device.device_edit', id=device.id) }}" id="deviceForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- 设备基本信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-info-circle me-2"></i>
+                    基本信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label required-field">设备名称</label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                               placeholder="设备名称（唯一标识）" maxlength="128"
+                               value="{{ device.name }}" data-error="请输入设备名称">
+                        <div class="invalid-feedback">
+                            请输入设备名称
+                        </div>
+                        <div class="help-text">
+                            设备的唯一标识，建议使用清晰明确的名称
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="management_ip" class="form-label required-field">管理IP地址</label>
+                        <input type="text" class="form-control" id="management_ip" name="management_ip" required
+                               placeholder="IPv4或IPv6地址" maxlength="45"
+                               value="{{ device.management_ip }}" data-error="请输入有效的IP地址">
+                        <div class="invalid-feedback">
+                            请输入有效的IP地址
+                        </div>
+                        <div class="help-text">
+                            设备的管理IP地址，用于远程管理和监控
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="device_type" class="form-label">设备类型</label>
+                        <select class="form-select" id="device_type" name="device_type">
+                            <option value="">请选择设备类型</option>
+                            <option value="switch" {% if device.device_type == 'switch' %}selected{% endif %}>交换机</option>
+                            <option value="router" {% if device.device_type == 'router' %}selected{% endif %}>路由器</option>
+                            <option value="firewall" {% if device.device_type == 'firewall' %}selected{% endif %}>防火墙</option>
+                            <option value="server" {% if device.device_type == 'server' %}selected{% endif %}>服务器</option>
+                            <option value="storage" {% if device.device_type == 'storage' %}selected{% endif %}>存储设备</option>
+                            <option value="ap" {% if device.device_type == 'ap' %}selected{% endif %}>无线AP</option>
+                            <option value="other" {% if device.device_type == 'other' %}selected{% endif %}>其他设备</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="management_mac" class="form-label">管理MAC地址</label>
+                        <input type="text" class="form-control" id="management_mac" name="management_mac"
+                               placeholder="XX:XX:XX:XX:XX:XX" maxlength="17"
+                               value="{{ device.mac_address or '' }}">
+                        <div class="help-text">
+                            设备管理接口的MAC地址
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="manufacturer" class="form-label">制造商</label>
+                        <input type="text" class="form-control" id="manufacturer" name="manufacturer"
+                               placeholder="华为、华三、思科等" maxlength="128"
+                               value="{{ device.manufacturer or '' }}">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="model" class="form-label">型号</label>
+                        <input type="text" class="form-control" id="model" name="model"
+                               placeholder="设备型号" maxlength="128"
+                               value="{{ device.model or '' }}">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="serial_number" class="form-label">序列号</label>
+                        <input type="text" class="form-control" id="serial_number" name="serial_number"
+                               placeholder="设备序列号" maxlength="128"
+                               value="{{ device.serial_number or '' }}">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">设备状态</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="online" {% if device.status == 'online' %}selected{% endif %}>在线</option>
+                            <option value="offline" {% if device.status == 'offline' %}selected{% endif %}>离线</option>
+                            <option value="fault" {% if device.status == 'fault' %}selected{% endif %}>故障</option>
+                            <option value="unknown" {% if device.status == 'unknown' %}selected{% endif %}>未知</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 机柜位置信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-server me-2"></i>
+                    机柜位置信息
+                </h5>
+                
+                <div class="row">
+
+<!-- 机房位置 -->
+<div class="col-md-6 mb-3">
+    <label for="location_id" class="form-label">机房位置</label>
+    <select class="form-select" id="location_id" name="location_id" onchange="updateCabinetsByLocation()">
+        <option value="">请选择机房</option>
+        {% for location in all_locations %}
+        <option value="{{ location.id }}" {% if device.location_id == location.id %}selected{% endif %}>
+            {{ location.name }}
+        </option>
+        {% endfor %}
+    </select>
+    <small class="text-muted">选择设备所在的机房，选择后机柜列表将自动过滤</small>
+</div>
+
+<!-- 所在机柜 -->
+<div class="col-md-6 mb-3">
+    <label for="cabinet_id" class="form-label">所在机柜</label>
+    <select class="form-select" id="cabinet_id" name="cabinet_id" onchange="updateCabinetPreview()">
+        <option value="">未分配机柜</option>
+        {% if all_cabinets %}
+            {% for cabinet in all_cabinets %}
+            <option value="{{ cabinet.id }}" 
+                    data-height="{{ cabinet.height_u or 42 }}"
+                    data-location="{{ cabinet.location_id or '' }}"
+                    {% if device.cabinet_id == cabinet.id %}selected{% endif %}>
+                {{ cabinet.name }} 
+                {% if cabinet.location %} 
+                    ({{ cabinet.location.name }})
+                {% endif %}
+                {% if cabinet.description %}
+                    - {{ cabinet.description }}
+                {% endif %}
+            </option>
+            {% endfor %}
+        {% endif %}
+    </select>
+    <div class="help-text">
+        选择设备所在的机柜（根据机房自动过滤）
+    </div>
+</div>         
+
+
+                    <div class="col-md-3 mb-3">
+                        <label for="position_u" class="form-label">U位位置</label>
+                        <input type="number" class="form-control" id="position_u" name="position_u"
+                               min="1" max="60" step="1"
+                               value="{{ device.position_u or '' }}"
+                               onchange="updateUPreview()">
+                        <div class="help-text">
+                            设备在机柜中的起始U位（1-60）
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="height_u" class="form-label">设备高度 (U)</label>
+                        <input type="number" class="form-control" id="height_u" name="height_u"
+                               min="1" max="20" step="1"
+                               value="{{ device.height_u or 1 }}"
+                               onchange="updateUPreview()">
+                        <div class="help-text">
+                            设备占用的U位数，默认1U
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 机房位置 -->
+
+                <!-- 机柜预览区域 -->
+                <div id="cabinetPreview" class="cabinet-preview">
+                    <div class="mb-2">
+                        <small class="text-muted">机柜预览:</small>
+                        <span id="cabinetInfo" class="text-muted ms-2"></span>
+                    </div>
+                    <div id="uPreview" class="u-preview">
+                        <!-- U位预览将通过JS动态生成 -->
+                    </div>
+                    <div id="uHint" class="mt-2 small text-muted" style="display: none;">
+                        <i class="fas fa-info-circle"></i>
+                        灰色U位可用，蓝色U位为当前设备位置
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 访问凭证 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-key me-2"></i>
+                    访问凭证
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="snmp_setting_id" class="form-label">SNMP配置</label>
+                        <select class="form-select" id="snmp_setting_id" name="snmp_setting_id">
+                            <option value="">-- 手动输入 --</option>
+                            {% for s in snmp_settings %}
+                            <option value="{{ s.id }}" data-community="{{ s.community }}" data-version="{{ s.version }}"
+                                {% if device.snmp_setting_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="help-text">
+                            选择后自动填充下方字段 | <a href="{{ url_for('config.snmp_settings') }}" target="_blank">管理配置</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="credential_id" class="form-label">登录凭据</label>
+                        <select class="form-select" id="credential_id" name="credential_id">
+                            <option value="">-- 手动输入 --</option>
+                            {% for c in credentials %}
+                            <option value="{{ c.id }}"
+                                {% if device.credential_id == c.id %}selected{% endif %}>{{ c.name }} ({{ c.username }}@{{ c.protocol or 'ssh' }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="help-text">
+                            选择后自动填充SSH信息 | <a href="{{ url_for('config.credential_management') }}" target="_blank">管理凭据</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="snmp_community" class="form-label">SNMP共同体</label>
+                        <input type="text" class="form-control" id="snmp_community" name="snmp_community"
+                               placeholder="默认: public" maxlength="64"
+                               value="{{ device.snmp_community or '' }}">
+                        <div class="help-text">
+                            SNMP协议的只读共同体字符串
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="ssh_username" class="form-label">SSH用户名</label>
+                        <input type="text" class="form-control" id="ssh_username" name="ssh_username"
+                               placeholder="SSH登录用户名" maxlength="64"
+                               value="{{ device.ssh_username or '' }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch mt-4">
+                            <input class="form-check-input" type="checkbox" role="switch" id="is_wireless_controller"
+                                   name="is_wireless_controller" {% if device.is_wireless_controller %}checked{% endif %}>
+                            <label class="form-check-label" for="is_wireless_controller">标记为无线控制器 (AC)</label>
+                        </div>
+                        <div class="help-text">勾选后，可在「拓扑管理 → 拓扑发现 → 无线控制器 AP 发现」中拉取其下属 AP。</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="controller_vendor" class="form-label">控制器厂商</label>
+                        <select class="form-select" id="controller_vendor" name="controller_vendor">
+                            <option value="auto" {% if device.controller_vendor == 'auto' %}selected{% endif %}>自动识别</option>
+                            <option value="h3c" {% if device.controller_vendor == 'h3c' %}selected{% endif %}>H3C</option>
+                            <option value="huawei" {% if device.controller_vendor == 'huawei' %}selected{% endif %}>华为</option>
+                            <option value="cisco" {% if device.controller_vendor == 'cisco' %}selected{% endif %}>Cisco</option>
+                            <option value="aruba" {% if device.controller_vendor == 'aruba' %}selected{% endif %}>Aruba</option>
+                            <option value="ruijie" {% if device.controller_vendor == 'ruijie' %}selected{% endif %}>锐捷</option>
+                        </select>
+                        <div class="help-text">auto 将按 sysObjectID 自动判断；如自动识别不准，请手动指定。</div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="ssh_password" class="form-label">SSH密码</label>
+                        <div class="password-container">
+                            <input type="password" class="form-control" id="ssh_password" name="ssh_password"
+                                   placeholder="SSH登录密码" maxlength="256"
+                                   value="{{ device.ssh_password or '' }}">
+                            <i class="fas fa-eye password-toggle" id="passwordToggle"></i>
+                        </div>
+                        <div class="help-text">
+                            留空表示不修改现有密码，密码将加密存储
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="snmp_version" class="form-label">SNMP版本</label>
+                        <select class="form-select" id="snmp_version" name="snmp_version">
+                            <option value="1" {% if device.snmp_version == '1' %}selected{% endif %}>v1</option>
+                            <option value="2c" {% if device.snmp_version == '2c' or not device.snmp_version %}selected{% endif %}>v2c</option>
+                            <option value="3" {% if device.snmp_version == '3' %}selected{% endif %}>v3</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 采购和保修信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-shopping-cart me-2"></i>
+                    采购和保修信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="purchase_date" class="form-label">购买日期</label>
+                        <input type="date" class="form-control" id="purchase_date" name="purchase_date"
+                               value="{% if device.purchase_date %}{{ device.purchase_date.strftime('%Y-%m-%d') }}{% endif %}">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="warranty_expiry" class="form-label">保修到期日</label>
+                        <input type="date" class="form-control" id="warranty_expiry" name="warranty_expiry"
+                               value="{% if device.warranty_expiry %}{{ device.warranty_expiry.strftime('%Y-%m-%d') }}{% endif %}">
+                        <div class="help-text">
+                            保修状态：
+                            {% if device.warranty_expiry %}
+                                {% set today = current_date if current_date else now().date() %}
+                                {% if device.warranty_expiry < today %}
+                                    <span class="badge bg-danger">已过期</span>
+                                {% else %}
+                                    {% set three_months_later = today.replace(month=today.month+3) if today.month <= 9 else today.replace(year=today.year+1, month=today.month-9) %}
+                                    {% if device.warranty_expiry < three_months_later %}
+                                        <span class="badge bg-warning">即将到期</span>
+                                    {% else %}
+                                        <span class="badge bg-success">有效期内</span>
+                                    {% endif %}
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">未设置</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="purchase_price" class="form-label">购买价格</label>
+                        <div class="input-group">
+                            <span class="input-group-text">¥</span>
+                            <input type="number" class="form-control" id="purchase_price" name="purchase_price"
+                                   step="0.01" min="0"
+                                   value="{{ device.purchase_price or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="vendor" class="form-label">供应商</label>
+                        <input type="text" class="form-control" id="vendor" name="vendor"
+                               placeholder="设备供应商" maxlength="128"
+                               value="{{ device.vendor or '' }}">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 备注信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-sticky-note me-2"></i>
+                    备注信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label for="notes" class="form-label">备注</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="4"
+                                  placeholder="设备的详细描述、配置信息、维护记录等" maxlength="2000">{{ device.notes or '' }}</textarea>
+                        <div class="help-text">
+                            最多2000个字符，支持换行
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 提交按钮 -->
+            <div class="d-flex justify-content-between mt-4">
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                    <i class="fas fa-trash"></i> 删除设备
+                </button>
+                <div>
+                    <button type="reset" class="btn btn-outline-secondary me-2" onclick="resetForm()">
+                        <i class="fas fa-refresh"></i> 重置
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存修改
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- 右侧信息面板 -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">设备信息</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <small class="text-muted">设备ID:</small>
+                    <div>{{ device.id }}</div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">创建时间:</small>
+                    <div>{{ device.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">最后更新:</small>
+                    <div>{{ device.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">最后检测:</small>
+                    <div>
+                        {% if device.last_checked %}
+                            {{ device.last_checked.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% else %}
+                            <span class="text-muted">从未检测</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">最后在线:</small>
+                    <div>
+                        {% if device.last_seen %}
+                            {{ device.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% else %}
+                            <span class="text-muted">从未在线</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">管理接口:</small>
+                    <div>
+                        {% if device.interfaces %}
+                            <ul class="list-unstyled mb-0 small">
+                                {% for interface in device.interfaces[:3] %}
+                                    <li>{{ interface.name }}: {{ interface.ip_address or '无IP' }}</li>
+                                {% endfor %}
+                                {% if device.interfaces|length > 3 %}
+                                    <li class="text-muted">... 还有 {{ device.interfaces|length - 3 }} 个接口</li>
+                                {% endif %}
+                            </ul>
+                        {% else %}
+                            <span class="text-muted">无接口信息</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">操作提示</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        设备名称和管理IP必须唯一
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        修改密码字段留空将保留原有密码
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        U位位置从机柜底部开始计数
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        保存后系统将自动更新设备信息
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        点击机柜预览中的U位可快速选择位置
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除设备 <strong>{{ device.name }}</strong> 吗？</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    此操作不可撤销，删除后将丢失该设备的所有相关数据！
+                </div>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    注意：该设备有 {{ device.interfaces|length if device.interfaces else 0 }} 个接口，删除设备会同时删除这些接口。
+                </div>
+            </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <form action="{{ url_for('device.delete_device', id=device.id) }}" method="POST" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> 确认删除
+                        </button>
+                    </form>
+                </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 保存所有机柜的原始数据（在页面加载时缓存）
+let allCabinetOptions = [];
+
+// 缓存所有机柜选项
+function cacheAllCabinetOptions() {
+    const cabinetSelect = document.getElementById('cabinet_id');
+    allCabinetOptions = [];
+    for (let i = 1; i < cabinetSelect.options.length; i++) {
+        const opt = cabinetSelect.options[i];
+        allCabinetOptions.push({
+            value: opt.value,
+            text: opt.text,
+            height: opt.getAttribute('data-height') || 42,
+            location: opt.getAttribute('data-location') || ''
+        });
+    }
+    console.log('缓存的机柜数量:', allCabinetOptions.length);
+}
+
+// 恢复所有机柜
+function restoreAllCabinets() {
+    const cabinetSelect = document.getElementById('cabinet_id');
+    
+    // 清除现有选项（保留第一个"未分配"选项）
+    while (cabinetSelect.options.length > 1) {
+        cabinetSelect.remove(1);
+    }
+    
+    // 从缓存恢复
+    allCabinetOptions.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.textContent = item.text;
+        option.dataset.height = item.height;
+        option.dataset.location = item.location;
+        cabinetSelect.appendChild(option);
+    });
+    
+    // 更新机柜预览
+    updateCabinetPreview();
+}
+
+// 根据机房过滤机柜列表
+function updateCabinetsByLocation() {
+    const locationSelect = document.getElementById('location_id');
+    const cabinetSelect = document.getElementById('cabinet_id');
+    const selectedLocationId = locationSelect.value;
+    
+    // 保存当前选中的机柜ID
+    const currentCabinetId = cabinetSelect.value;
+    
+    // 清除当前机柜选项（保留第一个"未分配"选项）
+    while (cabinetSelect.options.length > 1) {
+        cabinetSelect.remove(1);
+    }
+    
+    if (!selectedLocationId) {
+        restoreAllCabinets();
+        return;
+    }
+    
+    // 通过API获取该机房下的机柜
+    fetch(`/device/api/cabinets_by_location?location_id=${selectedLocationId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.cabinets && data.cabinets.length > 0) {
+                data.cabinets.forEach(cabinet => {
+                    const option = document.createElement('option');
+                    option.value = cabinet.id;
+                    option.textContent = cabinet.name + (cabinet.description ? ` - ${cabinet.description}` : '');
+                    option.dataset.height = cabinet.height_u || 42;
+                    option.dataset.location = selectedLocationId;
+                    cabinetSelect.appendChild(option);
+                });
+                
+                if (currentCabinetId) {
+                    const found = Array.from(cabinetSelect.options).some(opt => opt.value == currentCabinetId);
+                    if (found) {
+                        cabinetSelect.value = currentCabinetId;
+                    }
+                }
+                
+                updateCabinetPreview();
+            } else {
+                // 该机房下没有机柜，尝试从缓存过滤
+                filterCabinetsFromCache(selectedLocationId);
+            }
+        })
+        .catch(error => {
+            console.error('加载机柜列表失败:', error);
+            filterCabinetsFromCache(selectedLocationId);
+        });
+}
+
+// 从缓存中过滤机柜（备用方案）
+function filterCabinetsFromCache(locationId) {
+    const cabinetSelect = document.getElementById('cabinet_id');
+    
+    // 清除现有选项（保留第一个）
+    while (cabinetSelect.options.length > 1) {
+        cabinetSelect.remove(1);
+    }
+    
+    let found = false;
+    allCabinetOptions.forEach(item => {
+        if (item.location == locationId) {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.text;
+            option.dataset.height = item.height;
+            option.dataset.location = item.location;
+            cabinetSelect.appendChild(option);
+            found = true;
+        }
+    });
+    
+    if (!found) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '该机房下暂无机柜';
+        option.disabled = true;
+        cabinetSelect.appendChild(option);
+        document.getElementById('cabinetPreview').style.display = 'none';
+    } else {
+        updateCabinetPreview();
+    }
+}
+
+// 更新机柜预览
+function updateCabinetPreview() {
+    const cabinetSelect = document.getElementById('cabinet_id');
+    const cabinetPreview = document.getElementById('cabinetPreview');
+    const cabinetInfo = document.getElementById('cabinetInfo');
+    const uHint = document.getElementById('uHint');
+    
+    const selectedOption = cabinetSelect.options[cabinetSelect.selectedIndex];
+    const cabinetHeight = selectedOption.getAttribute('data-height') || 42;
+    
+    if (selectedOption.value) {
+        cabinetInfo.textContent = `机柜: ${selectedOption.text}, 高度: ${cabinetHeight}U`;
+    } else {
+        cabinetInfo.textContent = '';
+    }
+    
+    if (selectedOption.value) {
+        cabinetPreview.style.display = 'block';
+        uHint.style.display = 'block';
+        generateUPreview(cabinetHeight);
+    } else {
+        cabinetPreview.style.display = 'none';
+        uHint.style.display = 'none';
+    }
+}
+
+// 生成U位预览
+function generateUPreview(height) {
+    const uPreview = document.getElementById('uPreview');
+    const positionU = document.getElementById('position_u').value;
+    const heightU = document.getElementById('height_u').value || 1;
+    
+    uPreview.innerHTML = '';
+    
+    for (let i = height; i >= 1; i--) {
+        const uSlot = document.createElement('div');
+        uSlot.className = 'u-slot';
+        uSlot.style.height = '20px';
+        uSlot.title = `U位 ${i}`;
+        uSlot.dataset.uNumber = i;
+        
+        uSlot.addEventListener('click', function() {
+            document.getElementById('position_u').value = this.dataset.uNumber;
+            updateUPreview();
+        });
+        
+        if (positionU && i >= positionU && i < (parseInt(positionU) + parseInt(heightU))) {
+            uSlot.classList.add('selected');
+            uSlot.title = `U位 ${i} (设备占用)`;
+        }
+        
+        const uNumber = document.createElement('div');
+        uNumber.className = 'u-slot-number';
+        uNumber.textContent = i;
+        
+        if (positionU && i == positionU) {
+            const deviceMark = document.createElement('div');
+            deviceMark.className = 'position-absolute top-0 start-50 translate-middle-x';
+            deviceMark.innerHTML = '<i class="fas fa-caret-up text-primary"></i>';
+            uSlot.appendChild(deviceMark);
+        }
+        
+        uSlot.appendChild(uNumber);
+        uPreview.appendChild(uSlot);
+    }
+}
+
+// 更新U位预览
+function updateUPreview() {
+    const cabinetSelect = document.getElementById('cabinet_id');
+    const selectedOption = cabinetSelect.options[cabinetSelect.selectedIndex];
+    const cabinetHeight = selectedOption.getAttribute('data-height');
+    
+    if (cabinetHeight) {
+        generateUPreview(cabinetHeight);
+    }
+}
+
+// IP地址验证函数
+function isValidIP(ip) {
+    const ipv4Regex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+    const ipv6CompressedRegex = /^(([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$/;
+    
+    return ipv4Regex.test(ip) || ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip);
+}
+
+// MAC地址验证函数
+function isValidMAC(mac) {
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+    return macRegex.test(mac);
+}
+
+// 重置表单
+function resetForm() {
+    if (confirm('确定要重置表单吗？所有未保存的更改将丢失。')) {
+        document.getElementById('deviceForm').reset();
+        updateCabinetPreview();
+        const locationSelect = document.getElementById('location_id');
+        if (locationSelect.value) {
+            updateCabinetsByLocation();
+        }
+    }
+}
+
+// 表单验证
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('deviceForm');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordInput = document.getElementById('ssh_password');
+    
+    // 缓存所有机柜选项
+    cacheAllCabinetOptions();
+    
+    // 如果已选择机房，自动过滤机柜
+    const locationSelect = document.getElementById('location_id');
+    if (locationSelect && locationSelect.value) {
+        setTimeout(function() {
+            updateCabinetsByLocation();
+        }, 100);
+    }
+    
+    // 表单提交验证
+    form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+        
+        const ipInput = document.getElementById('management_ip');
+        const ip = ipInput.value.trim();
+        if (ip && !isValidIP(ip)) {
+            ipInput.classList.add('is-invalid');
+            event.preventDefault();
+        }
+    });
+    
+    // 密码显示/隐藏切换
+    passwordToggle.addEventListener('click', function() {
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.classList.toggle('fa-eye');
+        this.classList.toggle('fa-eye-slash');
+    });
+    
+    // 初始化机柜预览
+    updateCabinetPreview();
+    
+    // IP地址验证
+    const ipInput = document.getElementById('management_ip');
+    ipInput.addEventListener('change', function() {
+        const ip = this.value.trim();
+        if (ip && !isValidIP(ip)) {
+            this.classList.add('is-invalid');
+        } else {
+            this.classList.remove('is-invalid');
+        }
+    });
+    
+    // MAC地址验证
+    const macInput = document.getElementById('management_mac');
+    if (macInput) {
+        macInput.addEventListener('change', function() {
+            const mac = this.value.trim();
+            if (mac && !isValidMAC(mac)) {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+});
+
+// 页面加载完成后初始化
+window.addEventListener('load', function() {
+    const requiredFields = document.querySelectorAll('.required-field');
+    requiredFields.forEach(function(field) {
+        const label = field.parentElement;
+        if (label && !label.querySelector('.required-star')) {
+            const star = document.createElement('span');
+            star.className = 'required-star text-danger ms-1';
+            star.innerHTML = '*';
+            label.appendChild(star);
+        }
+    });
+});
+</script>
+
+<script>
+document.getElementById('snmp_setting_id')?.addEventListener('change', function() {
+    var selected = this.options[this.selectedIndex];
+    if (selected && selected.value) {
+        document.getElementById('snmp_community').value = selected.getAttribute('data-community') || '';
+        var ver = (selected.getAttribute('data-version') || 'v2c').replace(/^v/i, '');
+        var verSelect = document.getElementById('snmp_version');
+        if (verSelect) {
+            for (var i = 0; i < verSelect.options.length; i++) {
+                if (verSelect.options[i].value === ver) {
+                    verSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+});
+
+document.getElementById('credential_id')?.addEventListener('change', function() {
+    var credId = this.value;
+    if (credId) {
+        fetch('/config/api/credentials/' + credId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.username) document.getElementById('ssh_username').value = data.username;
+                if (data.password_decrypted) document.getElementById('ssh_password').value = data.password_decrypted;
+            })
+            .catch(function(e) { console.error('获取凭据失败:', e); });
+    }
+});
+</script>
+{% endblock %}
+

@@ -1,0 +1,1047 @@
+{% extends "base.html" %}
+
+{% block title %}阈值配置管理 - 网络监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-tachometer-alt mr-2"></i>阈值配置管理
+        </h1>
+        <button class="btn btn-primary" id="addProfileBtn">
+            <i class="fas fa-plus mr-1"></i> 新增阈值配置
+        </button>
+    </div>
+
+    <!-- 信息提示区域 -->
+    <div id="alertContainer"></div>
+
+    <!-- 阈值配置表格 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">阈值配置列表</h6>
+            <div class="dropdown no-arrow">
+                <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" 
+                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+                </a>
+                <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" 
+                     aria-labelledby="dropdownMenuLink">
+                    <div class="dropdown-header">操作:</div>
+                    <a class="dropdown-item" href="#" id="exportProfiles">
+                        <i class="fas fa-file-export mr-1"></i> 导出配置
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="#" id="refreshTable">
+                        <i class="fas fa-sync-alt mr-1"></i> 刷新表格
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- 筛选器 -->
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="filterMetricType">指标类型</label>
+                        <select class="form-control" id="filterMetricType">
+                            <option value="">所有类型</option>
+                            <option value="cpu">CPU</option>
+                            <option value="memory">内存</option>
+                            <option value="disk">磁盘</option>
+                            <option value="network">网络</option>
+                            <option value="temperature">温度</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="filterStatus">状态</label>
+                        <select class="form-control" id="filterStatus">
+                            <option value="">所有状态</option>
+                            <option value="enabled">已启用</option>
+                            <option value="disabled">已禁用</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="filterDefault">默认配置</label>
+                        <select class="form-control" id="filterDefault">
+                            <option value="">全部</option>
+                            <option value="default">默认配置</option>
+                            <option value="custom">自定义配置</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-secondary btn-block" id="resetFilters">
+                            <i class="fas fa-filter mr-1"></i> 重置筛选
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered" id="thresholdProfilesTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>名称</th>
+                            <th>指标类型</th>
+                            <th>阈值配置</th>
+                            <th>条件/持续时间</th>
+                            <th>状态</th>
+                            <th>默认配置</th>
+                            <th>适用范围</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="profilesTableBody">
+                        <!-- 数据将通过JavaScript动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑阈值配置模态框 -->
+<div class="modal fade" id="profileModal" tabindex="-1" role="dialog" aria-labelledby="profileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="profileModalLabel">阈值配置</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="profileForm">
+                <div class="modal-body">
+                    <input type="hidden" id="profileId" name="id">
+                    
+                    <!-- 基本设置 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="name">配置名称 *</label>
+                                <input type="text" class="form-control" id="name" name="name" required>
+                                <small class="form-text text-muted">为这个阈值配置命名</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="metric_type">指标类型 *</label>
+                                <select class="form-control" id="metric_type" name="metric_type" required>
+                                    <option value="">请选择指标类型</option>
+                                    <option value="cpu">CPU</option>
+                                    <option value="memory">内存</option>
+                                    <option value="disk">磁盘</option>
+                                    <option value="network">网络</option>
+                                    <option value="temperature">温度</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 描述 -->
+                    <div class="form-group mb-3">
+                        <label for="description">描述</label>
+                        <textarea class="form-control" id="description" name="description" rows="2" placeholder="请输入阈值配置的描述信息..."></textarea>
+                    </div>
+
+                    <!-- 阈值设置 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="warning_threshold">警告阈值</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="warning_threshold" name="warning_threshold" step="0.1">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text" id="unitDisplay">%</span>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">触发警告的阈值</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="critical_threshold">严重阈值</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="critical_threshold" name="critical_threshold" step="0.1">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text" id="criticalUnitDisplay">%</span>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">触发严重告警的阈值</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="recovery_threshold">恢复阈值</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="recovery_threshold" name="recovery_threshold" step="0.1">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text" id="recoveryUnitDisplay">%</span>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">告警恢复的阈值</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 条件和单位 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="condition_type">条件类型 *</label>
+                                <select class="form-control" id="condition_type" name="condition_type" required>
+                                    <option value="greater">大于</option>
+                                    <option value="less">小于</option>
+                                    <option value="equal">等于</option>
+                                    <option value="not_equal">不等于</option>
+                                </select>
+                                <small class="form-text text-muted">触发条件</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="unit">单位</label>
+                                <select class="form-control" id="unit" name="unit">
+                                    <option value="">请选择单位</option>
+                                    <option value="%">百分比(%)</option>
+                                    <option value="MB">兆字节(MB)</option>
+                                    <option value="GB">吉字节(GB)</option>
+                                    <option value="Mbps">兆比特每秒(Mbps)</option>
+                                    <option value="Gbps">吉比特每秒(Gbps)</option>
+                                    <option value="°C">摄氏度(°C)</option>
+                                    <option value="°F">华氏度(°F)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="duration">持续时间(秒) *</label>
+                                <input type="number" class="form-control" id="duration" name="duration" value="300" min="1" max="86400" required>
+                                <small class="form-text text-muted">阈值持续超过指定时间才触发告警</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 状态和高级设置 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <div class="custom-control custom-switch mt-3">
+                                    <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
+                                    <label class="custom-control-label" for="enabled">启用此阈值配置</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <div class="custom-control custom-switch mt-3">
+                                    <input type="checkbox" class="custom-control-input" id="is_default" name="is_default">
+                                    <label class="custom-control-label" for="is_default">设为默认配置</label>
+                                </div>
+                                <small class="form-text text-muted">每个指标类型只能有一个默认配置</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <div class="custom-control custom-switch mt-3">
+                                    <input type="checkbox" class="custom-control-input" id="apply_to_all" name="apply_to_all">
+                                    <label class="custom-control-label" for="apply_to_all">应用到所有设备</label>
+                                </div>
+                                <small class="form-text text-muted">将此配置应用到所有设备</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 阈值可视化 -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">阈值可视化</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="threshold-visualization">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="threshold-bar-container" style="flex: 1; height: 30px; position: relative;">
+                                        <div class="threshold-bar" style="width: 100%; height: 100%; background: linear-gradient(to right, #28a745, #ffc107, #dc3545); border-radius: 4px;"></div>
+                                        <div class="threshold-marker warning-marker" style="position: absolute; top: -5px; width: 3px; height: 40px; background-color: #ffc107;"></div>
+                                        <div class="threshold-marker critical-marker" style="position: absolute; top: -5px; width: 3px; height: 40px; background-color: #dc3545;"></div>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <div class="text-success">
+                                        <i class="fas fa-circle"></i> 正常
+                                    </div>
+                                    <div class="text-warning">
+                                        <i class="fas fa-circle"></i> 警告
+                                    </div>
+                                    <div class="text-danger">
+                                        <i class="fas fa-circle"></i> 严重
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-center">
+                                    <small class="text-muted" id="visualizationText">当前配置: 警告阈值未设置，严重阈值未设置</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="saveProfileBtn">保存配置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除阈值配置 <strong id="deleteProfileName"></strong> 吗？</p>
+                <p class="text-danger">此操作无法撤销，可能会影响正在使用此配置的告警规则。</p>
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    <strong>注意：</strong>如果此配置是默认配置，删除后系统将不再有该指标类型的默认阈值配置。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 详情模态框 -->
+<div class="modal fade" id="detailModal" tabindex="-1" role="dialog" aria-labelledby="detailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailModalLabel">阈值配置详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>基本信息</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th width="40%">ID:</th>
+                                <td id="detailId"></td>
+                            </tr>
+                            <tr>
+                                <th>名称:</th>
+                                <td id="detailName"></td>
+                            </tr>
+                            <tr>
+                                <th>描述:</th>
+                                <td id="detailDescription"></td>
+                            </tr>
+                            <tr>
+                                <th>指标类型:</th>
+                                <td id="detailMetricType"></td>
+                            </tr>
+                            <tr>
+                                <th>单位:</th>
+                                <td id="detailUnit"></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>阈值配置</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th width="40%">警告阈值:</th>
+                                <td id="detailWarningThreshold"></td>
+                            </tr>
+                            <tr>
+                                <th>严重阈值:</th>
+                                <td id="detailCriticalThreshold"></td>
+                            </tr>
+                            <tr>
+                                <th>恢复阈值:</th>
+                                <td id="detailRecoveryThreshold"></td>
+                            </tr>
+                            <tr>
+                                <th>条件类型:</th>
+                                <td id="detailConditionType"></td>
+                            </tr>
+                            <tr>
+                                <th>持续时间:</th>
+                                <td id="detailDuration"></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>状态信息</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th width="40%">状态:</th>
+                                <td id="detailStatus"></td>
+                            </tr>
+                            <tr>
+                                <th>默认配置:</th>
+                                <td id="detailIsDefault"></td>
+                            </tr>
+                            <tr>
+                                <th>适用范围:</th>
+                                <td id="detailApplyToAll"></td>
+                            </tr>
+                            <tr>
+                                <th>创建时间:</th>
+                                <td id="detailCreatedAt"></td>
+                            </tr>
+                            <tr>
+                                <th>更新时间:</th>
+                                <td id="detailUpdatedAt"></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>阈值可视化</h6>
+                        <div class="threshold-visualization mt-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="threshold-bar-container" style="flex: 1; height: 30px; position: relative;">
+                                    <div class="threshold-bar" style="width: 100%; height: 100%; background: linear-gradient(to right, #28a745, #ffc107, #dc3545); border-radius: 4px;"></div>
+                                    <div class="threshold-marker warning-marker-detail" style="position: absolute; top: -5px; width: 3px; height: 40px; background-color: #ffc107;"></div>
+                                    <div class="threshold-marker critical-marker-detail" style="position: absolute; top: -5px; width: 3px; height: 40px; background-color: #dc3545;"></div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div class="text-success">
+                                    <i class="fas fa-circle"></i> 正常
+                                </div>
+                                <div class="text-warning">
+                                    <i class="fas fa-circle"></i> 警告
+                                </div>
+                                <div class="text-danger">
+                                    <i class="fas fa-circle"></i> 严重
+                                </div>
+                            </div>
+                            <div class="mt-2 text-center">
+                                <small class="text-muted" id="detailVisualizationText"></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 页面加载完成后执行
+    $(document).ready(function() {
+        // 全局变量
+        let thresholdProfiles = [];
+        let deleteProfileId = null;
+        let filteredProfiles = [];
+
+        // 初始化页面
+        loadThresholdProfiles();
+
+        // 加载阈值配置数据
+        function loadThresholdProfiles() {
+            $('#profilesTableBody').html('<tr><td colspan="10" class="text-center"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> 加载中...</td></tr>');
+            
+            fetch('/config/api/threshold-profiles')
+                .then(response => response.json())
+                .then(data => {
+                    thresholdProfiles = data;
+                    applyFilters();
+                })
+                .catch(error => {
+                    console.error('Error loading threshold profiles:', error);
+                    showAlert('加载阈值配置失败，请刷新页面重试', 'danger');
+                });
+        }
+
+        // 应用筛选器
+        function applyFilters() {
+            filteredProfiles = [...thresholdProfiles];
+            
+            const metricTypeFilter = $('#filterMetricType').val();
+            const statusFilter = $('#filterStatus').val();
+            const defaultFilter = $('#filterDefault').val();
+            
+            if (metricTypeFilter) {
+                filteredProfiles = filteredProfiles.filter(profile => 
+                    profile.metric_type === metricTypeFilter
+                );
+            }
+            
+            if (statusFilter) {
+                filteredProfiles = filteredProfiles.filter(profile => 
+                    (statusFilter === 'enabled' && profile.enabled) ||
+                    (statusFilter === 'disabled' && !profile.enabled)
+                );
+            }
+            
+            if (defaultFilter) {
+                filteredProfiles = filteredProfiles.filter(profile => 
+                    (defaultFilter === 'default' && profile.is_default) ||
+                    (defaultFilter === 'custom' && !profile.is_default)
+                );
+            }
+            
+            renderProfilesTable(filteredProfiles);
+        }
+
+        // 渲染阈值配置表格
+        function renderProfilesTable(profiles) {
+            const tbody = $('#profilesTableBody');
+            tbody.empty();
+            
+            if (profiles.length === 0) {
+                tbody.html('<tr><td colspan="10" class="text-center">暂无阈值配置，点击"新增阈值配置"按钮添加</td></tr>');
+                return;
+            }
+            
+            profiles.forEach(profile => {
+                // 格式化指标类型显示
+                const typeMap = {
+                    'cpu': '<span class="badge badge-info">CPU</span>',
+                    'memory': '<span class="badge badge-success">内存</span>',
+                    'disk': '<span class="badge badge-warning">磁盘</span>',
+                    'network': '<span class="badge badge-primary">网络</span>',
+                    'temperature': '<span class="badge badge-danger">温度</span>'
+                };
+                
+                const typeBadge = typeMap[profile.metric_type] || `<span class="badge badge-dark">${profile.metric_type}</span>`;
+                
+                // 格式化阈值配置显示
+                let thresholdDisplay = '';
+                if (profile.warning_threshold !== null || profile.critical_threshold !== null) {
+                    const warning = profile.warning_threshold !== null ? `${profile.warning_threshold}${profile.unit || ''}` : '未设置';
+                    const critical = profile.critical_threshold !== null ? `${profile.critical_threshold}${profile.unit || ''}` : '未设置';
+                    thresholdDisplay = `<div>警告: ${warning}</div><div>严重: ${critical}</div>`;
+                } else {
+                    thresholdDisplay = '<span class="text-muted">未配置阈值</span>';
+                }
+                
+                // 格式化条件显示
+                const conditionMap = {
+                    'greater': '大于',
+                    'less': '小于',
+                    'equal': '等于',
+                    'not_equal': '不等于'
+                };
+                const conditionDisplay = conditionMap[profile.condition_type] || profile.condition_type;
+                const durationDisplay = formatSeconds(profile.duration);
+                
+                // 格式化状态显示
+                const statusBadge = profile.enabled 
+                    ? '<span class="badge badge-success">已启用</span>' 
+                    : '<span class="badge badge-secondary">已禁用</span>';
+                
+                // 默认配置显示
+                const defaultBadge = profile.is_default 
+                    ? '<span class="badge badge-primary"><i class="fas fa-star mr-1"></i>默认</span>' 
+                    : '<span class="text-muted">自定义</span>';
+                
+                // 适用范围显示
+                const applyBadge = profile.apply_to_all 
+                    ? '<span class="badge badge-info">所有设备</span>' 
+                    : '<span class="badge badge-secondary">指定设备</span>';
+                
+                // 格式化时间显示
+                const createdAt = new Date(profile.created_at).toLocaleDateString();
+                
+                // 构建表格行
+                const row = `
+                <tr id="profileRow-${profile.id}">
+                    <td>${profile.id}</td>
+                    <td><strong>${profile.name}</strong></td>
+                    <td>${typeBadge}</td>
+                    <td>${thresholdDisplay}</td>
+                    <td><div>${conditionDisplay}</div><small class="text-muted">${durationDisplay}</small></td>
+                    <td>${statusBadge}</td>
+                    <td>${defaultBadge}</td>
+                    <td>${applyBadge}</td>
+                    <td>${createdAt}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-info btn-sm view-btn" data-id="${profile.id}" title="查看详情">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button type="button" class="btn btn-warning btn-sm edit-btn" data-id="${profile.id}" title="编辑">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-danger btn-sm delete-btn" data-id="${profile.id}" data-name="${profile.name}" title="删除">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                `;
+                
+                tbody.append(row);
+            });
+        }
+
+        // 格式化秒数为易读格式
+        function formatSeconds(seconds) {
+            if (seconds < 60) {
+                return `${seconds}秒`;
+            } else if (seconds < 3600) {
+                return `${Math.floor(seconds / 60)}分钟`;
+            } else if (seconds < 86400) {
+                return `${Math.floor(seconds / 3600)}小时`;
+            } else {
+                return `${Math.floor(seconds / 86400)}天`;
+            }
+        }
+
+        // 根据指标类型设置默认单位
+        function updateDefaultUnit() {
+            const metricType = $('#metric_type').val();
+            let defaultUnit = '%';
+            
+            switch(metricType) {
+                case 'cpu':
+                    defaultUnit = '%';
+                    break;
+                case 'memory':
+                    defaultUnit = '%';
+                    break;
+                case 'disk':
+                    defaultUnit = '%';
+                    break;
+                case 'network':
+                    defaultUnit = 'Mbps';
+                    break;
+                case 'temperature':
+                    defaultUnit = '°C';
+                    break;
+            }
+            
+            $('#unit').val(defaultUnit);
+            $('#unitDisplay').text(defaultUnit);
+            $('#criticalUnitDisplay').text(defaultUnit);
+            $('#recoveryUnitDisplay').text(defaultUnit);
+            
+            updateVisualization();
+        }
+
+        // 更新阈值可视化
+        function updateVisualization() {
+            const warning = parseFloat($('#warning_threshold').val()) || 0;
+            const critical = parseFloat($('#critical_threshold').val()) || 0;
+            const condition = $('#condition_type').val();
+            const unit = $('#unit').val() || '';
+            
+            let warningPos = 0;
+            let criticalPos = 0;
+            
+            // 根据条件类型调整阈值位置
+            if (condition === 'greater') {
+                // 大于条件：阈值从左侧开始
+                warningPos = warning > 0 ? Math.min(warning, 100) : 0;
+                criticalPos = critical > 0 ? Math.min(critical, 100) : 0;
+            } else if (condition === 'less') {
+                // 小于条件：阈值从右侧开始
+                warningPos = warning > 0 ? Math.max(100 - warning, 0) : 0;
+                criticalPos = critical > 0 ? Math.max(100 - critical, 0) : 0;
+            }
+            
+            // 更新标记位置
+            $('.warning-marker').css('left', `${warningPos}%`);
+            $('.critical-marker').css('left', `${criticalPos}%`);
+            
+            // 更新文本
+            let text = '当前配置: ';
+            if (warning > 0) {
+                text += `警告阈值: ${warning}${unit} `;
+            } else {
+                text += '警告阈值未设置 ';
+            }
+            
+            if (critical > 0) {
+                text += `严重阈值: ${critical}${unit}`;
+            } else {
+                text += '严重阈值未设置';
+            }
+            
+            $('#visualizationText').text(text);
+        }
+
+        // 显示提示信息
+        function showAlert(message, type = 'info', duration = 5000) {
+            const alertId = 'alert-' + Date.now();
+            const alertHtml = `
+                <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            
+            $('#alertContainer').append(alertHtml);
+            
+            // 自动关闭提示
+            setTimeout(() => {
+                $(`#${alertId}`).alert('close');
+            }, duration);
+        }
+
+        // 重置表单
+        function resetForm() {
+            $('#profileForm')[0].reset();
+            $('#profileId').val('');
+            $('#profileModalLabel').text('新增阈值配置');
+            $('#metric_type').val('');
+            $('#unit').val('');
+            updateDefaultUnit();
+        }
+
+        // 新增阈值配置按钮点击事件
+        $('#addProfileBtn').click(function() {
+            resetForm();
+            $('#profileModal').modal('show');
+        });
+
+        // 刷新表格按钮点击事件
+        $('#refreshTable').click(function() {
+            loadThresholdProfiles();
+            showAlert('表格已刷新', 'success');
+        });
+
+        // 重置筛选按钮点击事件
+        $('#resetFilters').click(function() {
+            $('#filterMetricType').val('');
+            $('#filterStatus').val('');
+            $('#filterDefault').val('');
+            applyFilters();
+            showAlert('筛选条件已重置', 'info');
+        });
+
+        // 筛选器变化事件
+        $('#filterMetricType, #filterStatus, #filterDefault').change(function() {
+            applyFilters();
+        });
+
+        // 阈值输入变化事件
+        $('#warning_threshold, #critical_threshold, #condition_type').on('input change', function() {
+            updateVisualization();
+        });
+
+        // 指标类型变化事件
+        $('#metric_type').change(function() {
+            updateDefaultUnit();
+        });
+
+        // 查看详情按钮点击事件（事件委托）
+        $(document).on('click', '.view-btn', function() {
+            const id = $(this).data('id');
+            const profile = thresholdProfiles.find(p => p.id === id);
+            
+            if (profile) {
+                $('#detailId').text(profile.id);
+                $('#detailName').text(profile.name);
+                $('#detailDescription').text(profile.description || '无描述');
+                
+                // 格式化指标类型
+                const typeMap = {
+                    'cpu': 'CPU',
+                    'memory': '内存',
+                    'disk': '磁盘',
+                    'network': '网络',
+                    'temperature': '温度'
+                };
+                $('#detailMetricType').text(typeMap[profile.metric_type] || profile.metric_type);
+                
+                $('#detailUnit').text(profile.unit || '无单位');
+                $('#detailWarningThreshold').text(profile.warning_threshold !== null ? `${profile.warning_threshold}${profile.unit || ''}` : '未设置');
+                $('#detailCriticalThreshold').text(profile.critical_threshold !== null ? `${profile.critical_threshold}${profile.unit || ''}` : '未设置');
+                $('#detailRecoveryThreshold').text(profile.recovery_threshold !== null ? `${profile.recovery_threshold}${profile.unit || ''}` : '未设置');
+                
+                // 格式化条件类型
+                const conditionMap = {
+                    'greater': '大于',
+                    'less': '小于',
+                    'equal': '等于',
+                    'not_equal': '不等于'
+                };
+                $('#detailConditionType').text(conditionMap[profile.condition_type] || profile.condition_type);
+                $('#detailDuration').text(formatSeconds(profile.duration));
+                $('#detailStatus').html(profile.enabled ? '<span class="badge badge-success">已启用</span>' : '<span class="badge badge-secondary">已禁用</span>');
+                $('#detailIsDefault').html(profile.is_default ? '<span class="badge badge-primary"><i class="fas fa-star mr-1"></i>默认配置</span>' : '<span class="text-muted">自定义配置</span>');
+                $('#detailApplyToAll').html(profile.apply_to_all ? '<span class="badge badge-info">所有设备</span>' : '<span class="badge badge-secondary">指定设备</span>');
+                
+                // 格式化时间
+                const createdAt = new Date(profile.created_at).toLocaleString();
+                const updatedAt = new Date(profile.updated_at).toLocaleString();
+                $('#detailCreatedAt').text(createdAt);
+                $('#detailUpdatedAt').text(updatedAt);
+                
+                // 更新详情页面的可视化
+                const warning = profile.warning_threshold || 0;
+                const critical = profile.critical_threshold || 0;
+                const condition = profile.condition_type;
+                const unit = profile.unit || '';
+                
+                let warningPos = 0;
+                let criticalPos = 0;
+                
+                if (condition === 'greater') {
+                    warningPos = warning > 0 ? Math.min(warning, 100) : 0;
+                    criticalPos = critical > 0 ? Math.min(critical, 100) : 0;
+                } else if (condition === 'less') {
+                    warningPos = warning > 0 ? Math.max(100 - warning, 0) : 0;
+                    criticalPos = critical > 0 ? Math.max(100 - critical, 0) : 0;
+                }
+                
+                $('.warning-marker-detail').css('left', `${warningPos}%`);
+                $('.critical-marker-detail').css('left', `${criticalPos}%`);
+                
+                let detailText = `配置详情: ${conditionMap[condition] || condition} `;
+                if (warning > 0) {
+                    detailText += `警告阈值: ${warning}${unit} `;
+                }
+                if (critical > 0) {
+                    detailText += `严重阈值: ${critical}${unit}`;
+                }
+                $('#detailVisualizationText').text(detailText);
+                
+                $('#detailModal').modal('show');
+            }
+        });
+
+        // 编辑按钮点击事件（事件委托）
+        $(document).on('click', '.edit-btn', function() {
+            const id = $(this).data('id');
+            const profile = thresholdProfiles.find(p => p.id === id);
+            
+            if (profile) {
+                // 填充表单数据
+                $('#profileId').val(profile.id);
+                $('#name').val(profile.name);
+                $('#description').val(profile.description || '');
+                $('#metric_type').val(profile.metric_type);
+                $('#warning_threshold').val(profile.warning_threshold || '');
+                $('#critical_threshold').val(profile.critical_threshold || '');
+                $('#recovery_threshold').val(profile.recovery_threshold || '');
+                $('#condition_type').val(profile.condition_type);
+                $('#unit').val(profile.unit || '');
+                $('#duration').val(profile.duration);
+                $('#enabled').prop('checked', profile.enabled);
+                $('#is_default').prop('checked', profile.is_default);
+                $('#apply_to_all').prop('checked', profile.apply_to_all);
+                
+                // 更新单位显示
+                $('#unitDisplay').text(profile.unit || '%');
+                $('#criticalUnitDisplay').text(profile.unit || '%');
+                $('#recoveryUnitDisplay').text(profile.unit || '%');
+                
+                $('#profileModalLabel').text(`编辑阈值配置: ${profile.name}`);
+                $('#profileModal').modal('show');
+                
+                // 更新可视化
+                updateVisualization();
+            }
+        });
+
+        // 删除按钮点击事件（事件委托）
+        $(document).on('click', '.delete-btn', function() {
+            deleteProfileId = $(this).data('id');
+            const profileName = $(this).data('name');
+            
+            $('#deleteProfileName').text(profileName);
+            $('#deleteModal').modal('show');
+        });
+
+        // 确认删除按钮点击事件
+        $('#confirmDeleteBtn').click(function() {
+            if (!deleteProfileId) return;
+            
+            fetch(`/config/api/threshold-profiles/${deleteProfileId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    showAlert('阈值配置已成功删除', 'success');
+                    $(`#profileRow-${deleteProfileId}`).remove();
+                    $('#deleteModal').modal('hide');
+                    
+                    // 重新加载数据
+                    loadThresholdProfiles();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '删除失败');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting threshold profile:', error);
+                showAlert(`删除失败: ${error.message}`, 'danger');
+            })
+            .finally(() => {
+                deleteProfileId = null;
+            });
+        });
+
+        // 表单提交事件
+        $('#profileForm').submit(function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                name: $('#name').val(),
+                description: $('#description').val(),
+                metric_type: $('#metric_type').val(),
+                warning_threshold: $('#warning_threshold').val() ? parseFloat($('#warning_threshold').val()) : null,
+                critical_threshold: $('#critical_threshold').val() ? parseFloat($('#critical_threshold').val()) : null,
+                recovery_threshold: $('#recovery_threshold').val() ? parseFloat($('#recovery_threshold').val()) : null,
+                duration: parseInt($('#duration').val()),
+                condition_type: $('#condition_type').val(),
+                unit: $('#unit').val() || null,
+                enabled: $('#enabled').is(':checked'),
+                is_default: $('#is_default').is(':checked'),
+                apply_to_all: $('#apply_to_all').is(':checked')
+            };
+            
+            const profileId = $('#profileId').val();
+            const isEdit = profileId !== '';
+            const url = isEdit ? `/config/api/threshold-profiles/${profileId}` : '/config/api/threshold-profiles';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            // 在请求体中添加id（如果是编辑）
+            if (isEdit) {
+                formData.id = parseInt(profileId);
+            }
+            
+            // 禁用保存按钮，防止重复提交
+            const saveBtn = $('#saveProfileBtn');
+            saveBtn.prop('disabled', true);
+            saveBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...');
+            
+            fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '保存失败');
+                    });
+                }
+            })
+            .then(data => {
+                showAlert(`阈值配置已成功${isEdit ? '更新' : '添加'}`, 'success');
+                $('#profileModal').modal('hide');
+                loadThresholdProfiles();
+            })
+            .catch(error => {
+                console.error('Error saving threshold profile:', error);
+                showAlert(`保存失败: ${error.message}`, 'danger');
+            })
+            .finally(() => {
+                // 重新启用保存按钮
+                saveBtn.prop('disabled', false);
+                saveBtn.text('保存配置');
+            });
+        });
+
+        // 导出配置按钮点击事件
+        $('#exportProfiles').click(function() {
+            const dataStr = JSON.stringify(thresholdProfiles, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `threshold-profiles-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            
+            showAlert('阈值配置已导出为JSON文件', 'success');
+        });
+    });
+</script>
+
+<style>
+    .badge {
+        font-size: 0.8em;
+    }
+    
+    .btn-group-sm > .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    table th {
+        font-weight: 600;
+    }
+    
+    .threshold-bar-container {
+        position: relative;
+    }
+    
+    .threshold-marker {
+        position: absolute;
+        top: -5px;
+        width: 3px;
+        height: 40px;
+        z-index: 10;
+    }
+    
+    .threshold-marker::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: -4px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background-color: inherit;
+    }
+    
+    .threshold-bar {
+        border-radius: 4px;
+    }
+    
+    .table td, .table th {
+        vertical-align: middle;
+    }
+    
+    .card-header {
+        background-color: #f8f9fc;
+    }
+</style>
+{% endblock %}

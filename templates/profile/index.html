@@ -1,0 +1,338 @@
+{# templates/profile/index.html #}
+
+{% extends "base.html" %}
+
+{% block title %}个人资料 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}个人资料{% endblock %}
+
+{% block page_subtitle %}
+<small class="text-muted">查看和编辑您的个人信息</small>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <!-- 用户信息卡片 -->
+        <div class="card shadow-sm text-center">
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="avatar-circle mx-auto mb-3">
+                        <span class="avatar-text">{{ user.username[0]|upper if user.username else 'U' }}</span>
+                    </div>
+                    <h5 class="card-title">{{ user.username }}</h5>
+                    <p class="text-muted small">
+                        {% if user.role == 'admin' %}
+                        <span class="badge bg-danger">管理员</span>
+                        {% else %}
+                        <span class="badge bg-secondary">普通用户</span>
+                        {% endif %}
+                        
+                        {% if user.is_active %}
+                        <span class="badge bg-success">已激活</span>
+                        {% else %}
+                        <span class="badge bg-warning">未激活</span>
+                        {% endif %}
+                    </p>
+                </div>
+                
+                <hr>
+                
+                <div class="text-start">
+                    <p class="mb-2">
+                        <i class="fas fa-calendar-alt text-primary me-2"></i>
+                        <strong>注册时间：</strong><br>
+                        <small>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '未知' }}</small>
+                    </p>
+                    <p class="mb-2">
+                        <i class="fas fa-clock text-primary me-2"></i>
+                        <strong>最后登录：</strong><br>
+                        <small>{{ user.last_login.strftime('%Y-%m-%d %H:%M') if user.last_login else '从未登录' }}</small>
+                    </p>
+                    <p class="mb-0">
+                        <i class="fas fa-edit text-primary me-2"></i>
+                        <strong>更新时间：</strong><br>
+                        <small>{{ user.updated_at.strftime('%Y-%m-%d %H:%M') if user.updated_at else '未知' }}</small>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快捷操作卡片 -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-link me-1"></i>快捷操作
+                </h6>
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="{{ url_for('settings.change_password') }}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-key me-2 text-warning"></i>修改密码
+                    <i class="fas fa-chevron-right float-end mt-1"></i>
+                </a>
+                <a href="#" class="list-group-item list-group-item-action" data-bs-toggle="modal" data-bs-target="#exportDataModal">
+                    <i class="fas fa-download me-2 text-info"></i>导出个人数据
+                    <i class="fas fa-chevron-right float-end mt-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- 编辑资料表单 -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-user-edit me-2 text-primary"></i>编辑个人资料
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('profile.profile') }}" id="profileForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                    
+                    <div class="row">
+                        <!-- 用户名（只读） -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-user me-1"></i>用户名
+                            </label>
+                            <input type="text" class="form-control bg-light" value="{{ user.username }}" readonly disabled>
+                            <div class="form-text text-muted">用户名不可修改</div>
+                        </div>
+
+                        <!-- 邮箱 -->
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">
+                                <i class="fas fa-envelope me-1"></i>电子邮箱
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   value="{{ user.email }}" required>
+                            <div class="form-text">用于接收系统通知和密码找回</div>
+                        </div>
+
+                        <!-- 手机号 -->
+                        <div class="col-md-6 mb-3">
+                            <label for="phone" class="form-label">
+                                <i class="fas fa-phone me-1"></i>手机号码
+                            </label>
+                            <input type="tel" class="form-control" id="phone" name="phone" 
+                                   value="{{ user.phone or '' }}" placeholder="请输入手机号码">
+                            <div class="form-text">用于紧急联系和验证</div>
+                        </div>
+
+                        <!-- 部门 -->
+                        <div class="col-md-12 mb-3">
+                            <label for="department" class="form-label">
+                                <i class="fas fa-building me-1"></i>所属部门
+                            </label>
+                            <input type="text" class="form-control" id="department" name="department" 
+                                   value="{{ user.department or '' }}" placeholder="请输入所属部门">
+                        </div>
+
+                        <!-- 角色信息（只读） -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-tag me-1"></i>用户角色
+                            </label>
+                            <div>
+                                {% if user.role == 'admin' %}
+                                <span class="badge bg-danger px-3 py-2">
+                                    <i class="fas fa-crown me-1"></i>系统管理员
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary px-3 py-2">
+                                    <i class="fas fa-user me-1"></i>普通用户
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="form-text text-muted">角色权限请联系系统管理员修改</div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-secondary" onclick="resetForm()">
+                            <i class="fas fa-undo me-1"></i>重置
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="saveBtn">
+                            <i class="fas fa-save me-1"></i>保存修改
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 最近活动卡片 -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-history me-1"></i>最近活动
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>操作</th>
+                                <th>IP地址</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityTable">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin me-1"></i>加载中...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导出数据模态框 -->
+<div class="modal fade" id="exportDataModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-download me-1"></i>导出个人数据
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>您可以选择导出以下数据：</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="basic" id="exportBasic" checked>
+                    <label class="form-check-label" for="exportBasic">
+                        基本信息（用户名、邮箱、手机号、部门）
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" value="logs" id="exportLogs">
+                    <label class="form-check-label" for="exportLogs">
+                        操作日志（最近30天）
+                    </label>
+                </div>
+                <hr>
+                <div class="alert alert-info small mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    导出文件将包含您选择的个人数据，请注意保管。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="exportData()">
+                    <i class="fas fa-download me-1"></i>开始导出
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.avatar-circle {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.avatar-text {
+    font-size: 32px;
+    font-weight: bold;
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 加载最近活动
+    loadRecentActivities();
+    
+    // 表单验证
+    $('#profileForm').on('submit', function(e) {
+        const email = $('#email').val();
+        const emailPattern = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
+        
+        if (!emailPattern.test(email)) {
+            e.preventDefault();
+            showToast('error', '请输入有效的邮箱地址');
+            return false;
+        }
+        
+        // 显示加载状态
+        const saveBtn = $('#saveBtn');
+        saveBtn.html('<i class="fas fa-spinner fa-spin me-1"></i>保存中...');
+        saveBtn.prop('disabled', true);
+    });
+});
+
+// 加载最近活动
+function loadRecentActivities() {
+    $.ajax({
+        url: '/api/user/recent-activities',
+        method: 'GET',
+        success: function(response) {
+            if (response.data && response.data.length > 0) {
+                let html = '';
+                response.data.forEach(function(activity) {
+                    html += `
+                        <tr>
+                            <td><small>${formatDateTime(activity.created_at)}</small></td>
+                            <td><small>${activity.action}</small></td>
+                            <td><small>${activity.ip_address || '--'}</small></td>
+                        </tr>
+                    `;
+                });
+                $('#activityTable').html(html);
+            } else {
+                $('#activityTable').html('<tr><td colspan="3" class="text-center text-muted">暂无活动记录</td></tr>');
+            }
+        },
+        error: function() {
+            $('#activityTable').html('<tr><td colspan="3" class="text-center text-muted">加载失败</td></tr>');
+        }
+    });
+}
+
+// 重置表单
+function resetForm() {
+    $('#email').val('{{ user.email }}');
+    $('#phone').val('{{ user.phone or "" }}');
+    $('#department').val('{{ user.department or "" }}');
+    showToast('info', '表单已重置');
+}
+
+// 导出数据
+function exportData() {
+    const exportBasic = $('#exportBasic').is(':checked');
+    const exportLogs = $('#exportLogs').is(':checked');
+    
+    if (!exportBasic && !exportLogs) {
+        showToast('warning', '请至少选择一项要导出的数据');
+        return;
+    }
+    
+    window.location.href = `/api/user/export-data?basic=${exportBasic}&logs=${exportLogs}`;
+    $('#exportDataModal').modal('hide');
+    showToast('success', '数据导出已开始，请稍后...');
+}
+
+// 格式化日期时间
+function formatDateTime(dateStr) {
+    if (!dateStr) return '--';
+    const date = new Date(dateStr);
+    return date.toLocaleString('zh-CN');
+}
+</script>
+{% endblock %}

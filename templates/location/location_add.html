@@ -1,0 +1,939 @@
+{% extends "base.html" %}
+
+{% block title %}添加位置 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}添加新位置{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('location.location_list') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> 返回位置列表
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* 自定义样式 */
+.form-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007bff;
+}
+
+.form-section h5 {
+    color: #495057;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.required-field::after {
+    content: " *";
+    color: #dc3545;
+}
+
+/* 地图预览容器 */
+#map-preview {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    height: 300px;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+}
+
+#map-preview i {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
+
+#map-preview p {
+    margin: 0;
+}
+
+/* 联系人卡片样式 */
+.contact-card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    background-color: white;
+}
+
+.contact-card .card-title {
+    font-size: 1rem;
+    color: #495057;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+/* 表单验证样式 */
+.is-invalid {
+    border-color: #dc3545 !important;
+}
+
+.is-valid {
+    border-color: #28a745 !important;
+}
+
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 0.875em;
+    margin-top: 0.25rem;
+}
+
+.was-validated .form-control:invalid ~ .invalid-feedback,
+.was-validated .form-control:invalid:focus ~ .invalid-feedback,
+.form-control.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+
+/* 帮助文本样式 */
+.help-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* 位置类型图标 */
+.location-type-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    font-size: 20px;
+}
+
+.location-type-option {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.location-type-option:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+    border-color: rgba(0, 123, 255, 0.1);
+}
+
+.location-type-option.active {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-color: #007bff;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .form-section {
+        padding: 15px;
+    }
+    
+    .location-type-option {
+        margin-bottom: 10px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Flash 消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST" action="{{ url_for('location.location_add') }}" id="locationForm" novalidate>
+            <!-- CSRF令牌 -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <!-- 位置基本信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-info-circle me-2"></i>
+                    位置基本信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label required-field">位置名称</label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                               placeholder="例如：核心机房、1号楼配线间" maxlength="100"
+                               data-error="请输入位置名称">
+                        <div class="invalid-feedback">
+                            请输入位置名称
+                        </div>
+                        <div class="help-text">
+                            位置的唯一标识，建议使用清晰明确的名称
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="location_type" class="form-label">位置类型</label>
+                        <select class="form-select" id="location_type" name="location_type">
+                            <option value="">请选择位置类型</option>
+                            <option value="data_center">数据中心/机房</option>
+                            <option value="wiring_closet">配线间</option>
+                            <option value="network_room">网络设备间</option>
+                            <option value="office">办公室</option>
+                            <option value="workshop">车间/厂房</option>
+                            <option value="other">其他</option>
+                        </select>
+                        <div class="help-text">
+                            选择位置的主要用途
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="description" class="form-label">位置描述</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"
+                              placeholder="位置的详细描述，如功能、用途等" maxlength="500"></textarea>
+                    <div class="help-text">
+                        最多500个字符，可选填
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 地址信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-map-marker-alt me-2"></i>
+                    地址信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="address" class="form-label">详细地址</label>
+                        <input type="text" class="form-control" id="address" name="address"
+                               placeholder="例如：北京市海淀区中关村大街1号" maxlength="200">
+                        <div class="help-text">
+                            位置的详细物理地址
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="floor" class="form-label">楼层</label>
+                        <input type="text" class="form-control" id="floor" name="floor"
+                               placeholder="例如：3楼、B1层">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="room_number" class="form-label">房间号</label>
+                        <input type="text" class="form-control" id="room_number" name="room_number"
+                               placeholder="例如：301、A-101">
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="area" class="form-label">面积(㎡)</label>
+                        <input type="number" class="form-control" id="area" name="area"
+                               placeholder="例如：50" min="0" step="0.1">
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="capacity" class="form-label">机柜容量</label>
+                        <input type="number" class="form-control" id="capacity" name="capacity"
+                               placeholder="例如：10" min="0">
+                        <div class="help-text">
+                            该位置最多可容纳的机柜数量
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 地图预览 -->
+                <div class="mb-3">
+                    <label class="form-label">位置预览</label>
+                    <div id="map-preview">
+                        <div class="text-center">
+                            <i class="fas fa-map-marked-alt"></i>
+                            <p>位置地图预览</p>
+                            <small class="text-muted">填写地址后可显示地图（功能演示）</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 联系人信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-user-friends me-2"></i>
+                    联系人信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="contact_person" class="form-label">联系人姓名</label>
+                        <input type="text" class="form-control" id="contact_person" name="contact_person"
+                               placeholder="例如：张三" maxlength="50">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="contact_phone" class="form-label">联系电话</label>
+                        <input type="tel" class="form-control" id="contact_phone" name="contact_phone"
+                               placeholder="例如：13800138000" pattern="[0-9]{11}|[0-9]{3,4}-[0-9]{7,8}"
+                               data-error="请输入有效的电话号码">
+                        <div class="invalid-feedback">
+                            请输入有效的电话号码（手机号或座机号）
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="contact_email" class="form-label">电子邮箱</label>
+                        <input type="email" class="form-control" id="contact_email" name="contact_email"
+                               placeholder="例如：contact@example.com"
+                               data-error="请输入有效的电子邮箱地址">
+                        <div class="invalid-feedback">
+                            请输入有效的电子邮箱地址
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="contact_department" class="form-label">所属部门</label>
+                        <input type="text" class="form-control" id="contact_department" name="contact_department"
+                               placeholder="例如：IT部、运维部" maxlength="50">
+                    </div>
+                </div>
+                
+                <div class="contact-card mt-3">
+                    <h6 class="card-title">联系人卡片</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <small class="text-muted">联系人：</small>
+                                <div id="contact-person-preview" class="text-muted">未填写</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">电话：</small>
+                                <div id="contact-phone-preview" class="text-muted">未填写</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <small class="text-muted">邮箱：</small>
+                                <div id="contact-email-preview" class="text-muted">未填写</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">部门：</small>
+                                <div id="contact-department-preview" class="text-muted">未填写</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 设备环境信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-cog me-2"></i>
+                    设备环境信息
+                </h5>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="power_supply" class="form-label">电源配置</label>
+                        <textarea class="form-control" id="power_supply" name="power_supply" rows="2"
+                                  placeholder="例如：双路UPS供电，每路20A"></textarea>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="cooling_system" class="form-label">制冷系统</label>
+                        <textarea class="form-control" id="cooling_system" name="cooling_system" rows="2"
+                                  placeholder="例如：精密空调，温度控制在22±2℃"></textarea>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="temperature" class="form-label">温度控制(℃)</label>
+                        <input type="text" class="form-control" id="temperature" name="temperature"
+                               placeholder="例如：22±2">
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="humidity" class="form-label">湿度控制(%)</label>
+                        <input type="text" class="form-control" id="humidity" name="humidity"
+                               placeholder="例如：45±5">
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="access_control" class="form-label">访问控制</label>
+                        <select class="form-select" id="access_control" name="access_control">
+                            <option value="">请选择访问控制方式</option>
+                            <option value="key">钥匙</option>
+                            <option value="card">门禁卡</option>
+                            <option value="biometric">生物识别</option>
+                            <option value="remote">远程授权</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 其他信息 -->
+            <div class="form-section">
+                <h5>
+                    <i class="fas fa-sticky-note me-2"></i>
+                    其他信息
+                </h5>
+                
+                <div class="mb-3">
+                    <label for="notes" class="form-label">备注</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="4"
+                              placeholder="其他需要说明的信息，如特殊要求、注意事项等" maxlength="1000"></textarea>
+                    <div class="help-text">
+                        最多1000个字符，可选填
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="tags" class="form-label">标签</label>
+                    <input type="text" class="form-control" id="tags" name="tags"
+                           placeholder="例如：核心、生产环境、备份站点 (用逗号分隔)">
+                    <div class="help-text">
+                        用于快速分类和搜索，用逗号分隔多个标签
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 表单操作按钮 -->
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{{ url_for('location.location_list') }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> 取消
+                </a>
+                <div>
+                    <button type="reset" class="btn btn-warning me-2" onclick="resetForm()">
+                        <i class="fas fa-redo"></i> 重置表单
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存位置
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- 右侧帮助信息 -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>添加位置指南</h5>
+            </div>
+            <div class="card-body">
+                <h6>必填字段说明：</h6>
+                <ul>
+                    <li><strong>位置名称</strong>：位置的唯一标识，建议使用清晰明确的命名</li>
+                </ul>
+                
+                <h6 class="mt-3">位置类型说明：</h6>
+                <ul>
+                    <li><strong>数据中心/机房</strong>：主要网络设备集中的核心位置</li>
+                    <li><strong>配线间</strong>：楼层或区域的网络接入点</li>
+                    <li><strong>网络设备间</strong>：专用网络设备房间</li>
+                    <li><strong>办公室</strong>：办公区域的网络接入点</li>
+                </ul>
+                
+                <h6 class="mt-3">地址信息说明：</h6>
+                <ul>
+                    <li>详细地址有助于物理定位和维护</li>
+                    <li>机柜容量用于规划机柜部署</li>
+                    <li>面积和楼层信息有助于空间管理</li>
+                </ul>
+                
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>注意：</strong>位置信息一旦创建，建议不要频繁修改，以免影响设备管理。
+                </div>
+                
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-bolt me-2"></i>
+                    <strong>快速提示：</strong>可以先填写基本信息，其他字段可以后续补充完善。
+                </div>
+            </div>
+        </div>
+        
+        <!-- 快速模板 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>快速模板</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">选择常见位置类型快速填充表单：</p>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="fillTemplate('data_center')">
+                        <i class="fas fa-server me-1"></i> 数据中心
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm" onclick="fillTemplate('wiring_closet')">
+                        <i class="fas fa-network-wired me-1"></i> 配线间
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-sm" onclick="fillTemplate('office_room')">
+                        <i class="fas fa-building me-1"></i> 办公室网络间
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 位置类型图标选择 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-th-large me-2"></i>位置类型图标</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('data_center')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-primary text-white">
+                                    <i class="fas fa-server"></i>
+                                </div>
+                                <div>
+                                    <small>数据中心</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('wiring_closet')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-success text-white">
+                                    <i class="fas fa-network-wired"></i>
+                                </div>
+                                <div>
+                                    <small>配线间</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('network_room')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-info text-white">
+                                    <i class="fas fa-ethernet"></i>
+                                </div>
+                                <div>
+                                    <small>设备间</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('office')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-secondary text-white">
+                                    <i class="fas fa-building"></i>
+                                </div>
+                                <div>
+                                    <small>办公室</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('workshop')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-warning text-white">
+                                    <i class="fas fa-industry"></i>
+                                </div>
+                                <div>
+                                    <small>车间</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="location-type-option" onclick="selectLocationType('other')">
+                            <div class="d-flex align-items-center">
+                                <div class="location-type-icon bg-dark text-white">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </div>
+                                <div>
+                                    <small>其他</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 表单验证
+function validateForm() {
+    const form = document.getElementById('locationForm');
+    let isValid = true;
+    
+    // 验证必填字段
+    const requiredFields = form.querySelectorAll('[required]');
+    requiredFields.forEach(field => {
+        if (!field.value.trim()) {
+            field.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            field.classList.remove('is-invalid');
+            field.classList.add('is-valid');
+        }
+    });
+    
+    // 验证电话号码格式
+    const phoneField = document.getElementById('contact_phone');
+    if (phoneField.value.trim()) {
+        const phonePattern = /^[0-9]{11}$|^[0-9]{3,4}-[0-9]{7,8}$/;
+        if (!phonePattern.test(phoneField.value.trim())) {
+            phoneField.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            phoneField.classList.remove('is-invalid');
+            phoneField.classList.add('is-valid');
+        }
+    }
+    
+    // 验证邮箱格式
+    const emailField = document.getElementById('contact_email');
+    if (emailField.value.trim()) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(emailField.value.trim())) {
+            emailField.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            emailField.classList.remove('is-invalid');
+            emailField.classList.add('is-valid');
+        }
+    }
+    
+    return isValid;
+}
+
+// 重置表单
+function resetForm() {
+    const form = document.getElementById('locationForm');
+    form.reset();
+    
+    // 清除验证样式
+    const fields = form.querySelectorAll('.form-control');
+    fields.forEach(field => {
+        field.classList.remove('is-valid', 'is-invalid');
+    });
+    
+    // 重置预览
+    updateContactPreview();
+    
+    // 重置位置类型选择
+    document.querySelectorAll('.location-type-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    
+    // 重置地图预览
+    const mapPreview = document.getElementById('map-preview');
+    mapPreview.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-map-marked-alt"></i>
+            <p>位置地图预览</p>
+            <small class="text-muted">填写地址后可显示地图（功能演示）</small>
+        </div>
+    `;
+}
+
+// 更新联系人预览
+function updateContactPreview() {
+    const contactPerson = document.getElementById('contact_person').value.trim();
+    const contactPhone = document.getElementById('contact_phone').value.trim();
+    const contactEmail = document.getElementById('contact_email').value.trim();
+    const contactDepartment = document.getElementById('contact_department').value.trim();
+    
+    document.getElementById('contact-person-preview').textContent = 
+        contactPerson || '未填写';
+    document.getElementById('contact-phone-preview').textContent = 
+        contactPhone || '未填写';
+    document.getElementById('contact-email-preview').textContent = 
+        contactEmail || '未填写';
+    document.getElementById('contact-department-preview').textContent = 
+        contactDepartment || '未填写';
+}
+
+// 更新地图预览
+function updateMapPreview() {
+    const address = document.getElementById('address').value.trim();
+    const mapPreview = document.getElementById('map-preview');
+    
+    if (address) {
+        // 这里可以集成地图API，如百度地图、高德地图等
+        // 目前使用模拟的地图显示
+        mapPreview.innerHTML = `
+            <div class="text-center w-100">
+                <i class="fas fa-map-marked-alt mb-3" style="font-size: 48px; color: #6c757d;"></i>
+                <h6>位置地图预览</h6>
+                <p class="mb-2">${address}</p>
+                <small class="text-muted">实际项目中可集成地图API显示具体位置</small>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="showMapDemo()">
+                        <i class="fas fa-external-link-alt me-1"></i> 查看地图
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        mapPreview.innerHTML = `
+            <div class="text-center">
+                <i class="fas fa-map-marked-alt"></i>
+                <p>位置地图预览</p>
+                <small class="text-muted">填写地址后可显示地图（功能演示）</small>
+            </div>
+        `;
+    }
+}
+
+// 显示地图演示
+function showMapDemo() {
+    const address = document.getElementById('address').value.trim();
+    if (address) {
+        alert(`在实际项目中，这里会打开地图显示：\n\n${address}\n\n可以集成百度地图、高德地图等API。`);
+    }
+}
+
+// 选择位置类型
+function selectLocationType(type) {
+    // 更新位置类型选择器的视觉状态
+    document.querySelectorAll('.location-type-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    event.currentTarget.classList.add('active');
+    
+    // 更新表单中的位置类型字段
+    const typeSelect = document.getElementById('location_type');
+    typeSelect.value = type;
+    
+    // 根据类型自动填充一些默认值
+    switch(type) {
+        case 'data_center':
+            fillTemplate('data_center');
+            break;
+        case 'wiring_closet':
+            fillTemplate('wiring_closet');
+            break;
+        case 'network_room':
+            document.getElementById('location_type').value = 'network_room';
+            document.getElementById('capacity').value = '5';
+            break;
+        case 'office':
+            document.getElementById('location_type').value = 'office';
+            document.getElementById('capacity').value = '2';
+            break;
+        case 'workshop':
+            document.getElementById('location_type').value = 'workshop';
+            document.getElementById('capacity').value = '3';
+            break;
+    }
+}
+
+// 填充模板
+function fillTemplate(templateType) {
+    const templates = {
+        'data_center': {
+            name: '核心数据中心',
+            location_type: 'data_center',
+            description: '公司核心数据中心，承载所有重要业务系统',
+            address: '北京市海淀区中关村大街1号',
+            floor: '3楼',
+            room_number: '301',
+            area: '200',
+            capacity: '20',
+            contact_person: '张伟',
+            contact_phone: '13800138000',
+            contact_email: 'zhangwei@example.com',
+            contact_department: 'IT运维部',
+            power_supply: '双路UPS供电，每路100A，配备柴油发电机',
+            cooling_system: '精密空调系统，温度22±2℃，湿度45±5%',
+            temperature: '22±2',
+            humidity: '45±5',
+            access_control: 'biometric',
+            notes: '核心业务区域，需要门禁授权访问'
+        },
+        'wiring_closet': {
+            name: '1号楼配线间',
+            location_type: 'wiring_closet',
+            description: '1号楼网络配线间，负责本楼层网络接入',
+            address: '北京市海淀区中关村大街1号',
+            floor: '2楼',
+            room_number: '208',
+            area: '15',
+            capacity: '3',
+            contact_person: '李娜',
+            contact_phone: '13900139000',
+            contact_email: 'lina@example.com',
+            contact_department: '网络部',
+            power_supply: '单路UPS供电，16A',
+            cooling_system: '空调，温度控制在25℃以下',
+            temperature: '25',
+            humidity: '50',
+            access_control: 'card',
+            notes: '楼层网络汇聚点，需保持通风良好'
+        },
+        'office_room': {
+            name: '行政部网络间',
+            location_type: 'office',
+            description: '行政办公室区域网络设备间',
+            address: '北京市海淀区中关村大街1号',
+            floor: '5楼',
+            room_number: '502',
+            area: '10',
+            capacity: '1',
+            contact_person: '王明',
+            contact_phone: '13700137000',
+            contact_email: 'wangming@example.com',
+            contact_department: '行政部',
+            power_supply: '普通市电供电',
+            cooling_system: '自然通风',
+            temperature: '室温',
+            humidity: '自然',
+            access_control: 'key',
+            notes: '办公区域，注意设备噪音控制'
+        }
+    };
+    
+    const template = templates[templateType];
+    if (!template) return;
+    
+    // 填充表单字段
+    for (const [key, value] of Object.entries(template)) {
+        const element = document.getElementById(key);
+        if (element) {
+            element.value = value;
+            
+            // 触发输入事件以更新预览
+            if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                const event = new Event('input', { bubbles: true });
+                element.dispatchEvent(event);
+            }
+        }
+    }
+    
+    // 更新位置类型图标选择状态
+    document.querySelectorAll('.location-type-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    
+    // 激活对应的位置类型图标
+    const typeIcon = document.querySelector(`[onclick*="${template.location_type}"]`);
+    if (typeIcon) {
+        typeIcon.classList.add('active');
+    }
+    
+    // 更新预览
+    updateContactPreview();
+    updateMapPreview();
+    
+    // 显示提示
+    alert(`已填充${templateType === 'data_center' ? '数据中心' : templateType === 'wiring_closet' ? '配线间' : '办公室网络间'}模板，请根据需要修改其他字段。`);
+}
+
+// 表单提交处理
+document.getElementById('locationForm').addEventListener('submit', function(event) {
+    // 验证表单
+    if (!validateForm()) {
+        event.preventDefault();
+        // 滚动到第一个错误字段
+        const firstInvalid = this.querySelector('.is-invalid');
+        if (firstInvalid) {
+            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstInvalid.focus();
+        }
+        return false;
+    }
+    
+    // 显示加载状态（不阻止表单提交）
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+    submitBtn.disabled = true;
+    
+    // 如果表单提交失败，3秒后重置按钮状态
+    setTimeout(() => {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }, 3000);
+    
+    return true;
+});
+
+// 实时更新预览
+document.addEventListener('DOMContentLoaded', function() {
+    // 联系人信息实时预览
+    const contactFields = ['contact_person', 'contact_phone', 'contact_email', 'contact_department'];
+    contactFields.forEach(fieldId => {
+        document.getElementById(fieldId).addEventListener('input', updateContactPreview);
+    });
+    
+    // 地址实时预览
+    document.getElementById('address').addEventListener('input', updateMapPreview);
+    
+    // 表单字段验证
+    const formFields = document.querySelectorAll('#locationForm [required], #locationForm [pattern]');
+    formFields.forEach(field => {
+        field.addEventListener('blur', function() {
+            if (this.required && !this.value.trim()) {
+                this.classList.add('is-invalid');
+            } else if (this.pattern) {
+                const pattern = new RegExp(this.pattern);
+                if (this.value && !pattern.test(this.value)) {
+                    this.classList.add('is-invalid');
+                } else {
+                    this.classList.remove('is-invalid');
+                    if (this.value) this.classList.add('is-valid');
+                }
+            }
+        });
+        
+        field.addEventListener('input', function() {
+            if (this.classList.contains('is-invalid')) {
+                this.classList.remove('is-invalid');
+            }
+        });
+    });
+    
+    // 初始化预览
+    updateContactPreview();
+    updateMapPreview();
+    
+    // 如果有错误消息，滚动到顶部
+    const alerts = document.querySelectorAll('.alert');
+    if (alerts.length > 0) {
+        window.scrollTo(0, 0);
+    }
+});
+
+// 键盘快捷键
+document.addEventListener('keydown', function(event) {
+    // Ctrl + S 保存
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        document.getElementById('locationForm').dispatchEvent(new Event('submit'));
+    }
+    
+    // Esc 返回列表
+    if (event.key === 'Escape') {
+        window.location.href = "{{ url_for('location.location_list') }}";
+    }
+});
+</script>
+{% endblock %}

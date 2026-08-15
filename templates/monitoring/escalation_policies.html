@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}告警升级策略{% endblock %}
+{% block page_title %}告警升级策略{% endblock %}
+{% block page_subtitle %}配置告警级别升级与通知策略{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-primary mb-1">{{ policies|length }}</h4><small>策略总数</small></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-success mb-1">{{ policies|selectattr('enabled', 'equalto', true)|list|length }}</h4><small>已启用</small></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                {% set channels = policies|map(attribute='notify_channel')|unique|list %}
+                <div class="card border-info text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-info mb-1">{{ channels|length }}</h4><small>通知渠道</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPolicyModal"><i class="fas fa-plus"></i> 添加策略</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>名称</th><th>关联规则</th><th>升级级别</th><th>等待(分钟)</th><th>通知渠道</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for p in policies %}
+                <tr>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td><small>{{ p.alert_rule_id or '全局' }}</small></td>
+                    <td><span class="badge bg-{{ 'danger' if p.escalation_level >= 2 else 'warning' }}">L{{ p.escalation_level }}</span></td>
+                    <td>{{ p.wait_minutes }}分钟</td>
+                    <td><span class="badge bg-info">{{ p.notify_channel or '-' }}</span></td>
+                    <td>{% if p.enabled %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无升级策略</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addPolicyModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('monitoring_extra.escalation_policy_add') }}">
+    <div class="modal-header"><h5 class="modal-title">添加升级策略</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">策略名称 <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">关联告警规则</label>
+                <select name="alert_rule_id" class="form-select">
+                    <option value="">全局(所有规则)</option>
+                    {% for r in alert_rules %}
+                    <option value="{{ r.id }}">{{ r.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">升级级别</label>
+                <select name="escalation_level" class="form-select">
+                    <option value="1">L1 - 初级</option>
+                    <option value="2">L2 - 中级</option>
+                    <option value="3">L3 - 高级</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">等待时间(分钟)</label>
+                <input type="number" name="wait_minutes" class="form-control" value="15" min="1">
+            </div>
+            <div class="col">
+                <label class="form-label">通知渠道</label>
+                <select name="notify_channel" class="form-select">
+                    <option value="email">邮件</option>
+                    <option value="sms">短信</option>
+                    <option value="webhook">Webhook</option>
+                    <option value="dingtalk">钉钉</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">通知目标</label><input type="text" name="notify_target" class="form-control" placeholder="邮箱/手机号/URL"></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+{% endblock %}

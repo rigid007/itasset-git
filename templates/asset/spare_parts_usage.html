@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}备件使用统计 - 资产管理{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 可选：引入日期选择器增强，此处使用原生 date 输入 -->
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 标题行 -->
+    <div class="row mb-3 align-items-center">
+        <div class="col">
+            <h2>备件使用统计</h2>
+        </div>
+    </div>
+
+    <!-- 日期筛选表单 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('asset.spare_parts_usage') }}" class="row g-3">
+                <div class="col-md-4">
+                    <label for="start_date" class="form-label">开始日期</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="end_date" class="form-label">结束日期</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">查询</button>
+                    <a href="{{ url_for('asset.spare_parts_usage') }}" class="btn btn-secondary">重置</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 统计结果卡片 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">使用统计（{{ start_date }} 至 {{ end_date }}）</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>备件名称</th>
+                            <th class="text-end">使用数量</th>
+                            <th class="text-end">总成本(元)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stat in usage_stats %}
+                        <tr>
+                            <td>{{ stat.name }}</td>
+                            <td class="text-end">{{ stat.total_used }}</td>
+                            <td class="text-end">¥{{ "%.2f"|format(stat.total_cost) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center">暂无使用记录</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td>合计</td>
+                            <td class="text-end">{{ usage_stats|sum(attribute='total_used') }}</td>
+                            <td class="text-end">¥{{ "%.2f"|format(usage_stats|sum(attribute='total_cost')) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer text-muted">
+            共 {{ usage_stats|length }} 种备件被使用
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table td, .table th {
+        vertical-align: middle;
+    }
+    .text-end {
+        text-align: right;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 简单的前端验证：开始日期不能大于结束日期
+    document.addEventListener('DOMContentLoaded', function() {
+        const startInput = document.getElementById('start_date');
+        const endInput = document.getElementById('end_date');
+        const form = document.querySelector('form');
+
+        form.addEventListener('submit', function(e) {
+            if (startInput.value && endInput.value && startInput.value > endInput.value) {
+                e.preventDefault();
+                alert('开始日期不能大于结束日期！');
+            }
+        });
+    });
+</script>
+{% endblock %}

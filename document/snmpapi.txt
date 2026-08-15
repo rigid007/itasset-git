@@ -1,0 +1,246 @@
+@config_bp.route('/api/snmp-settings', methods=['GET'])
+@login_required
+def get_snmp_settings():
+    """获取SNMP配置"""
+    settings = SNMPSetting.query.all()
+    return jsonify([s.to_dict() for s in settings])
+
+
+@config_bp.route('/api/snmp-settings/<int:setting_id>', methods=['GET'])
+@login_required
+def get_snmp_setting(setting_id):
+    """获取单个SNMP配置"""
+    setting = SNMPSetting.query.get_or_404(setting_id)
+    return jsonify({'success': True, 'config': setting.to_dict()})
+
+@config_bp.route('/api/snmp-settings', methods=['POST'])
+@login_required
+def create_snmp_setting():
+    """创建SNMP配置"""
+    try:
+        data = request.get_json()
+        
+        # 验证必要字段
+        required_fields = ['name', 'version']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'message': f'缺少必要字段: {field}'}), 400
+        
+        # 检查名称是否已存在
+        existing_setting = SNMPSetting.query.filter_by(name=data['name']).first()
+        if existing_setting:
+            return jsonify({'success': False, 'message': f'配置名称"{data["name"]}"已存在'}), 400
+        
+        # 验证版本特定字段
+        if data['version'] in ['v1', 'v2c']:
+            if not data.get('community'):
+                return jsonify({'success': False, 'message': 'v1/v2c版本需要社区字符串'}), 400
+        elif data['version'] == 'v3':
+            if not data.get('username'):
+                return jsonify({'success': False, 'message': 'v3版本需要用户名'}), 400
+            
+            # 根据安全级别验证字段
+            security_level = data.get('security_level', 'authPriv')
+            if security_level in ['authNoPriv', 'authPriv']:
+                if not data.get('auth_protocol') or not data.get('auth_password'):
+                    return jsonify({'success': False, 'message': '认证级别需要认证协议和密码'}), 400
+            if security_level == 'authPriv':
+                if not data.get('priv_protocol') or not data.get('priv_password'):
+                    return jsonify({'success': False, 'message': '加密级别需要加密协议和密码'}), 400
+        
+        # 创建新配置
+        setting = SNMPSetting(
+            name=data['name'],
+            version=data['version'],
+            community=data.get('community'),
+            security_level=data.get('security_level'),
+            auth_protocol=data.get('auth_protocol'),
+            auth_password=data.get('auth_password'),
+            priv_protocol=data.get('priv_protocol'),
+            priv_password=data.get('priv_password'),
+            username=data.get('username'),
+            context_name=data.get('context_name'),
+            timeout=data.get('timeout', 5),
+            retries=data.get('retries', 3),
+            port=data.get('port', 161),
+            enabled=data.get('enabled', True)
+        )
+        
+        db.session.add(setting)
+        db.session.commit()
+        
+        log_audit('create', 'snmp_setting', setting.id, f"创建SNMP配置: {setting.name}")
+        
+        return jsonify({'success': True, 'message': 'SNMP配置创建成功', 'id': setting.id})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'创建失败: {str(e)}'}), 500
+
+@config_bp.route('/api/snmp-settings/<int:setting_id>', methods=['PUT'])
+@login_required
+def update_snmp_setting(setting_id):
+    """更新SNMP配置"""
+    try:
+        setting = SNMPSetting.query.get_or_404(setting_id)
+        data = request.get_json()
+        
+        # 更新字段
+        if 'name' in data and data['name'] != setting.name:
+            # 检查新名称是否已存在
+            existing_setting = SNMPSetting.query.filter_by(name=data['name']).first()
+            if existing_setting and existing_setting.id != setting_id:
+                return jsonify({'success': False, 'message': f'配置名称"{data["name"]}"已存在'}), 400
+            setting.name = data['name']
+        
+        if 'version' in data:
+            setting.version = data['version']
+        
+        # 根据版本更新相应字段
+        if setting.version in ['v1', 'v2c']:
+            setting.community = data.get('community', setting.community)
+            # 清空v3特有字段
+            setting.security_level = None
+            setting.auth_protocol = None
+            setting.auth_password = None
+            setting.priv_protocol = None
+            setting.priv_password = None
+            setting.username = None
+            setting.context_name = None
+        elif setting.version == 'v3':
+            setting.username = data.get('username', setting.username)
+            setting.security_level = data.get('security_level', setting.security_level)
+            setting.auth_protocol = data.get('auth_protocol', setting.auth_protocol)
+            setting.auth_password = data.get('auth_password', setting.auth_password)
+            setting.priv_protocol = data.get('priv_protocol', setting.priv_protocol)
+            setting.priv_password = data.get('priv_password', setting.priv_password)
+            setting.context_name = data.get('context_name', setting.context_name)
+            setting.community = None
+        
+        # 更新通用字段
+        setting.timeout = data.get('timeout', setting.timeout)
+        setting.retries = data.get('retries', setting.retries)
+        setting.port = data.get('port', setting.port)
+        
+        if 'enabled' in data:
+            setting.enabled = data['enabled']
+        
+        setting.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        log_audit('update', 'snmp_setting', setting.id, f"更新SNMP配置: {setting.name}")
+        
+        return jsonify({'success': True, 'message': 'SNMP配置更新成功'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'更新失败: {str(e)}'}), 500
+
+@config_bp.route('/api/snmp-settings/<int:setting_id>/status', methods=['PUT'])
+@login_required
+def update_snmp_setting_status(setting_id):
+    """更新SNMP配置状态"""
+    try:
+        setting = SNMPSetting.query.get_or_404(setting_id)
+        data = request.get_json()
+        
+        if 'enabled' in data:
+            setting.enabled = data['enabled']
+            setting.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            
+            log_audit('update', 'snmp_setting_status', setting.id, 
+                     f"更新SNMP配置状态: {setting.name} -> {'启用' if setting.enabled else '禁用'}")
+            
+            return jsonify({'success': True, 'message': '配置状态更新成功'})
+        
+        return jsonify({'success': False, 'message': '缺少参数'}), 400
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'状态更新失败: {str(e)}'}), 500
+
+@config_bp.route('/api/snmp-settings/<int:setting_id>', methods=['DELETE'])
+@login_required
+def delete_snmp_setting(setting_id):
+    """删除SNMP配置"""
+    try:
+        setting = SNMPSetting.query.get_or_404(setting_id)
+        
+        # 记录审计日志
+        log_audit('delete', 'snmp_setting', setting_id, f"删除SNMP配置: {setting.name}")
+        
+        db.session.delete(setting)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'SNMP配置删除成功'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"删除SNMP配置异常: {str(e)}")  # 查看具体错误
+        return jsonify({'success': False, 'message': f'删除失败: {str(e)}'}), 500
+
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import time
+
+@config_bp.route('/api/snmp-settings/test', methods=['POST'])
+@login_required
+def test_snmp_connection():
+    try:
+        data = request.get_json()
+        host = data.get('host')
+        config = data.get('config', {})
+
+        if not host:
+            return jsonify({'success': False, 'message': '请提供测试主机地址'}), 400
+
+        version = config.get('version', 'v2c')
+        if version == 'v3':
+            return jsonify({'success': False, 'message': '暂不支持SNMP v3测试'})
+
+        timeout = min(config.get('timeout', 3), 5)
+        retries = min(config.get('retries', 1), 2)
+        community = config.get('community', 'public')
+
+        from utils.utils import snmp_get_device_info
+
+        def _snmp_query():
+            # 调用你的同步函数
+            return snmp_get_device_info(
+                ip=host,
+                community=community,
+                version=version[1:],  # 'v2c' -> '2c'
+                timeout=timeout,
+                retries=retries
+            )
+
+        # 计算最大等待时间（理论最大 + 2秒缓冲）
+        max_wait = timeout * (retries + 1) + 2  # 例如 3*2+2 = 8秒
+
+        # 使用线程池执行，并设置超时
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_snmp_query)
+            try:
+                success, device_info = future.result(timeout=max_wait)
+            except TimeoutError:
+                print(f"[SNMP测试] 超时: {host}")
+                return jsonify({'success': False, 'message': f'连接 {host} 超时（{max_wait}秒）'})
+            except Exception as e:
+                print(f"[SNMP测试] 异常: {host} - {str(e)}")
+                return jsonify({'success': False, 'message': f'测试异常: {str(e)}'})
+
+        if success and device_info:
+            return jsonify({
+                'success': True,
+                'message': f'成功连接到 {host}',
+                'sys_info': device_info.get('sys_descr', '')[:200]
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'无法连接到 {host}，请检查网络或SNMP配置'
+            })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'测试失败: {str(e)}'}), 500

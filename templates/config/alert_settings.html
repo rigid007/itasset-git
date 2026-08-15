@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}告警通知设置{% endblock %}
+{% block page_title %}告警通知设置{% endblock %}
+{% block page_subtitle %}配置邮件服务、企业微信、Slack 等通知渠道{% endblock %}
+
+{% block content %}
+<!-- 提示信息 -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('config.alert_settings_save') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+<!-- SMTP 邮件配置 -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-envelope text-primary"></i> 邮件服务 (SMTP)</h5>
+        <span class="badge bg-{{ 'success' if settings.get('smtp_server') else 'secondary' }}">
+            {{ '已配置' if settings.get('smtp_server') else '未配置' }}
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">SMTP服务器 <span class="text-danger">*</span></label>
+                <input type="text" name="smtp_server" class="form-control" value="{{ settings.get('smtp_server', '') }}" placeholder="smtp.example.com">
+                <div class="form-text">邮件发送服务器地址</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">端口 <span class="text-danger">*</span></label>
+                <input type="number" name="smtp_port" class="form-control" value="{{ settings.get('smtp_port', '587') }}">
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check">
+                    <input type="hidden" name="smtp_use_tls" value="false">
+                    <input class="form-check-input" type="checkbox" name="smtp_use_tls" value="true" id="smtp_use_tls"
+                           {% if settings.get('smtp_use_tls', 'true') == 'true' %}checked{% endif %}>
+                    <label class="form-check-label" for="smtp_use_tls">使用 TLS 加密</label>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                <input type="text" name="smtp_user" class="form-control" value="{{ settings.get('smtp_user', '') }}" placeholder="your@email.com">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">密码 <span class="text-danger">*</span></label>
+                <input type="password" name="smtp_password" class="form-control" value="{{ settings.get('smtp_password', '') }}" placeholder="SMTP密码或授权码">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <label class="form-label">发件人地址</label>
+                <input type="email" name="smtp_from_addr" class="form-control" value="{{ settings.get('smtp_from_addr', '') }}" placeholder="noreply@example.com">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">发件人名称</label>
+                <input type="text" name="smtp_from_name" class="form-control" value="{{ settings.get('smtp_from_name', '告警系统') }}" placeholder="告警系统">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 企业微信配置 -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fab fa-weixin text-success"></i> 企业微信</h5>
+        <span class="badge bg-{{ 'success' if settings.get('wechat_webhook_url') else 'secondary' }}">
+            {{ '已配置' if settings.get('wechat_webhook_url') else '未配置' }}
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">机器人 Webhook URL <span class="text-danger">*</span></label>
+            <input type="url" name="wechat_webhook_url" class="form-control"
+                   value="{{ settings.get('wechat_webhook_url', '') }}"
+                   placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+            <div class="form-text">
+                在企业微信群中添加机器人后获取的Webhook地址。支持Markdown消息。
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">代理地址 (可选)</label>
+            <input type="text" name="wechat_proxy" class="form-control"
+                   value="{{ settings.get('wechat_proxy', '') }}"
+                   placeholder="http://proxy.example.com:8080">
+            <div class="form-text">如果需要通过代理访问企业微信API，填写代理地址</div>
+        </div>
+    </div>
+</div>
+
+<!-- Slack 配置 -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fab fa-slack text-info"></i> Slack</h5>
+        <span class="badge bg-{{ 'success' if settings.get('slack_webhook_url') else 'secondary' }}">
+            {{ '已配置' if settings.get('slack_webhook_url') else '未配置' }}
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Webhook URL</label>
+            <input type="url" name="slack_webhook_url" class="form-control"
+                   value="{{ settings.get('slack_webhook_url', '') }}"
+                   placeholder="https://hooks.slack.com/services/xxx/yyy/zzz">
+            <div class="form-text">在Slack中创建Incoming Webhook后获取的URL</div>
+        </div>
+    </div>
+</div>
+
+<!-- Webhook 默认配置 -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0"><i class="fas fa-globe text-warning"></i> 通用 Webhook</h5></div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">默认 Webhook URL</label>
+            <input type="url" name="webhook_default_url" class="form-control"
+                   value="{{ settings.get('webhook_default_url', '') }}"
+                   placeholder="https://example.com/webhook">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">默认请求头 (JSON)</label>
+            <textarea name="webhook_default_headers" class="form-control" rows="3"
+                      placeholder='{"Authorization": "Bearer xxx"}'>{{ settings.get('webhook_default_headers', '{}') }}</textarea>
+        </div>
+    </div>
+</div>
+
+<!-- 保存按钮 -->
+<div class="d-flex justify-content-between mb-4">
+    <div>
+        <a href="{{ url_for('config_compliance.config_baseline') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 返回
+        </a>
+    </div>
+    <div>
+        {% if has_permission(current_user, 'config:edit') %}
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> 保存设置</button>
+        {% endif %}
+    </div>
+</div>
+</form>
+
+<!-- 测试发送功能 -->
+{% if has_permission(current_user, 'config:edit') %}
+<div class="card border-info mb-4">
+    <div class="card-header bg-info text-white"><h5 class="mb-0"><i class="fas fa-paper-plane"></i> 测试发送</h5></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('config.alert_settings_test') }}" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-3">
+                <select name="channel" class="form-select" required>
+                    <option value="">选择测试渠道</option>
+                    <option value="email">📧 邮件</option>
+                    <option value="wechat">💬 企业微信</option>
+                    <option value="slack">🔷 Slack</option>
+                    <option value="webhook">🌐 Webhook</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" name="test_recipient" class="form-control" placeholder="测试接收地址/邮箱">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-info w-100">
+                    <i class="fas fa-paper-plane"></i> 发送测试
+                </button>
+            </div>
+        </form>
+        <div class="form-text mt-2">
+            邮件：填写测试邮箱地址 | 企业微信/Slack：留空使用已配置的Webhook
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

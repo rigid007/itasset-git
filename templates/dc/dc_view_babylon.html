@@ -1,0 +1,1038 @@
+{% extends "base.html" %}
+{% block page_title %}机房 3D 可视化{% endblock %}
+
+
+{% block content %}
+<div class="row g-3">
+  <!-- 左：工具栏 + 图例 -->
+  <div class="col-lg-3 col-xl-2 order-2 order-lg-1">
+    <div class="card mb-3">
+      <div class="card-header"><i class="fas fa-tools me-1"></i> 机房选择</div>
+      <div class="card-body">
+        <select id="locationSelect" class="form-select form-select-sm">
+          <option value="">-- 选择机房 --</option>
+        </select>
+        <div class="form-text small" id="locStat">正在加载机房列表…</div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><i class="fas fa-sliders-h me-1"></i> 视图操作</div>
+      <div class="card-body d-grid gap-2">
+        <button class="btn btn-sm btn-primary" id="btnReset"><i class="fas fa-crosshairs"></i> 重置视角</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnFront"><i class="fas fa-tv"></i> 正面视角</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnSide"><i class="fas fa-columns"></i> 侧面视角</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnU"><i class="fas fa-border-all"></i> 机柜内部：开</button>
+        <button class="btn btn-sm btn-secondary" id="btnLabels"><i class="fas fa-tag"></i> 显示机柜名称</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnColor"><i class="fas fa-palette"></i> 状态着色：开</button>
+        <button class="btn btn-sm btn-outline-info" id="btnTemp"><i class="fas fa-thermometer-half"></i> 温度视图：关</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnEditLayout"><i class="fas fa-arrows-alt"></i> 编辑布局</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnAuto"><i class="fas fa-th"></i> 自动排列</button>
+        <button class="btn btn-sm btn-outline-success" id="btnSave"><i class="fas fa-save"></i> 保存布局</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnRefresh"><i class="fas fa-sync"></i> 刷新数据</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnShot"><i class="fas fa-camera"></i> 截图保存</button>
+      </div>
+      <div class="card-footer small text-secondary">左键拖拽旋转 · 滚轮缩放 · 右键平移 · 点击机柜/设备下钻 · 双击机柜进入详情</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><i class="fas fa-info-circle me-1"></i> 状态图例</div>
+      <div class="card-body small" id="legendBox"></div>
+    </div>
+  </div>
+
+  <!-- 右：3D 画布 + 下钻面板 -->
+  <div class="col-lg-9 col-xl-10 order-1 order-lg-2">
+    <div class="position-relative">
+      <canvas id="renderCanvas" style="width:100%; height:72vh; display:block; background:#0e1116; border-radius:.5rem; touch-action:none; outline:none;"></canvas>
+      <div id="babylonHint" class="position-absolute top-50 start-50 translate-middle text-center text-light">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <div class="mt-2">正在初始化场景…</div>
+      </div>
+      <div id="babylonError" class="position-absolute top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center text-center p-4" style="background:rgba(14,17,22,.95);">
+        <div class="text-light">
+          <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+          <div id="babylonErrorText">Babylon.js 资源未能加载。</div>
+          <div class="small text-secondary mt-2">请确认 static/js/babylon.js 与 babylon.gui.min.js 已存在（本地托管，无需联网）。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-3" id="panelBox" style="display:none;">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-server me-1"></i> <span id="panelTitle">机柜详情</span></span>
+        <button class="btn btn-sm btn-link" id="panelClose">收起</button>
+      </div>
+      <div class="card-body" id="panelBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{# Babylon.js 完全开源(Apache-2.0)，库文件本地托管，内网离线可用，无云端依赖 #}
+<script src="{{ url_for('static', filename='js/babylon.js') }}"></script>
+<script src="{{ url_for('static', filename='js/babylon.gui.min.js') }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  var CURRENT_LOCATION = null;
+
+  var STATUS_COLORS = {
+    online: '#2ecc71', active: '#2ecc71',
+    offline: '#e74c3c', down: '#c0392b',
+    warning: '#f39c12', maintenance: '#3498db',
+    alert: '#c0392b', error: '#c0392b', critical: '#922b21',
+    unknown: '#bdc3c7'
+  };
+  // 严重度由低到高(索引越大越严重): 用于机柜综合状态取"最严重设备"
+  var STATUS_ORDER = ['online','active','maintenance','unknown','warning','offline','down','alert','error','critical'];
+  var STATUS_LABEL = {
+    online:'在线', active:'在线', offline:'离线', down:'离线',
+    warning:'警告', maintenance:'维护', alert:'告警', error:'故障', critical:'严重', unknown:'未知'
+  };
+
+  var U_UNIT = 0.05;            // 每个 U 的世界高度
+  var CAB_W = 0.62, CAB_D = 1.05;
+
+  var engine = null, scene = null, camera = null, adt = null;
+  var cabinetMeshes = [];   // { mesh, node, cabinet, status, baseColor }  node=TransformNode 便于整体拖动
+  var deviceMeshes = [];    // { mesh, device, cabinet, status, baseColor }
+  var uMeshes = [];         // U 位网格 LinesMesh
+  var labelCtrls = [];
+  var devLabelMeshes = [];  // 设备名称标签(3D 名牌 mesh)
+  var uLabelCtrls = [];     // U 位编号标签
+  var uAnchors = [];        // U 位编号隐形锚点(随 node 移动)
+  var labelsOn = true;      // 标签默认开启(设备名/机柜名默认可见)
+  var colorOn = true;
+  var showU = true;
+  var hoverMesh = null;
+  var bounds = null;
+  var groundMesh = null;    // 地面, 拖动时做射线拾取
+  var editLayout = false;   // 编辑布局模式(开启后可拖动机柜)
+  var dragNode = null;      // 当前拖动中的机柜节点
+  var dragOffset = null;    // 拖动抓取偏移
+  var layoutDirty = false;  // 布局是否已改动未保存
+  var snapOn = true;        // 拖动时按 0.7 网格吸附
+  var tempMode = false;     // 温度热力图视图
+  var blankMeshes = [];     // 空白U位挡板(实例)
+  var aisleMeshes = [];     // 冷/热通道标识条
+  var ledMeshes = [];       // 设备状态 LED 小球
+  var panelMeshes = [];     // 设备前面板 plane
+  var blankProto = null;    // 挡板原型网格(共享几何/材质)
+  var glowLayer = null;     // 告警发光层
+  var lastTipMesh = null;   // 悬浮提示关联缓存
+  var tooltip = null, tooltipText = null;
+
+  function el(id){ return document.getElementById(id); }
+  function showError(msg){
+    el('babylonErrorText').textContent = msg || 'Babylon.js 资源未能加载。';
+    el('babylonError').classList.remove('d-none');
+    el('babylonError').classList.add('d-flex');
+    el('babylonHint').style.display = 'none';
+  }
+  function apiGet(url){
+    return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  }
+  function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+
+  function hexToColor3(hex){
+    try { return BABYLON.Color3.FromHexString(hex); } catch(e){ return new BABYLON.Color3(0.5,0.5,0.5); }
+  }
+
+  // 温度 -> 颜色（机房热力图色阶）
+  function tempColor(t){
+    if (t == null) return '#bdc3c7';
+    t = Number(t);
+    if (t < 30) return '#2ecc71';
+    if (t < 40) return '#f1c40f';
+    if (t < 50) return '#e67e22';
+    return '#e74c3c';
+  }
+
+  // 设备当前展示颜色（温度视图优先，其次状态着色，最后中性色）
+  function deviceColor(dev){
+    if (tempMode && dev.temperature != null) return tempColor(dev.temperature);
+    if (!colorOn) return '#8a94a6';
+    return STATUS_COLORS[dev.status] || STATUS_COLORS.unknown;
+  }
+
+  function cabinetStatus(cab){
+    var worstIdx = -1, worst = 'online';
+    (cab.devices||[]).forEach(function(d){
+      var i = STATUS_ORDER.indexOf(d.status || 'unknown');
+      if (i < 0) i = 0;
+      if (i > worstIdx){ worstIdx = i; worst = d.status || 'unknown'; }
+    });
+    return worstIdx < 0 ? 'online' : worst;
+  }
+
+  function loadLocations(){
+    apiGet("{{ url_for('dc_view.api_locations') }}")
+      .then(function(list){
+        var sel = el('locationSelect');
+        sel.innerHTML = '<option value="">-- 选择机房 --</option>';
+        list.forEach(function(l){
+          var o = document.createElement('option');
+          o.value = l.id; o.textContent = l.name + '（' + (l.cabinet_count||0) + ' 柜）';
+          sel.appendChild(o);
+        });
+        el('locStat').textContent = '共 ' + list.length + ' 个机房';
+        if (list.length){ sel.value = list[0].id; loadLocation(list[0].id); }
+        else { el('locStat').textContent = '暂无机房数据，请先在「位置管理」中添加机房与机柜'; }
+      })
+      .catch(function(e){ el('locStat').textContent = '加载失败：' + e.message; });
+  }
+
+  function loadLocation(locationId){
+    CURRENT_LOCATION = locationId;
+    var url = "{{ url_for('dc_view.api_dc_view', location_id=0) }}".replace('/0', '/' + locationId);
+    el('babylonHint').style.display = 'block';
+    apiGet(url).then(function(data){
+      buildScene(data);
+      el('babylonHint').style.display = 'none';
+    }).catch(function(e){
+      el('babylonHint').style.display = 'none';
+      alert('加载机房布局失败：' + e.message);
+    });
+  }
+
+  function clearScene(){
+    scene.meshes.slice().forEach(function(m){
+      if (m.name && (m.name.indexOf('cab_')===0 || m.name.indexOf('dev_')===0 || m.name.indexOf('u_')===0)){
+        if (m.material) m.material.dispose();
+        m.dispose();
+      }
+    });
+    (scene.transformNodes || []).slice().forEach(function(n){
+      if (n.name && n.name.indexOf('cabNode_')===0) n.dispose();
+    });
+    labelCtrls.forEach(function(l){ if (l) l.dispose(); });
+    devLabelMeshes.forEach(function(l){ if (l) l.dispose(); });
+    uLabelCtrls.forEach(function(l){ if (l) l.dispose(); });
+    uAnchors.forEach(function(m){ if (m) m.dispose(); });
+    blankMeshes.forEach(function(m){ if (m) m.dispose(); });
+    if (blankProto){ try { blankProto.dispose(); } catch(e){} blankProto = null; }
+    aisleMeshes.forEach(function(m){ if (m){ if (m.material) m.material.dispose(); m.dispose(); } });
+    ledMeshes.forEach(function(m){ if (m){ if (m.material) m.material.dispose(); m.dispose(); } });
+    panelMeshes.forEach(function(m){
+      if (m){
+        if (m.material){
+          try { if (m.material.diffuseTexture) m.material.diffuseTexture.dispose(); m.material.dispose(); } catch(e){}
+        }
+        m.dispose();
+      }
+    });
+    labelCtrls = []; devLabelMeshes = []; uLabelCtrls = []; uAnchors = [];
+    cabinetMeshes = []; deviceMeshes = []; uMeshes = [];
+    blankMeshes = []; aisleMeshes = []; ledMeshes = []; panelMeshes = [];
+  }
+
+  // 设备名称标签：生成 3D 名牌(动态纹理 plane), 作为设备方块的子物体,
+  // 位置锚定在机柜正面、随机柜一起移动; billboard 始终正对相机便于阅读。
+  function makeDeviceLabel(dev, dbox, dh){
+    var text = (dev.name || ('设备' + dev.id)) + (dev.position_u ? '  U' + dev.position_u : '');
+    var tw = 512, th = 128;
+    var dt = new BABYLON.DynamicTexture('dlbltex_' + dev.id, { width: tw, height: th }, scene, true);
+    dt.hasAlpha = true;
+    var ctx = dt.getContext();
+    ctx.clearRect(0, 0, tw, th);
+    // 圆角半透明背景
+    var r = 18, x = 6, y = 6, w = tw - 12, h = th - 12;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(18,26,38,0.85)';
+    ctx.fill();
+    ctx.font = 'bold 60px "Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.fillStyle = '#e6edf3';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, tw / 2, th / 2);
+    dt.update();
+
+    var planeH = 0.09;
+    // 按文本长度估算平面宽度, 不超过机柜宽度
+    var ratio = text.length / 9;
+    var planeW = Math.min(CAB_W * 0.9, planeH * (tw / th) * Math.max(0.5, ratio));
+    var plane = BABYLON.MeshBuilder.CreatePlane('dlbl_' + dev.id, { width: planeW, height: planeH }, scene);
+    var pmat = new BABYLON.StandardMaterial('dlblmat_' + dev.id, scene);
+    pmat.diffuseTexture = dt;
+    pmat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    pmat.opacityTexture = dt;
+    pmat.backFaceCulling = false;
+    pmat.disableLighting = true;
+    pmat.useAlphaFromDiffuseTexture = true;
+    plane.material = pmat;
+    plane.parent = dbox;
+    // 放在机柜正面外表面、设备相同高度, 清晰可见, 随视角转动正对相机
+    plane.position = new BABYLON.Vector3(0, 0, CAB_D / 2 + 0.04);
+    plane.isPickable = false;
+    plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+    return plane;
+  }
+
+  // 设备前面板：暗色机箱面板 + 品牌/型号 + 状态徽标（不 billboard，真实贴面）
+  function makeFrontPanel(dev, dbox, dh, dw, dd){
+    var tw = 256, th = 128;
+    var dt = new BABYLON.DynamicTexture('fptex_' + dev.id, { width: tw, height: th }, scene, true);
+    dt.hasAlpha = true;
+    var ctx = dt.getContext();
+    ctx.clearRect(0, 0, tw, th);
+    var r = 10, x = 4, y = 4, w = tw - 8, h = th - 8;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fillStyle = '#11161d';
+    ctx.fill();
+    ctx.strokeStyle = '#3a4757';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // 品牌/型号（左上角小字）
+    ctx.font = 'bold 20px "Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.fillStyle = '#9fb3c8';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    var model = [dev.brand, dev.model].filter(Boolean).join(' ') || (dev.device_type || '');
+    ctx.fillText((model || 'DEVICE').slice(0, 16), 14, 10);
+    // 状态徽标（右下角色块 + 文字）
+    var st = dev.status || 'unknown';
+    var sttxt = (STATUS_LABEL[st] || st);
+    ctx.font = 'bold 24px "Microsoft YaHei","PingFang SC",sans-serif';
+    var stw = ctx.measureText(sttxt).width;
+    ctx.fillStyle = STATUS_COLORS[st] || '#bdc3c7';
+    ctx.fillRect(tw - 26 - stw - 16, th - 38, stw + 16, 26);
+    ctx.fillStyle = '#0b0f14';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sttxt, tw - 26 - stw - 8, th - 25);
+    dt.update();
+
+    var planeH = Math.max(0.05, dh * 0.72);
+    var planeW = Math.min(dw * 0.9, planeH * (tw / th));
+    var plane = BABYLON.MeshBuilder.CreatePlane('fpanel_' + dev.id, { width: planeW, height: planeH }, scene);
+    var pmat = new BABYLON.StandardMaterial('fpanelmat_' + dev.id, scene);
+    pmat.diffuseTexture = dt;
+    pmat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    pmat.disableLighting = true;
+    pmat.backFaceCulling = false;
+    plane.material = pmat;
+    plane.parent = dbox;
+    plane.position = new BABYLON.Vector3(0, 0, dd / 2 + 0.002);
+    plane.isPickable = false;
+    return plane;
+  }
+
+  function buildScene(data){
+    clearScene();
+    var cabs = data.cabinets || [];
+    var minX=1e9, maxX=-1e9, minZ=1e9, maxZ=-1e9, maxY=0;
+    var gridIdx = 0;
+    var gridCols = Math.max(1, Math.ceil(Math.sqrt(cabs.length || 1)));
+
+    cabs.forEach(function(c){
+      var hu = Number(c.height_u) || 42;
+      var h = hu * U_UNIT;
+      var x, z;
+      if (c.pos_x != null && c.pos_y != null){
+        // 已设置坐标：按 pos_x/pos_y(0-100) 映射到 14x14 平面
+        x = ((Number(c.pos_x)/100) - 0.5) * 14;
+        z = ((Number(c.pos_y)/100) - 0.5) * 14;
+      } else {
+        // 未设置坐标：自动网格排列，避免全部叠在原点导致设备/状态不可见
+        var gx = (gridIdx % gridCols) + 1;
+        var gz = Math.floor(gridIdx / gridCols) + 1;
+        x = ((gx/(gridCols+1)) - 0.5) * 14;
+        z = ((gz/(gridCols+1)) - 0.5) * 14;
+        gridIdx++;
+      }
+      minX = Math.min(minX, x - CAB_W/2); maxX = Math.max(maxX, x + CAB_W/2);
+      minZ = Math.min(minZ, z - CAB_D/2); maxZ = Math.max(maxZ, z + CAB_D/2);
+      maxY = Math.max(maxY, h);
+
+      var st = cabinetStatus(c);
+      var cabColor = colorOn ? STATUS_COLORS[st] : (c.color || '#007bff');
+
+      // 机柜节点(TransformNode): 外壳/U位/设备统一挂在其下, 支持整体拖动自定义排列
+      var node = new BABYLON.TransformNode('cabNode_' + c.id, scene);
+      node.position = new BABYLON.Vector3(x, 0, z);
+
+      // 机柜玻璃外壳（半透明）+ 边框，便于看到内部设备（局部坐标）
+      var box = BABYLON.MeshBuilder.CreateBox('cab_' + c.id, { width: CAB_W, height: h, depth: CAB_D }, scene);
+      box.position = new BABYLON.Vector3(0, h/2, 0);
+      box.parent = node;
+      var mat = new BABYLON.StandardMaterial('mat_' + c.id, scene);
+      mat.diffuseColor = hexToColor3(cabColor);
+      mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+      mat.emissiveColor = new BABYLON.Color3(0, 0, 0);
+      mat.alpha = 0.14;
+      box.material = mat;
+      box.metadata = { kind: 'cabinet', cabinet: c, status: st, baseColor: cabColor, node: node };
+      box.isPickable = true;
+      try { box.enableEdgesRendering(); box.edgesWidth = 2.0; box.edgesColor = new BABYLON.Color4(0.8, 0.85, 0.9, 0.9); } catch(e){}
+
+      cabinetMeshes.push({ mesh: box, node: node, cabinet: c, status: st, baseColor: cabColor });
+
+      // U 位分隔线（局部坐标，挂到 node 下，整体随机柜移动）
+      var linesArr = [];
+      for (var ui = 0; ui <= hu; ui++){
+        var yy = ui * U_UNIT;
+        linesArr.push([
+          new BABYLON.Vector3(-CAB_W/2, yy, -CAB_D/2),
+          new BABYLON.Vector3(CAB_W/2, yy, -CAB_D/2),
+          new BABYLON.Vector3(CAB_W/2, yy, CAB_D/2),
+          new BABYLON.Vector3(-CAB_W/2, yy, CAB_D/2),
+          new BABYLON.Vector3(-CAB_W/2, yy, -CAB_D/2)
+        ]);
+      }
+      try {
+        var ln = BABYLON.MeshBuilder.CreateLineSystem('u_' + c.id, { lines: linesArr }, scene);
+        ln.parent = node;
+        ln.color = new BABYLON.Color3(0.42, 0.47, 0.52);
+        ln.isPickable = false;
+        ln.isVisible = showU;
+        uMeshes.push(ln);
+      } catch(e){}
+
+      // U 位编号标签：每 U 一个, 挂在机柜左侧透明锚点上, 随「U位网格」开关显隐
+      for (var ui = 1; ui <= hu; ui++){
+        var anchor = BABYLON.MeshBuilder.CreateBox('uanchor_' + c.id + '_' + ui, { size: 0.01 }, scene);
+        anchor.parent = node;
+        anchor.position = new BABYLON.Vector3(-CAB_W/2 - 0.02, ui * U_UNIT, 0);
+        anchor.isPickable = false;
+        anchor.isVisible = true; anchor.visibility = 0;   // 透明但可被 GUI 链接定位
+        uAnchors.push(anchor);
+        var ut = new BABYLON.GUI.TextBlock();
+        ut.text = '' + ui;
+        ut.color = '#9fb3c8'; ut.fontSize = 9;
+        adt.addControl(ut);
+        ut.linkWithMesh(anchor);
+        ut.linkOffsetX = -2;
+        ut.isVisible = showU;
+        uLabelCtrls.push(ut);
+      }
+
+      // 设备（按 U 位堆叠在机柜内部，局部坐标）
+      var occupiedU = {};
+      (c.devices||[]).forEach(function(dev){
+        var du = Number(dev.height_u) || 1;
+        var pu = Number(dev.position_u) || 1;
+        for (var kk = 0; kk < du; kk++) occupiedU[pu + kk] = true;
+        var dh = du * U_UNIT * 0.86;
+        var dy = (pu - 1 + du/2) * U_UNIT;   // 距机柜底部中心高度
+        var dw = CAB_W * 0.82, dd = CAB_D * 0.8;
+        var dbox = BABYLON.MeshBuilder.CreateBox('dev_' + dev.id, { width: dw, height: dh, depth: dd }, scene);
+        dbox.position = new BABYLON.Vector3(0, dy, 0);
+        dbox.parent = node;
+        var dmat = new BABYLON.StandardMaterial('dmat_' + dev.id, scene);
+        var dcol = STATUS_COLORS[dev.status] || STATUS_COLORS.unknown;
+        dmat.diffuseColor = hexToColor3(dcol);
+        dmat.specularColor = new BABYLON.Color3(0.15, 0.15, 0.15);
+        dmat.emissiveColor = new BABYLON.Color3(0, 0, 0);
+        dbox.material = dmat;
+        dbox.metadata = { kind: 'device', device: dev, cabinet: c, status: dev.status, baseColor: dcol, node: node };
+        dbox.isPickable = true;
+        deviceMeshes.push({ mesh: dbox, device: dev, cabinet: c, status: dev.status, baseColor: dcol });
+
+        // 设备名称标签：3D 名牌, 作为设备方块子物体, 锚定机柜正面, 随视角移动而附着在设备上
+        try {
+          var dlabel = makeDeviceLabel(dev, dbox, dh);
+          dlabel.isVisible = labelsOn;
+          devLabelMeshes.push(dlabel);
+        } catch(e){}
+
+        // 设备前面板 + 状态 LED（呼吸灯由 registerBeforeRender 统一驱动）
+        try {
+          var fpanel = makeFrontPanel(dev, dbox, dh, dw, dd);
+          panelMeshes.push(fpanel);
+          var dEntry = deviceMeshes[deviceMeshes.length - 1];
+          var ledR = Math.max(0.008, dh * 0.08);
+          var ledMat = new BABYLON.StandardMaterial('ledmat_' + dev.id, scene);
+          ledMat.emissiveColor = hexToColor3(dcol);
+          ledMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+          ledMat.disableLighting = true;
+          var led1 = BABYLON.MeshBuilder.CreateSphere('led_' + dev.id + '_a', { diameter: ledR, segments: 8 }, scene);
+          led1.position = new BABYLON.Vector3(-dw * 0.26, dy + dh * 0.30, dd / 2 + 0.004);
+          led1.parent = node; led1.isPickable = false; led1.material = ledMat;
+          var led2 = BABYLON.MeshBuilder.CreateSphere('led_' + dev.id + '_b', { diameter: ledR * 0.7, segments: 8 }, scene);
+          led2.position = new BABYLON.Vector3(-dw * 0.26, dy + dh * 0.12, dd / 2 + 0.004);
+          led2.parent = node; led2.isPickable = false; led2.material = ledMat;
+          ledMeshes.push(led1, led2);
+          dEntry.leds = [led1, led2];
+          dEntry.ledMat = ledMat;
+        } catch(e){}
+      });
+
+      // 空白 U 位挡板（共享原型实例，随「机柜内部」开关显隐，塑造真实机柜感）
+      try {
+        if (!blankProto){
+          blankProto = BABYLON.MeshBuilder.CreateBox('blank_proto', { width: CAB_W * 0.72, height: U_UNIT * 0.9, depth: 0.035 }, scene);
+          blankProto.setEnabled(false);  // 官方推荐：禁用主网格，实例仍正常渲染
+          blankProto.isPickable = false;
+          var bm = new BABYLON.StandardMaterial('blankmat', scene);
+          bm.diffuseColor = new BABYLON.Color3(0.24, 0.29, 0.36);
+          bm.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+          bm.emissiveColor = new BABYLON.Color3(0, 0, 0);
+          blankProto.material = bm;
+        }
+        for (var bi = 1; bi <= hu; bi++){
+          if (occupiedU[bi]) continue;
+          var blankInst = blankProto.createInstance('blank_' + c.id + '_' + bi);
+          blankInst.parent = node;
+          blankInst.position = new BABYLON.Vector3(0, (bi - 0.5) * U_UNIT, 0);
+          blankInst.isPickable = false;
+          blankInst.isVisible = showU;
+          blankMeshes.push(blankInst);
+        }
+      } catch(e){}
+
+      // 机柜名称标签（GUI，默认隐藏）
+      try {
+        var rect = new BABYLON.GUI.Rectangle('lbl_' + c.id);
+        rect.background = 'rgba(20,28,38,0.85)';
+        rect.color = '#cfd8dc';
+        rect.thickness = 0;
+        rect.cornerRadius = 4;
+        rect.width = '84px'; rect.height = '20px';
+        rect.isVisible = labelsOn;
+        var tb = new BABYLON.GUI.TextBlock();
+        tb.text = c.name; tb.color = '#e6edf3'; tb.fontSize = 11;
+        rect.addControl(tb);
+        adt.addControl(rect);
+        rect.linkWithMesh(box);
+        rect.linkOffsetY = -16 - (h * 30);
+        labelCtrls.push(rect);
+      } catch(e){}
+    });
+
+    if (cabs.length){
+      bounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ, maxY: maxY };
+    } else {
+      bounds = null;
+    }
+    buildAisles();
+    fitView();
+  }
+
+  // 拖动时把屏幕坐标投射到地面, 返回交点(Vector3)或 null
+  function groundPick(){
+    if (!groundMesh) return null;
+    var p = scene.pick(scene.pointerX, scene.pointerY, function(m){ return m === groundMesh; });
+    return (p && p.hit) ? p.pickedPoint : null;
+  }
+
+  // 根据当前各机柜节点位置重算取景包围盒
+  function updateCabBounds(){
+    if (!cabinetMeshes.length){ bounds = null; return; }
+    var minX=1e9, maxX=-1e9, minZ=1e9, maxZ=-1e9, maxY=0;
+    cabinetMeshes.forEach(function(m){
+      var x = m.node.position.x, z = m.node.position.z;
+      var h = (Number(m.cabinet.height_u) || 42) * U_UNIT;
+      minX = Math.min(minX, x - CAB_W/2); maxX = Math.max(maxX, x + CAB_W/2);
+      minZ = Math.min(minZ, z - CAB_D/2); maxZ = Math.max(maxZ, z + CAB_D/2);
+      maxY = Math.max(maxY, h);
+    });
+    bounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ, maxY: maxY };
+  }
+
+  // 相机飞行：先 stop 已有动画，再用 CONSTANT 循环模式（避免无限循环闪烁）
+  function flyTo(targetVec, radius){
+    if (!camera) return;
+    scene.stopAnimation(camera);
+    var ease = new BABYLON.CubicEase();
+    ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    BABYLON.Animation.CreateAndStartAnimation('cam_t', camera, 'target', 60, 30,
+      camera.target.clone(), targetVec.clone(), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+    BABYLON.Animation.CreateAndStartAnimation('cam_r', camera, 'radius', 60, 30,
+      camera.radius, radius, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  }
+
+  function fitView(){
+    if (!camera) return;
+    scene.stopAnimation(camera);
+    camera.alpha = Math.PI / 2;     // 正面视角(看到设备名称)
+    camera.beta = Math.PI / 2.6;
+    if (bounds){
+      var cx = (bounds.minX + bounds.maxX) / 2;
+      var cz = (bounds.minZ + bounds.maxZ) / 2;
+      var cy = bounds.maxY / 2;
+      var span = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) + 3;
+      var r = Math.max(7, span * 1.5);
+      flyTo(new BABYLON.Vector3(cx, cy, cz), Math.min(r, camera.upperRadiusLimit));
+    } else {
+      flyTo(new BABYLON.Vector3(0, 1, 0), 18);
+    }
+  }
+
+  function focusMesh(mesh){
+    if (!camera || !mesh) return;
+    var p = mesh.getBoundingInfo().boundingBox.centerWorld.clone();
+    var r = (mesh.metadata && mesh.metadata.kind === 'device') ? 3.2 : 5;
+    flyTo(p, r);
+  }
+
+  // 冷/热通道标识：按机柜行(z 相近)分组，行间画冷通道(蓝)，首尾外侧画热通道(红)
+  function buildAisles(){
+    aisleMeshes.forEach(function(m){ if (m){ if (m.material) m.material.dispose(); m.dispose(); } });
+    aisleMeshes = [];
+    if (!cabinetMeshes.length) return;
+    var rows = {};
+    cabinetMeshes.forEach(function(m){
+      var key = Math.round(m.node.position.z / 0.7) * 0.7;
+      if (!rows[key]) rows[key] = [];
+      rows[key].push(m);
+    });
+    var keys = Object.keys(rows).map(Number).sort(function(a, b){ return a - b; });
+    if (!keys.length) return;
+    var minX = 1e9, maxX = -1e9;
+    cabinetMeshes.forEach(function(m){
+      minX = Math.min(minX, m.node.position.x);
+      maxX = Math.max(maxX, m.node.position.x);
+    });
+    var len = Math.max(4, (maxX - minX) + 3);
+    var centerX = (minX + maxX) / 2;
+    function strip(cz, depth, color, alpha){
+      var m = BABYLON.MeshBuilder.CreateBox('aisle_' + aisleMeshes.length, { width: len, height: 0.01, depth: depth }, scene);
+      m.position = new BABYLON.Vector3(centerX, 0.012, cz);
+      var mat = new BABYLON.StandardMaterial('aislemat_' + aisleMeshes.length, scene);
+      mat.diffuseColor = hexToColor3(color);
+      mat.emissiveColor = hexToColor3(color).scale(0.55);
+      mat.alpha = alpha;
+      mat.disableLighting = true;
+      m.material = mat;
+      m.isPickable = false;
+      aisleMeshes.push(m);
+    }
+    // 行间冷通道
+    for (var i = 0; i < keys.length - 1; i++){
+      var gap = Math.abs(keys[i + 1] - keys[i]);
+      strip((keys[i] + keys[i + 1]) / 2, Math.max(0.5, gap * 0.8), '#2e86de', 0.10);
+    }
+    // 首/末行外侧热通道
+    strip(keys[0] - 1.0, 0.8, '#e74c3c', 0.08);
+    strip(keys[keys.length - 1] + 1.0, 0.8, '#e74c3c', 0.08);
+  }
+
+  // 视角预设：正面 / 侧面，平滑飞行（CONSTANT 循环模式，避免残速振荡）
+  function viewPreset(kind){
+    if (!camera) return;
+    if (kind === 'reset'){ fitView(); return; }
+    scene.stopAnimation(camera);
+    var alpha = (kind === 'side') ? 0 : Math.PI / 2;
+    var beta = Math.PI / 2.25;
+    var radius = 18;
+    if (bounds){
+      var cx = (bounds.minX + bounds.maxX) / 2;
+      var cz = (bounds.minZ + bounds.maxZ) / 2;
+      var cy = bounds.maxY / 2;
+      var span = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) + 3;
+      radius = Math.min(Math.max(7, span * 1.2), camera.upperRadiusLimit);
+      camera.target = new BABYLON.Vector3(cx, cy, cz);
+    }
+    var ease = new BABYLON.CubicEase();
+    ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    BABYLON.Animation.CreateAndStartAnimation('cam_va', camera, 'alpha', 60, 30,
+      camera.alpha, alpha, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+    BABYLON.Animation.CreateAndStartAnimation('cam_vb', camera, 'beta', 60, 30,
+      camera.beta, beta, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+    BABYLON.Animation.CreateAndStartAnimation('cam_vr', camera, 'radius', 60, 30,
+      camera.radius, radius, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  }
+
+  function setHover(mesh){
+    if (hoverMesh && hoverMesh !== mesh && hoverMesh.material){
+      hoverMesh.material.emissiveColor = hoverMesh._baseEmissive || new BABYLON.Color3(0,0,0);
+    }
+    hoverMesh = mesh;
+    if (mesh && mesh.material){
+      mesh._baseEmissive = mesh.material.emissiveColor.clone();
+      mesh.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.12);
+    }
+    canvas.style.cursor = (mesh && mesh.metadata) ? 'pointer' : 'default';
+
+    // 悬浮提示：设备显示 名称/状态/IP，机柜显示 名称/U位占用/设备数
+    if (mesh && mesh.metadata && tooltip){
+      var md = mesh.metadata;
+      var tipText = '';
+      if (md.kind === 'device'){
+        var dv = md.device;
+        tipText = escapeHtml(dv.name || ('设备' + dv.id)) + ' · ' + (STATUS_LABEL[dv.status] || dv.status) +
+                  (dv.ip_address ? ' · ' + escapeHtml(dv.ip_address) : '');
+      } else if (md.kind === 'cabinet'){
+        tipText = escapeHtml(md.cabinet.name || '') + ' · U' + (md.cabinet.u_used || 0) + '/' + (md.cabinet.u_total || 0) +
+                  ' · ' + (md.cabinet.device_count || 0) + ' 台设备';
+      }
+      tooltipText.text = tipText;
+      if (mesh !== lastTipMesh){
+        lastTipMesh = mesh;
+        tooltip.linkWithMesh(mesh);
+      }
+      tooltip.linkOffsetY = -22;
+      tooltip.isVisible = !!tipText;
+    } else if (tooltip){
+      tooltip.isVisible = false;
+      lastTipMesh = null;
+    }
+  }
+
+  function showCabinetPanel(cab){
+    el('panelBox').style.display = 'block';
+    el('panelTitle').textContent = cab.name || ('机柜 #' + cab.id);
+    var html = '<div class="d-flex justify-content-between align-items-center mb-2">' +
+      '<div class="row small flex-grow-1">' +
+      '<div class="col-4">U位总高：<b>' + (cab.height_u||42) + 'U</b></div>' +
+      '<div class="col-4">已用：<b>' + (cab.u_used||0) + 'U (' + (cab.u_usage||0) + '%)</b></div>' +
+      '<div class="col-4">设备数：<b>' + (cab.device_count||0) + '</b></div></div></div>';
+    html += '<a href="/cabinet/' + cab.id + '" class="btn btn-sm btn-primary mb-2"><i class="fas fa-door-open me-1"></i> 进入机柜详情</a>';
+    html += '<div class="table-responsive"><table class="table table-sm table-hover align-middle">' +
+      '<thead><tr><th>设备</th><th>类型</th><th>状态</th><th>U位</th><th></th></tr></thead><tbody>';
+    (cab.devices||[]).forEach(function(d){
+      var col = STATUS_COLORS[d.status] || STATUS_COLORS.unknown;
+      html += '<tr><td>' + escapeHtml(d.name) + '</td>' +
+        '<td>' + escapeHtml(d.device_type||'') + '</td>' +
+        '<td><span class="status-indicator" style="background:' + col + '"></span> ' + (STATUS_LABEL[d.status]||d.status) + '</td>' +
+        '<td>' + (d.position_u||'-') + '/' + (d.height_u||1) + 'U</td>' +
+        '<td><button class="btn btn-sm btn-outline-primary" onclick="window.__showDevice(' + d.id + ')">详情</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+    el('panelBody').innerHTML = html;
+  }
+
+  function showDevicePanel(dev, cab){
+    el('panelBox').style.display = 'block';
+    el('panelTitle').textContent = dev.name || ('设备 #' + dev.id);
+    var col = STATUS_COLORS[dev.status] || STATUS_COLORS.unknown;
+    var html = '<div class="small mb-2">所属机柜：<b>' + (cab ? cab.name : '-') + '</b>　U位：<b>' +
+      (dev.position_u||'-') + '/' + (dev.height_u||1) + 'U</b></div>';
+    html += '<a href="/devices/' + dev.id + '" class="btn btn-sm btn-primary mb-2"><i class="fas fa-door-open me-1"></i> 进入设备详情</a>';
+    html += '<div class="row small mb-2">' +
+      '<div class="col-4"><span class="status-indicator" style="background:' + col + '"></span> ' + (STATUS_LABEL[dev.status]||dev.status) + '</div>' +
+      '<div class="col-4">类型：' + escapeHtml(dev.device_type||'-') + '</div>' +
+      '<div class="col-4">IP：' + (dev.ip_address||'-') + '</div></div>';
+    html += '<div class="small">品牌/型号：' + escapeHtml(dev.brand||'-') + ' / ' + escapeHtml(dev.model||'-') + '<br>' +
+      'CPU：' + (dev.cpu_usage!=null ? dev.cpu_usage+'%' : '-') +
+      '　内存：' + (dev.memory_usage!=null ? dev.memory_usage+'%' : '-') + '<br>' +
+      '温度：' + (dev.temperature!=null ? dev.temperature+'℃' : '-') +
+      '　功耗：' + (dev.power_consumption!=null ? dev.power_consumption+'kW' : '-') + '</div>';
+    el('panelBody').innerHTML = html;
+  }
+
+  window.__showDevice = function(id){
+    apiGet("{{ url_for('dc_view.api_device', device_id=0) }}".replace('/0','/'+id))
+      .then(function(d){
+        var cab = d.cabinet_name ? {name: d.cabinet_name, id: d.cabinet_id} : null;
+        showDevicePanel(d, cab);
+      }).catch(function(e){ alert('设备详情失败：'+e.message); });
+  };
+
+  function toggleLabels(){
+    labelsOn = !labelsOn;
+    el('btnLabels').classList.toggle('btn-outline-secondary', !labelsOn);
+    el('btnLabels').classList.toggle('btn-secondary', labelsOn);
+    labelCtrls.forEach(function(l){ if (l) l.isVisible = labelsOn; });
+    devLabelMeshes.forEach(function(l){ if (l) l.isVisible = labelsOn; });
+  }
+
+  function toggleU(){
+    showU = !showU;
+    el('btnU').textContent = '机柜内部：' + (showU ? '开' : '关');
+    el('btnU').classList.toggle('btn-outline-secondary', !showU);
+    el('btnU').classList.toggle('btn-secondary', showU);
+    uMeshes.forEach(function(m){ if (m) m.isVisible = showU; });
+    uLabelCtrls.forEach(function(l){ if (l) l.isVisible = showU; });
+    blankMeshes.forEach(function(m){ if (m) m.isVisible = showU; });
+  }
+
+  // 统一重刷机柜/设备/图例颜色（状态着色、温度视图共用入口）
+  function applyColors(){
+    cabinetMeshes.forEach(function(m){
+      if (m.mesh && m.mesh.material){
+        var col = colorOn ? STATUS_COLORS[m.status] : (m.cabinet.color || '#007bff');
+        m.mesh.material.diffuseColor = hexToColor3(col);
+      }
+    });
+    deviceMeshes.forEach(function(m){
+      var col = deviceColor(m.device);
+      if (m.mesh && m.mesh.material) m.mesh.material.diffuseColor = hexToColor3(col);
+      if (m.ledMat) m.ledMat.emissiveColor = hexToColor3(col);
+    });
+    updateLegend();
+  }
+
+  function toggleColor(){
+    colorOn = !colorOn;
+    el('btnColor').textContent = '状态着色：' + (colorOn?'开':'关');
+    el('btnColor').classList.toggle('btn-outline-secondary', !colorOn);
+    el('btnColor').classList.toggle('btn-secondary', colorOn);
+    applyColors();
+  }
+
+  function toggleTemp(){
+    tempMode = !tempMode;
+    el('btnTemp').textContent = '温度视图：' + (tempMode?'开':'关');
+    el('btnTemp').classList.toggle('btn-outline-info', !tempMode);
+    el('btnTemp').classList.toggle('btn-info', tempMode);
+    applyColors();
+  }
+
+  function updateLegend(){
+    if (!el('legendBox')) return;
+    var lg = '';
+    if (tempMode){
+      lg = '<div class="d-flex align-items-center mb-1"><span class="status-indicator" style="background:#2ecc71"></span> &lt;30℃</div>' +
+           '<div class="d-flex align-items-center mb-1"><span class="status-indicator" style="background:#f1c40f"></span> 30-40℃</div>' +
+           '<div class="d-flex align-items-center mb-1"><span class="status-indicator" style="background:#e67e22"></span> 40-50℃</div>' +
+           '<div class="d-flex align-items-center mb-1"><span class="status-indicator" style="background:#e74c3c"></span> ≥50℃</div>';
+    } else {
+      Object.keys(STATUS_COLORS).forEach(function(k){
+        if (['active','down','error'].indexOf(k) >= 0) return;
+        lg += '<div class="d-flex align-items-center mb-1"><span class="status-indicator" style="background:'+STATUS_COLORS[k]+'"></span> '+(STATUS_LABEL[k]||k)+'</div>';
+      });
+    }
+    el('legendBox').innerHTML = lg;
+  }
+
+  function screenshot(){
+    try {
+      BABYLON.Tools.CreateScreenshot(engine, camera, { width: canvas.width, height: canvas.height });
+    } catch(e){ alert('截图失败：' + e.message); }
+  }
+
+  // 编辑布局开关：开启后可拖动机柜自定义排列
+  function toggleEditLayout(){
+    editLayout = !editLayout;
+    var b = el('btnEditLayout');
+    b.classList.toggle('btn-outline-secondary', !editLayout);
+    b.classList.toggle('btn-warning', editLayout);
+    el('babylonHint').style.display = 'none';
+    if (editLayout){
+      el('locStat').textContent = '编辑布局：拖动机柜调整位置，完成后点「保存布局」写回数据库。';
+    } else if (layoutDirty){
+      el('locStat').textContent = '有未保存的布局改动，点「保存布局」写回数据库。';
+    } else {
+      el('locStat').textContent = '布局编辑已关闭。';
+    }
+  }
+
+  // 自动网格排列（按 √n 列），并立即保存
+  function autoArrange(){
+    var n = cabinetMeshes.length;
+    if (!n) return;
+    var cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    cabinetMeshes.forEach(function(m, i){
+      var gx = (i % cols) + 1;
+      var gz = Math.floor(i / cols) + 1;
+      m.node.position.x = ((gx/(cols+1)) - 0.5) * 14;
+      m.node.position.z = ((gz/(cols+1)) - 0.5) * 14;
+    });
+    updateCabBounds();
+    buildAisles();
+    layoutDirty = true;
+    fitView();
+    saveLayout();
+  }
+
+  // 将当前各机柜节点位置换算为 pos_x/pos_y(0-100) 并写回数据库
+  function saveLayout(){
+    if (!cabinetMeshes.length){ return; }
+    var payload = { cabinets: cabinetMeshes.map(function(m){
+      var p = m.node.position;
+      return { id: m.cabinet.id, pos_x: (p.x/14 + 0.5) * 100, pos_y: (p.z/14 + 0.5) * 100 };
+    }) };
+    fetch("{{ url_for('dc_view.api_save_layout') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(j){
+      layoutDirty = false;
+      el('locStat').textContent = '布局已保存（' + (j.updated || 0) + ' 个机柜）。';
+    }).catch(function(e){ alert('保存布局失败：' + e.message); });
+  }
+
+  function bindUI(){
+    el('btnReset').onclick = fitView;
+    el('btnFront').onclick = function(){ viewPreset('front'); };
+    el('btnSide').onclick = function(){ viewPreset('side'); };
+    el('btnU').onclick = toggleU;
+    el('btnLabels').onclick = toggleLabels;
+    el('btnColor').onclick = toggleColor;
+    el('btnTemp').onclick = toggleTemp;
+    el('btnEditLayout').onclick = toggleEditLayout;
+    el('btnAuto').onclick = autoArrange;
+    el('btnSave').onclick = saveLayout;
+    el('btnRefresh').onclick = function(){ if (CURRENT_LOCATION!=null) loadLocation(CURRENT_LOCATION); };
+    el('btnShot').onclick = screenshot;
+    el('panelClose').onclick = function(){ el('panelBox').style.display='none'; };
+    el('locationSelect').onchange = function(){ if (this.value) loadLocation(this.value); };
+    updateLegend();
+  }
+
+  function init(){
+    bindUI();
+    if (typeof BABYLON === 'undefined'){ showError('Babylon.js 资源未能加载（请确认 static/js/babylon.js 存在）。'); return; }
+    var canvas = el('renderCanvas');
+    engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true });
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.055, 0.067, 0.086, 1);
+
+    camera = new BABYLON.ArcRotateCamera('cam', Math.PI/2, Math.PI/2.6, 18, new BABYLON.Vector3(0,1,0), scene);
+    camera.attachControl(canvas, true);
+    camera.wheelPrecision = 8;
+    camera.lowerRadiusLimit = 2.5;
+    camera.upperRadiusLimit = 60;
+    camera.minZ = 0.1;
+    camera.inertia = 0.6;   // 适度惯性，避免重置视角时残速振荡
+
+    var hl = new BABYLON.HemisphericLight('hl', new BABYLON.Vector3(0,1,0), scene);
+    hl.intensity = 0.9; hl.groundColor = new BABYLON.Color3(0.2,0.22,0.25);
+    var dl = new BABYLON.DirectionalLight('dl', new BABYLON.Vector3(-1,-2,-1), scene);
+    dl.intensity = 0.45;
+
+    // 告警/故障设备发光层
+    try {
+      glowLayer = new BABYLON.GlowLayer('glow', scene, 1.0);
+      glowLayer.intensity = 0.35;
+    } catch(e){ glowLayer = null; }
+
+    var ground = BABYLON.MeshBuilder.CreateGround('ground', { width:20, height:20 }, scene);
+    var gm = new BABYLON.StandardMaterial('gm', scene);
+    gm.diffuseColor = new BABYLON.Color3(0.1, 0.13, 0.17); gm.specularColor = new BABYLON.Color3(0,0,0);
+    // 机房地砖网格纹理（动态生成，无外部资源，离线可用）
+    try {
+      var gt = new BABYLON.DynamicTexture('groundtex', { width: 512, height: 512 }, scene, false);
+      var gctx = gt.getContext();
+      gctx.fillStyle = '#1a222c';
+      gctx.fillRect(0, 0, 512, 512);
+      gctx.strokeStyle = 'rgba(120,140,160,0.35)';
+      gctx.lineWidth = 2;
+      var cell = 64;
+      for (var gxi = 0; gxi <= 512; gxi += cell){
+        gctx.beginPath(); gctx.moveTo(gxi, 0); gctx.lineTo(gxi, 512); gctx.stroke();
+        gctx.beginPath(); gctx.moveTo(0, gxi); gctx.lineTo(512, gxi); gctx.stroke();
+      }
+      gt.update();
+      gm.diffuseTexture = gt;
+      gm.diffuseTexture.uScale = 5;
+      gm.diffuseTexture.vScale = 5;
+      gm.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    } catch(e){}
+    ground.material = gm;
+    groundMesh = ground;
+
+    try { adt = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI('ui', true, scene); } catch(e){ adt = null; }
+
+    // 悬浮提示框（GUI，屏幕空间）
+    try {
+      tooltip = new BABYLON.GUI.Rectangle('tip');
+      tooltip.background = 'rgba(10,16,24,0.92)';
+      tooltip.color = '#3a4757';
+      tooltip.thickness = 1;
+      tooltip.cornerRadius = 4;
+      tooltip.width = '240px';
+      tooltip.height = '36px';
+      tooltip.isVisible = false;
+      tooltipText = new BABYLON.GUI.TextBlock();
+      tooltipText.color = '#e6edf3';
+      tooltipText.fontSize = 12;
+      tooltip.addControl(tooltipText);
+      adt.addControl(tooltip);
+    } catch(e){}
+
+    // 指针交互：悬停高亮 + 点击下钻(设备优先于机柜)；编辑布局模式下可拖动机柜
+    scene.onPointerObservable.add(function(pi){
+      if (pi.type === BABYLON.PointerEventTypes.POINTERDOWN){
+        if (editLayout){
+          var dp = scene.pick(scene.pointerX, scene.pointerY);
+          if (dp && dp.hit && dp.pickedMesh && dp.pickedMesh.metadata && dp.pickedMesh.metadata.node){
+            dragNode = dp.pickedMesh.metadata.node;
+            var gp = groundPick();
+            var gx = gp ? gp.x : dragNode.position.x;
+            var gz = gp ? gp.z : dragNode.position.z;
+            dragOffset = dragNode.position.subtract(new BABYLON.Vector3(gx, 0, gz));
+            camera.detachControl(canvas);
+            el('babylonHint').style.display = 'none';
+          }
+        }
+      } else if (pi.type === BABYLON.PointerEventTypes.POINTERMOVE){
+        if (dragNode){
+          var gp2 = groundPick();
+          if (gp2){
+            var tx = gp2.x + dragOffset.x;
+            var tz = gp2.z + dragOffset.z;
+            if (snapOn){ tx = Math.round(tx/0.7)*0.7; tz = Math.round(tz/0.7)*0.7; }
+            tx = Math.max(-7, Math.min(7, tx));
+            tz = Math.max(-7, Math.min(7, tz));
+            dragNode.position.x = tx; dragNode.position.z = tz;
+            updateCabBounds();
+            layoutDirty = true;
+          }
+          return;
+        }
+        var pick = scene.pick(scene.pointerX, scene.pointerY);
+        setHover(pick && pick.hit ? pick.pickedMesh : null);
+      } else if (pi.type === BABYLON.PointerEventTypes.POINTERUP){
+        if (dragNode){
+          dragNode = null;
+          camera.attachControl(canvas, true);
+          buildAisles();
+        }
+      } else if (pi.type === BABYLON.PointerEventTypes.POINTERPICK){
+        if (!editLayout && pi.pickInfo && pi.pickInfo.pickedMesh && pi.pickInfo.pickedMesh.metadata){
+          var mesh = pi.pickInfo.pickedMesh;
+          if (mesh.metadata.kind === 'device'){ showDevicePanel(mesh.metadata.device, mesh.metadata.cabinet); focusMesh(mesh); }
+          else if (mesh.metadata.kind === 'cabinet'){ showCabinetPanel(mesh.metadata.cabinet); focusMesh(mesh); }
+        }
+      } else if (pi.type === BABYLON.PointerEventTypes.POINTERDOUBLETAP){
+        // 双击机柜直接跳转到机柜详情页
+        if (!editLayout && pi.pickInfo && pi.pickInfo.pickedMesh && pi.pickInfo.pickedMesh.metadata){
+          var mesh2 = pi.pickInfo.pickedMesh;
+          if (mesh2.metadata.kind === 'cabinet'){
+            window.location.href = '/cabinet/' + mesh2.metadata.cabinet.id;
+          }
+        }
+      }
+    });
+
+    // 告警设备呼吸灯 + 状态 LED 驱动（每帧刷新，故障设备脉冲发光）
+    scene.registerBeforeRender(function(){
+      var t = performance.now() / 1000;
+      var sin = Math.abs(Math.sin(t * 3));
+      deviceMeshes.forEach(function(m){
+        var bad = (m.status === 'offline' || m.status === 'down' || m.status === 'alert' ||
+                   m.status === 'error' || m.status === 'critical');
+        if (!m.mesh || !m.mesh.material) return;
+        if (bad){
+          var k = 0.35 + 0.65 * sin;
+          var col = hexToColor3(deviceColor(m.device));
+          m.mesh.material.emissiveColor = col.scale(k * 0.55);
+          if (m.ledMat) m.ledMat.emissiveColor = col.scale(k);
+        } else {
+          if (m.mesh !== hoverMesh && m.mesh.material.emissiveColor && m.mesh.material.emissiveColor.r !== 0){
+            m.mesh.material.emissiveColor = new BABYLON.Color3(0, 0, 0);
+          }
+          if (m.ledMat) m.ledMat.emissiveColor = hexToColor3(deviceColor(m.device));
+        }
+      });
+    });
+
+    engine.runRenderLoop(function(){ scene.render(); });
+    window.addEventListener('resize', function(){ engine.resize(); });
+
+    loadLocations();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+{% endblock %}

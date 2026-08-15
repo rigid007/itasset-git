@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}趋势预测{% endblock %}
+{% block page_title %}趋势预测{% endblock %}
+{% block page_subtitle %}基于历史数据的性能趋势分析{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary text-center h-100">
+            <div class="card-body py-3"><h4 class="text-primary mb-1" id="avgCpu">-</h4><small>平均CPU</small></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success text-center h-100">
+            <div class="card-body py-3"><h4 class="text-success mb-1" id="avgMemory">-</h4><small>平均内存</small></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning text-center h-100">
+            <div class="card-body py-3"><h4 class="text-warning mb-1" id="avgDisk">-</h4><small>平均磁盘</small></div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto"><label class="form-label fw-bold mb-0">时间范围:</label></div>
+            <div class="col-auto">
+                <select id="daysSelect" class="form-select form-select-sm" onchange="loadTrend()">
+                    <option value="7">最近7天</option>
+                    <option value="30" selected>最近30天</option>
+                    <option value="90">最近90天</option>
+                </select>
+            </div>
+            <div class="col-auto"><label class="form-label fw-bold mb-0">指标:</label></div>
+            <div class="col-auto">
+                <select id="metricSelect" class="form-select form-select-sm" onchange="loadTrend()">
+                    <option value="cpu">CPU使用率</option>
+                    <option value="memory">内存使用率</option>
+                    <option value="disk">磁盘使用率</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <canvas id="trendChart" height="100"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let trendChart = null;
+
+function loadTrend() {
+    const days = document.getElementById('daysSelect').value;
+    const metric = document.getElementById('metricSelect').value;
+
+    fetch(`{{ url_for('report_extra.trend_forecast_api') }}?days=${days}&metric=${metric}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) return;
+            const data = res.data;
+            const labels = data.map(d => d.date);
+            const values = data.map(d => d['avg_' + metric] || 0);
+
+            // 更新平均值
+            const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
+            document.getElementById('avgCpu').textContent = metric === 'cpu' ? avg + '%' : document.getElementById('avgCpu').textContent;
+            document.getElementById('avgMemory').textContent = metric === 'memory' ? avg + '%' : document.getElementById('avgMemory').textContent;
+            document.getElementById('avgDisk').textContent = metric === 'disk' ? avg + '%' : document.getElementById('avgDisk').textContent;
+
+            // 更新所有平均值
+            if (metric === 'cpu') document.getElementById('avgCpu').textContent = avg + '%';
+            if (metric === 'memory') document.getElementById('avgMemory').textContent = avg + '%';
+            if (metric === 'disk') document.getElementById('avgDisk').textContent = avg + '%';
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if (trendChart) trendChart.destroy();
+
+            const metricNames = {'cpu': 'CPU使用率', 'memory': '内存使用率', 'disk': '磁盘使用率'};
+
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: metricNames[metric] || metric,
+                        data: values,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + '%' } }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, title: { display: true, text: '使用率 (%)' } },
+                        x: { title: { display: true, text: '日期' } }
+                    }
+                }
+            });
+        });
+}
+
+document.addEventListener('DOMContentLoaded', loadTrend);
+</script>
+{% endblock %}

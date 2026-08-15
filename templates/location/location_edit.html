@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block title %}位置信息编辑 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<!-- 引入Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+<!-- 引入Select2用于更好的下拉选择体验 -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    /* 自定义样式 */
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        font-weight: 600;
+    }
+    
+    .form-section {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .form-section-title {
+        color: #495057;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        color: #495057;
+    }
+    
+    /* 地图容器样式 */
+    #map-container {
+        height: 300px;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+    }
+    
+    #location-map {
+        height: 100%;
+        width: 100%;
+    }
+    
+    /* 标签样式 */
+    .tag-badge {
+        margin-right: 0.3rem;
+        margin-bottom: 0.3rem;
+        display: inline-block;
+    }
+    
+    /* 表单操作按钮 */
+    .form-actions {
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        padding: 1rem 0;
+        margin-top: 2rem;
+        border-radius: 0 0 0.375rem 0.375rem;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .card-body {
+            padding: 1rem;
+        }
+        
+        .form-section {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+位置信息编辑
+{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('location.location_list') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left"></i> 返回列表
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header">
+                {% if location %}
+                    编辑位置: {{ location.name }}
+                {% else %}
+                    添加新位置
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% if location %}{{ url_for('location.location_edit', id=location.id) }}{% else %}{{ url_for('location.location.location_add') }}{% endif %}" id="location-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                    <!-- 基本信息 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">基本信息</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="name" class="form-label required-field">位置名称</label>
+                                <input type="text" class="form-control" id="name" name="name" 
+                                       value="{{ location.name if location else '' }}" 
+                                       required maxlength="128">
+                                <div class="form-text">请输入位置的唯一名称，如"数据中心A"、"办公楼3层机房"等</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="location_type" class="form-label">位置类型</label>
+                                <select class="form-select" id="location_type" name="location_type">
+                                    <option value="">选择类型</option>
+                                    <option value="数据中心" {% if location and location.location_type == '数据中心' %}selected{% endif %}>数据中心</option>
+                                    <option value="机房" {% if location and location.location_type == '机房' %}selected{% endif %}>机房</option>
+                                    <option value="办公室" {% if location and location.location_type == '办公室' %}selected{% endif %}>办公室</option>
+                                    <option value="楼层" {% if location and location.location_type == '楼层' %}selected{% endif %}>楼层</option>
+                                    <option value="建筑物" {% if location and location.location_type == '建筑物' %}selected{% endif %}>建筑物</option>
+                                    <option value="园区" {% if location and location.location_type == '园区' %}selected{% endif %}>园区</option>
+                                    <option value="其他" {% if location and location.location_type == '其他' %}selected{% endif %}>其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="description" class="form-label">位置描述</label>
+                                <textarea class="form-control" id="description" name="description" rows="3">{{ location.description if location else '' }}</textarea>
+                                <div class="form-text">对位置的详细描述，用途、特点等</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label for="address" class="form-label">详细地址</label>
+                                <input type="text" class="form-control" id="address" name="address" 
+                                       value="{{ location.address if location else '' }}" maxlength="256">
+                                <div class="form-text">完整的物理地址</div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="area" class="form-label">面积(m²)</label>
+                                <input type="number" class="form-control" id="area" name="area" 
+                                       value="{{ location.area if location else '' }}" min="0" step="0.1">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="floor" class="form-label">楼层</label>
+                                <input type="text" class="form-control" id="floor" name="floor" 
+                                       value="{{ location.floor if location else '' }}" maxlength="50">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="room_number" class="form-label">房间号</label>
+                                <input type="text" class="form-control" id="room_number" name="room_number" 
+                                       value="{{ location.room_number if location else '' }}" maxlength="50">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="capacity" class="form-label">机柜容量</label>
+                                <input type="number" class="form-control" id="capacity" name="capacity" 
+                                       value="{{ location.capacity if location else '' }}" min="0">
+                                <div class="form-text">可容纳的标准机柜数量</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 联系信息 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">联系信息</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="contact_person" class="form-label">联系人</label>
+                                <input type="text" class="form-control" id="contact_person" name="contact_person" 
+                                       value="{{ location.contact_person if location else '' }}" maxlength="64">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="contact_department" class="form-label">所属部门</label>
+                                <input type="text" class="form-control" id="contact_department" name="contact_department" 
+                                       value="{{ location.contact_department if location else '' }}" maxlength="100">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="contact_phone" class="form-label">联系电话</label>
+                                <input type="text" class="form-control" id="contact_phone" name="contact_phone" 
+                                       value="{{ location.contact_phone if location else '' }}" maxlength="20">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="contact_email" class="form-label">联系邮箱</label>
+                                <input type="email" class="form-control" id="contact_email" name="contact_email" 
+                                       value="{{ location.contact_email if location else '' }}" maxlength="120">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 环境信息 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">环境信息</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="power_supply" class="form-label">电力供应</label>
+                                <textarea class="form-control" id="power_supply" name="power_supply" rows="2">{{ location.power_supply if location else '' }}</textarea>
+                                <div class="form-text">如：双路市电+UPS，总容量200KVA</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="cooling_system" class="form-label">制冷系统</label>
+                                <textarea class="form-control" id="cooling_system" name="cooling_system" rows="2">{{ location.cooling_system if location else '' }}</textarea>
+                                <div class="form-text">如：精密空调，制冷量80KW</div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="temperature" class="form-label">温度要求</label>
+                                <input type="text" class="form-control" id="temperature" name="temperature" 
+                                       value="{{ location.temperature if location else '' }}" maxlength="50">
+                                <div class="form-text">如：18-25°C</div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="humidity" class="form-label">湿度要求</label>
+                                <input type="text" class="form-control" id="humidity" name="humidity" 
+                                       value="{{ location.humidity if location else '' }}" maxlength="50">
+                                <div class="form-text">如：40-60% RH</div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="access_control" class="form-label">门禁系统</label>
+                                <select class="form-select" id="access_control" name="access_control">
+                                    <option value="">选择类型</option>
+                                    <option value="IC卡" {% if location and location.access_control == 'IC卡' %}selected{% endif %}>IC卡</option>
+                                    <option value="指纹" {% if location and location.access_control == '指纹' %}selected{% endif %}>指纹</option>
+                                    <option value="人脸识别" {% if location and location.access_control == '人脸识别' %}selected{% endif %}>人脸识别</option>
+                                    <option value="密码" {% if location and location.access_control == '密码' %}selected{% endif %}>密码</option>
+                                    <option value="多种组合" {% if location and location.access_control == '多种组合' %}selected{% endif %}>多种组合</option>
+                                    <option value="无" {% if location and location.access_control == '无' %}selected{% endif %}>无</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 标签和备注 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">标签和备注</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="tags" class="form-label">标签</label>
+                                <input type="text" class="form-control" id="tags" name="tags" 
+                                       value="{{ location.tags if location else '' }}" maxlength="255">
+                                <div class="form-text">多个标签用逗号分隔，如：核心机房,生产环境,24小时运维</div>
+                                <div class="mt-2" id="tags-preview">
+                                    {% if location and location.tags %}
+                                        {% for tag in location.tags.split(',') %}
+                                            {% if tag.strip() %}
+                                                <span class="badge bg-primary tag-badge">{{ tag.strip() }}</span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="notes" class="form-label">备注</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="4">{{ location.notes if location else '' }}</textarea>
+                                <div class="form-text">其他需要记录的信息</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 表单操作按钮 -->
+                    <div class="form-actions text-end">
+                        <button type="button" class="btn btn-secondary" onclick="window.history.back()">取消</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> 保存位置信息
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 位置统计信息（编辑模式下显示） -->
+{% if location %}
+<div class="row mt-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header">
+                位置统计信息
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ location.cabinet_count() }}</h5>
+                                <p class="card-text">机柜数量</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ location.get_used_u_count() }}</h5>
+                                <p class="card-text">已使用U位</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ location.created_at.strftime('%Y-%m-%d') if location.created_at else 'N/A' }}</h5>
+                                <p class="card-text">创建时间</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ location.updated_at.strftime('%Y-%m-%d') if location.updated_at else 'N/A' }}</h5>
+                                <p class="card-text">更新时间</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<!-- 引入Select2 -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        // 初始化Select2
+        $('#location_type, #access_control').select2({
+            theme: 'bootstrap-5',
+            width: '100%'
+        });
+        
+        // 标签输入预览
+        $('#tags').on('input', function() {
+            var tags = $(this).val().split(',');
+            var tagsPreview = $('#tags-preview');
+            tagsPreview.empty();
+            
+            tags.forEach(function(tag) {
+                tag = tag.trim();
+                if (tag) {
+                    tagsPreview.append('<span class="badge bg-primary tag-badge">' + tag + '</span>');
+                }
+            });
+        });
+        
+        // 表单提交验证
+        $('#location-form').submit(function(e) {
+            var name = $('#name').val().trim();
+            if (!name) {
+                e.preventDefault();
+                alert('位置名称不能为空！');
+                $('#name').focus();
+                return false;
+            }
+            
+            // 可以添加更多验证逻辑
+            return true;
+        });
+        
+        // 自动填充示例数据（仅用于演示，实际环境中应移除）
+        function fillDemoData() {
+            if (!$('#name').val() && window.location.href.includes('add')) {
+                $('#name').val('数据中心A');
+                $('#location_type').val('数据中心').trigger('change');
+                $('#description').val('公司核心数据中心，承载所有关键业务系统');
+                $('#address').val('北京市海淀区中关村大街1号');
+                $('#area').val('500');
+                $('#capacity').val('50');
+                $('#contact_person').val('张三');
+                $('#contact_phone').val('13800138000');
+                $('#contact_email').val('zhangsan@company.com');
+                $('#contact_department').val('IT运维部');
+                $('#power_supply').val('双路市电+UPS，总容量300KVA，备用柴油发电机');
+                $('#cooling_system').val('精密空调系统，制冷量150KW，N+1冗余配置');
+                $('#temperature').val('18-25°C');
+                $('#humidity').val('40-60% RH');
+                $('#access_control').val('指纹+IC卡').trigger('change');
+                $('#tags').val('核心机房,生产环境,24小时运维,Tier3');
+                $('#notes').val('该数据中心按照Tier3标准建设，具备99.982%的可用性');
+                
+                // 触发标签预览更新
+                $('#tags').trigger('input');
+            }
+        }
+        
+        // 填充演示数据（仅当URL包含demo参数时）
+        if (window.location.href.includes('demo=true')) {
+            fillDemoData();
+        }
+    });
+</script>
+{% endblock %}

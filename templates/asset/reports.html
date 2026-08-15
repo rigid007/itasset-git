@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}资产报表 - 资产管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>资产报表</h2>
+        </div>
+        <div class="col text-right">
+            <button class="btn btn-primary" onclick="window.print()">
+                <i class="fas fa-print"></i> 打印报表
+            </button>
+        </div>
+    </div>
+
+    <!-- 筛选表单（如需要） -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('asset.asset_reports') }}" class="form-inline">
+                <div class="form-group mr-2">
+                    <label for="type" class="mr-2">资产类型</label>
+                    <select name="type" id="type" class="form-control">
+                        <option value="">全部</option>
+                        {% for type in type_stats %}
+                        <option value="{{ type.asset_type }}" {% if request.args.get('type') == type.asset_type %}selected{% endif %}>
+                            {{ type.asset_type }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <label for="status" class="mr-2">状态</label>
+                    <select name="status" id="status" class="form-control">
+                        <option value="">全部</option>
+                        {% for status in status_stats %}
+                        <option value="{{ status.status }}" {% if request.args.get('status') == status.status %}selected{% endif %}>
+                            {{ status.status }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">筛选</button>
+                <a href="{{ url_for('asset.asset_reports') }}" class="btn btn-secondary ml-2">重置</a>
+            </form>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">资产总数</h5>
+                    <p class="card-text display-4">{{ type_stats|sum(attribute='count') }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">总价值</h5>
+                    <p class="card-text display-4">¥{{ "%.2f"|format(type_stats|sum(attribute='total_value')) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">累计折旧</h5>
+                    <p class="card-text display-4">¥{{ "%.2f"|format(depreciation_summary|sum(attribute='total_depreciation')) }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 按资产类型统计的图表和表格 -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>按资产类型统计</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="typeChart" width="400" height="200"></canvas>
+                    <table class="table table-sm table-striped mt-3">
+                        <thead>
+                            <tr>
+                                <th>资产类型</th>
+                                <th>数量</th>
+                                <th>总价值(元)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in type_stats %}
+                            <tr>
+                                <td>{{ stat.asset_type }}</td>
+                                <td>{{ stat.count }}</td>
+                                <td>¥{{ "%.2f"|format(stat.total_value) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-center">暂无数据</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>按资产状态统计</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="statusChart" width="400" height="200"></canvas>
+                    <table class="table table-sm table-striped mt-3">
+                        <thead>
+                            <tr>
+                                <th>状态</th>
+                                <th>数量</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in status_stats %}
+                            <tr>
+                                <td>{{ stat.status }}</td>
+                                <td>{{ stat.count }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-center">暂无数据</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 折旧汇总表（可选） -->
+    <div class="card">
+        <div class="card-header">
+            <h5>折旧汇总（按资产）</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>资产ID</th>
+                            <th>累计折旧(元)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dep in depreciation_summary %}
+                        <tr>
+                            <td>{{ dep.asset_id }}</td>
+                            <td>¥{{ "%.2f"|format(dep.total_depreciation) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="2" class="text-center">暂无折旧数据</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .card .display-4 {
+        font-size: 2.5rem;
+        font-weight: 300;
+        line-height: 1.2;
+    }
+    .table th, .table td {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    $(document).ready(function() {
+        // 资产类型图表
+        var typeCtx = document.getElementById('typeChart').getContext('2d');
+        var typeLabels = [{% for stat in type_stats %}'{{ stat.asset_type }}'{% if not loop.last %},{% endif %}{% endfor %}];
+        var typeCounts = [{% for stat in type_stats %}{{ stat.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+        var typeValues = [{% for stat in type_stats %}{{ stat.total_value }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+        new Chart(typeCtx, {
+            type: 'bar',
+            data: {
+                labels: typeLabels,
+                datasets: [{
+                    label: '资产数量',
+                    data: typeCounts,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y-count'
+                }, {
+                    label: '总价值(千元)',
+                    data: typeValues.map(v => v / 1000),
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y-value'
+                }]
+            },
+            options: {
+                scales: {
+                    'y-count': {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: '数量' }
+                    },
+                    'y-value': {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: '价值(千元)' }
+                    }
+                }
+            }
+        });
+
+        // 资产状态图表
+        var statusCtx = document.getElementById('statusChart').getContext('2d');
+        var statusLabels = [{% for stat in status_stats %}'{{ stat.status }}'{% if not loop.last %},{% endif %}{% endfor %}];
+        var statusCounts = [{% for stat in status_stats %}{{ stat.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+        new Chart(statusCtx, {
+            type: 'pie',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusCounts,
+                    backgroundColor: [
+                        'rgba(75, 192, 192, 0.6)',
+                        'rgba(255, 159, 64, 0.6)',
+                        'rgba(153, 102, 255, 0.6)',
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(201, 203, 207, 0.6)'
+                    ],
+                    borderWidth: 1
+                }]
+            }
+        });
+    });
+</script>
+{% endblock %}

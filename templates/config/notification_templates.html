@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}通知模板管理 - 配置{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>通知模板管理</h2>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#templateModal" id="newTemplateBtn">
+            <i class="bi bi-plus-lg"></i> 新建模板
+        </button>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle" id="templatesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>名称</th>
+                            <th>描述</th>
+                            <th>类型</th>
+                            <th>状态</th>
+                            <th>默认</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for template in templates %}
+                        <tr data-template-id="{{ template.id }}">
+                            <td>{{ template.name }}</td>
+                            <td>{{ template.description or '-' }}</td>
+                            <td>
+                                {% if template.notification_type == 'email' %}
+                                    <span class="badge bg-info">邮件</span>
+                                {% elif template.notification_type == 'sms' %}
+                                    <span class="badge bg-success">短信</span>
+                                {% elif template.notification_type == 'webhook' %}
+                                    <span class="badge bg-warning">Webhook</span>
+                                {% elif template.notification_type == 'slack' %}
+                                    <span class="badge bg-secondary">Slack</span>
+                                {% elif template.notification_type == 'wechat' %}
+                                    <span class="badge bg-primary">微信</span>
+                                {% else %}
+                                    <span class="badge bg-dark">{{ template.notification_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if template.enabled %}
+                                    <span class="badge bg-success">启用</span>
+                                {% else %}
+                                    <span class="badge bg-danger">禁用</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if template.is_default %}
+                                    <span class="badge bg-info">默认</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary edit-template-btn" 
+                                        data-template-id="{{ template.id }}"
+                                        data-template='{{ template.to_dict() | tojson | safe }}'
+                                        title="编辑">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-template-btn" 
+                                        data-template-id="{{ template.id }}"
+                                        data-template-name="{{ template.name }}"
+                                        title="删除">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                暂无通知模板，点击“新建模板”添加。
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 模板编辑模态框 -->
+<div class="modal fade" id="templateModal" tabindex="-1" aria-labelledby="templateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="templateForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                <input type="hidden" id="templateId" name="id">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="templateModalLabel">新建通知模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">模板名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="notification_type" class="form-label">通知类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="notification_type" name="notification_type" required>
+                                <option value="">请选择类型</option>
+                                <option value="email">邮件</option>
+                                <option value="sms">短信</option>
+                                <option value="webhook">Webhook</option>
+                                <option value="slack">Slack</option>
+                                <option value="wechat">微信</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="template_content" class="form-label">模板内容 <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="template_content" name="template_content" rows="6" required></textarea>
+                            <div class="form-text">支持变量占位符，如 {{ "{{ var }}" }}，具体格式视通知渠道而定。</div>
+                        </div>
+                        <div class="col-12">
+                            <label for="variables" class="form-label">变量定义 (JSON) <span class="text-muted">可选</span></label>
+                            <textarea class="form-control" id="variables" name="variables" rows="3" placeholder='["var1", "var2"] 或更复杂的对象'></textarea>
+                            <div class="form-text">以JSON数组或对象格式定义模板中使用的变量，例如：["name", "time"] 或 [{"name": "title", "type": "string"}]。</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enabled" name="enabled" value="y" checked>
+                                <label class="form-check-label" for="enabled">
+                                    启用模板
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_default" name="is_default" value="y">
+                                <label class="form-check-label" for="is_default">
+                                    设为默认模板
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除模板 <strong id="deleteTemplateName"></strong> 吗？此操作不可撤销。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 基础 URL（使用已存在的端点，避免 BuildError）
+    const BASE_URL = '{{ url_for("config.notification_templates") }}';
+    const csrfToken = '{{ csrf_token() if csrf_token else "" }}';
+
+    // 获取模态框元素并初始化
+    const modalElement = document.getElementById('templateModal');
+    const templateModal = new bootstrap.Modal(modalElement);
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+
+    // 强制关闭：为所有带 data-bs-dismiss="modal" 的按钮添加后备事件
+    modalElement.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            templateModal.hide();
+        });
+    });
+    document.getElementById('deleteConfirmModal').querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            deleteModal.hide();
+        });
+    });
+
+    // 表单元素
+    const form = document.getElementById('templateForm');
+    const modalTitle = document.getElementById('templateModalLabel');
+    const templateIdInput = document.getElementById('templateId');
+    const nameInput = document.getElementById('name');
+    const descriptionInput = document.getElementById('description');
+    const typeSelect = document.getElementById('notification_type');
+    const contentTextarea = document.getElementById('template_content');
+    const variablesTextarea = document.getElementById('variables');
+    const enabledCheckbox = document.getElementById('enabled');
+    const isDefaultCheckbox = document.getElementById('is_default');
+
+    // 使用事件委托处理所有动态按钮点击（包括编辑、删除）
+    document.addEventListener('click', function(e) {
+        // 编辑按钮
+        if (e.target.closest('.edit-template-btn')) {
+            const btn = e.target.closest('.edit-template-btn');
+            e.preventDefault(); // 防止任何默认行为
+            const templateDataStr = btn.dataset.template;
+            try {
+                const templateData = JSON.parse(templateDataStr);
+                // 填充表单
+                templateIdInput.value = templateData.id || '';
+                nameInput.value = templateData.name || '';
+                descriptionInput.value = templateData.description || '';
+                typeSelect.value = templateData.notification_type || '';
+                contentTextarea.value = templateData.template_content || '';
+                variablesTextarea.value = templateData.variables ? JSON.stringify(templateData.variables, null, 2) : '';
+                enabledCheckbox.checked = templateData.enabled === true;
+                isDefaultCheckbox.checked = templateData.is_default === true;
+                modalTitle.textContent = '编辑通知模板';
+                // 手动显示模态框（确保打开）
+                templateModal.show();
+            } catch (error) {
+                console.error('解析模板数据失败:', error);
+                alert('无法加载模板数据，请刷新页面重试');
+            }
+        }
+
+        // 删除按钮
+        if (e.target.closest('.delete-template-btn')) {
+            const btn = e.target.closest('.delete-template-btn');
+            e.preventDefault();
+            const templateId = btn.dataset.templateId;
+            const templateName = btn.dataset.templateName;
+            document.getElementById('deleteTemplateName').textContent = templateName;
+            document.getElementById('confirmDeleteBtn').dataset.templateId = templateId;
+            deleteModal.show();
+        }
+    });
+
+    // 新建按钮：直接通过 data-bs-toggle 打开模态框，但需要重置表单
+    document.getElementById('newTemplateBtn').addEventListener('click', function() {
+        form.reset();
+        templateIdInput.value = '';
+        modalTitle.textContent = '新建通知模板';
+        // 模态框由 data-bs-toggle 自动打开，无需额外操作
+    });
+
+    // 确认删除
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+        const templateId = this.dataset.templateId;
+        fetch(`${BASE_URL}/${templateId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('删除失败，请稍后重试');
+            }
+            deleteModal.hide();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('请求出错，请稍后重试');
+            deleteModal.hide();
+        });
+    });
+
+    // 表单提交（AJAX）
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const data = {};
+        formData.forEach((value, key) => {
+            if (key === 'enabled' || key === 'is_default') {
+                data[key] = value === 'y';
+            } else {
+                data[key] = value;
+            }
+        });
+
+        // 校验 variables 是否为合法 JSON
+        if (data.variables) {
+            try {
+                JSON.parse(data.variables);
+            } catch (e) {
+                alert('变量定义不是合法的JSON格式，请检查');
+                return;
+            }
+        }
+
+        const isEdit = !!data.id;
+        const url = isEdit ? `${BASE_URL}/${data.id}` : BASE_URL;
+        const method = isEdit ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                return response.json().then(err => { throw new Error(err.message || '保存失败'); });
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('保存失败：' + error.message);
+        });
+    });
+});
+</script>
+{% endblock %}

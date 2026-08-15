@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}服务器错误 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container text-center mt-5">
+    <h1 class="display-1">500</h1>
+    <h2>服务器内部错误</h2>
+    <p class="lead">抱歉，服务器遇到了问题。</p>
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">返回首页</a>
+</div>
+{% endblock %}

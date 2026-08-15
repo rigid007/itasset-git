@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}已知错误库{% endblock %}
+{% block page_title %}已知错误库{% endblock %}
+{% block page_subtitle %}记录已知错误及临时方案，减少重复排查{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card border-danger text-center h-100">
+                    <div class="card-body py-3">
+                        <h4 class="text-danger mb-1">{{ errors|selectattr('status', 'equalto', 'active')|list|length }}</h4>
+                        <small>活跃中</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3">
+                        <h4 class="text-success mb-1">{{ errors|selectattr('status', 'equalto', 'resolved')|list|length }}</h4>
+                        <small>已解决</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3">
+                        <h4 class="text-primary mb-1">{{ errors|length }}</h4>
+                        <small>总计</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addKEModal">
+            <i class="fas fa-plus"></i> 记录已知错误
+        </button>
+    </div>
+</div>
+
+<!-- 列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+                <thead class="table-light">
+                <tr><th>编号</th><th>标题</th><th>严重度</th><th>状态</th><th>症状</th><th>创建时间</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {% for ke in errors %}
+                <tr>
+                    <td><code>{{ ke.ke_number }}</code></td>
+                    <td>
+                        <strong>{{ ke.title }}</strong>
+                        {% if ke.knowledge_article %}<br><a href="{{ url_for('maintenance_extra.kb_article', id=ke.knowledge_article.id) }}" class="badge bg-success text-decoration-none"><i class="fas fa-book"></i> 知识库</a>{% endif %}
+                        {% if ke.linked_problem %}<br><span class="badge bg-info">问题#{{ ke.linked_problem.id }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if ke.severity == 'critical' %}<span class="badge bg-danger">严重</span>
+                        {% elif ke.severity == 'high' %}<span class="badge bg-warning">高</span>
+                        {% elif ke.severity == 'medium' %}<span class="badge bg-primary">中</span>
+                        {% else %}<span class="badge bg-secondary">低</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if ke.status == 'active' %}<span class="badge bg-danger">活跃</span>
+                        {% else %}<span class="badge bg-success">已解决</span>{% endif %}
+                    </td>
+                    <td><small class="text-muted">{{ ke.symptom[:60] if ke.symptom else '-' }}</small></td>
+                    <td>{{ ke.created_at.strftime('%Y-%m-%d') if ke.created_at else '-' }}</td>
+                    <td>
+                        {% if has_permission(current_user, 'maintenance:edit') and not ke.knowledge_article %}
+                        <form method="POST" action="{{ url_for('itsm_adv.known_error_link_kb', ke_id=ke.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-success" onclick="return confirm('根据该已知错误生成知识库文章？')"><i class="fas fa-book"></i> 生成KB</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无已知错误记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addKEModal" tabindex="-1">
+<div class="modal-dialog modal-lg"><div class="modal-content">
+<form method="POST" action="{{ url_for('maintenance_extra.known_error_add') }}">
+    <div class="modal-header"><h5 class="modal-title">记录已知错误</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">标题 <span class="text-danger">*</span></label><input type="text" name="title" class="form-control" required></div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">严重度</label>
+                <select name="severity" class="form-select">
+                    <option value="low">低</option>
+                    <option value="medium" selected>中</option>
+                    <option value="high">高</option>
+                    <option value="critical">严重</option>
+                </select>
+            </div>
+            <div class="col">
+                <label class="form-label">关联问题</label>
+                <select name="linked_problem_id" class="form-select">
+                    <option value="">无</option>
+                    {% for p in problems %}
+                    <option value="{{ p.id }}">[{{ p.problem_number }}] {{ p.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mb-3"><label class="form-label">描述</label><textarea name="description" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">症状</label><textarea name="symptom" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">根因</label><textarea name="root_cause" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">临时方案</label><textarea name="workaround" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+{% endblock %}

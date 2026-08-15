@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+
+{% block title %}日志设置 - 系统管理{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .log-settings-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .log-type-badge {
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    .log-type-system {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .log-type-audit {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .log-type-access {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+    
+    .log-type-error {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+    
+    .settings-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .settings-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
+    }
+    
+    .settings-card-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .settings-card-body {
+        padding: 20px;
+    }
+    
+    .setting-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #f5f5f5;
+    }
+    
+    .setting-label {
+        font-weight: 500;
+        width: 200px;
+        color: #555;
+    }
+    
+    .setting-value {
+        flex: 1;
+    }
+    
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 54px;
+        height: 28px;
+    }
+    
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+    
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 20px;
+        width: 20px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+        background-color: #0d6efd;
+    }
+    
+    input:checked + .toggle-slider:before {
+        transform: translateX(26px);
+    }
+    
+    .level-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    .level-debug {
+        background-color: #e3f2fd;
+        color: #2196f3;
+    }
+    
+    .level-info {
+        background-color: #e8f5e9;
+        color: #4caf50;
+    }
+    
+    .level-warning {
+        background-color: #fff3e0;
+        color: #ff9800;
+    }
+    
+    .level-error {
+        background-color: #ffebee;
+        color: #f44336;
+    }
+    
+    .level-critical {
+        background-color: #f3e5f5;
+        color: #9c27b0;
+    }
+    
+    .json-preview {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        max-height: 120px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #dee2e6;
+    }
+    
+    .modal-lg {
+        max-width: 800px;
+    }
+    
+    .json-editor {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        min-height: 120px;
+    }
+    
+    .form-section {
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .form-section-title {
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #495057;
+        font-size: 1.1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="log-settings-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">日志设置</h1>
+            <p class="text-muted">配置系统日志、审计日志、访问日志和错误日志的存储与处理设置</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary me-2" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+        </div>
+    </div>
+    
+    {% if settings %}
+    <div id="logSettingsList">
+        {% for setting in settings %}
+        <div class="card settings-card" data-setting-id="{{ setting.id }}">
+            <div class="settings-card-header">
+                <div class="d-flex align-items-center">
+                    <h5 class="mb-0 me-3">{{ setting.log_type|capitalize }} 日志</h5>
+                    <span class="log-type-badge log-type-{{ setting.log_type }}">
+                        {% if setting.log_type == 'system' %}
+                        系统日志
+                        {% elif setting.log_type == 'audit' %}
+                        审计日志
+                        {% elif setting.log_type == 'access' %}
+                        访问日志
+                        {% elif setting.log_type == 'error' %}
+                        错误日志
+                        {% else %}
+                        {{ setting.log_type }}
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input setting-toggle" type="checkbox" 
+                           id="toggle_{{ setting.id }}" 
+                           data-setting-id="{{ setting.id }}"
+                           {% if setting.enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="toggle_{{ setting.id }}">
+                        {% if setting.enabled %}已启用{% else %}已禁用{% endif %}
+                    </label>
+                </div>
+            </div>
+            
+            <div class="settings-card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="setting-row">
+                            <div class="setting-label">日志级别</div>
+                            <div class="setting-value">
+                                <span class="level-badge level-{{ setting.level }}">
+                                    {{ setting.level|upper }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">保留天数</div>
+                            <div class="setting-value">
+                                <span class="fw-medium">{{ setting.retention_days }} 天</span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">最大文件大小</div>
+                            <div class="setting-value">
+                                <span class="fw-medium">{{ setting.max_file_size }} MB</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="setting-row">
+                            <div class="setting-label">最大文件数</div>
+                            <div class="setting-value">
+                                <span class="fw-medium">{{ setting.max_files }} 个</span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">输出格式</div>
+                            <div class="setting-value">
+                                <span class="badge bg-secondary">{{ setting.output_format|upper }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <div class="setting-label">最后更新</div>
+                            <div class="setting-value">
+                                <span class="text-muted">{{ setting.updated_at.strftime('%Y-%m-%d %H:%M') if setting.updated_at else '未更新' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="setting-label mb-2">输出目标</div>
+                            <div class="json-preview" id="destinations_{{ setting.id }}">
+                                {% if setting.destinations %}
+                                {{ setting.destinations|tojson|safe }}
+                                {% else %}
+                                [未配置]
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="setting-label mb-2">过滤器</div>
+                            <div class="json-preview" id="filters_{{ setting.id }}">
+                                {% if setting.filters %}
+                                {{ setting.filters|tojson|safe }}
+                                {% else %}
+                                [未配置]
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary edit-setting-btn" data-setting-id="{{ setting.id }}">
+                        <i class="fas fa-edit me-1"></i> 编辑设置
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="empty-state">
+            <i class="fas fa-file-alt"></i>
+            <h4 class="h5 mt-3">暂无日志设置</h4>
+            <p class="text-muted">系统未找到任何日志配置，请检查数据库或联系管理员</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 编辑设置模态框 -->
+<div class="modal fade" id="editSettingModal" tabindex="-1" aria-labelledby="editSettingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editSettingModalLabel">编辑日志设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editSettingForm">
+                    <input type="hidden" id="editSettingId" name="id">
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">基本设置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editLogType" class="form-label">日志类型</label>
+                                <input type="text" class="form-control" id="editLogType" readonly>
+                                <div class="form-text">日志类型不可更改</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editLevel" class="form-label">日志级别</label>
+                                <select class="form-select" id="editLevel" name="level">
+                                    <option value="debug">DEBUG - 调试信息</option>
+                                    <option value="info">INFO - 一般信息</option>
+                                    <option value="warning">WARNING - 警告信息</option>
+                                    <option value="error">ERROR - 错误信息</option>
+                                    <option value="critical">CRITICAL - 严重错误</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="editEnabled" class="form-label d-block">启用状态</label>
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" id="editEnabled" name="enabled">
+                                    <label class="form-check-label" for="editEnabled">启用日志记录</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="editOutputFormat" class="form-label">输出格式</label>
+                                <select class="form-select" id="editOutputFormat" name="output_format">
+                                    <option value="json">JSON 格式</option>
+                                    <option value="text">文本格式</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">存储设置</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="editRetentionDays" class="form-label">保留天数</label>
+                                <input type="number" class="form-control" id="editRetentionDays" name="retention_days" min="1" max="3650">
+                                <div class="form-text">日志保留的天数</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="editMaxFileSize" class="form-label">最大文件大小 (MB)</label>
+                                <input type="number" class="form-control" id="editMaxFileSize" name="max_file_size" min="1" max="1024">
+                                <div class="form-text">单个日志文件的最大大小</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="editMaxFiles" class="form-label">最大文件数</label>
+                                <input type="number" class="form-control" id="editMaxFiles" name="max_files" min="1" max="100">
+                                <div class="form-text">保留的日志文件最大数量</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">输出目标</div>
+                        
+                        <div class="mb-3">
+                            <label for="editDestinations" class="form-label">输出目标配置</label>
+                            <textarea class="form-control json-editor" id="editDestinations" name="destinations" rows="4" placeholder='例如: ["file", "console"] 或 ["file"]'></textarea>
+                            <div class="form-text">JSON 格式的数组，可用的输出目标：file, console, database</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title">过滤器</div>
+                        
+                        <div class="mb-3">
+                            <label for="editFilters" class="form-label">过滤器配置</label>
+                            <textarea class="form-control json-editor" id="editFilters" name="filters" rows="4" placeholder='例如: {"min_level": "warning", "exclude": ["health_check"]}'></textarea>
+                            <div class="form-text">JSON 格式的对象，用于过滤日志记录</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveSettingBtn">保存设置</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 刷新按钮
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // 切换启用状态
+        document.querySelectorAll('.setting-toggle').forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                const enabled = this.checked;
+                
+                // 更新标签文本
+                const label = this.nextElementSibling;
+                label.textContent = enabled ? '已启用' : '已禁用';
+                
+                // 发送更新请求
+                updateSetting(settingId, { enabled: enabled });
+            });
+        });
+        
+        // 编辑设置按钮
+        document.querySelectorAll('.edit-setting-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                loadSettingData(settingId);
+            });
+        });
+        
+        // 保存设置按钮
+        document.getElementById('saveSettingBtn').addEventListener('click', saveSetting);
+        
+        // 加载设置数据到模态框
+        function loadSettingData(settingId) {
+            const card = document.querySelector(`.settings-card[data-setting-id="${settingId}"]`);
+            if (!card) return;
+            
+            // 获取设置数据
+            const logType = card.querySelector('h5').textContent.replace(' 日志', '').toLowerCase();
+            const logTypeBadge = card.querySelector('.log-type-badge').textContent;
+            const enabled = card.querySelector('.setting-toggle').checked;
+            const level = card.querySelector('.level-badge').textContent.toLowerCase();
+            const retentionDays = card.querySelectorAll('.setting-value span.fw-medium')[0]?.textContent.replace(' 天', '') || '30';
+            const maxFileSize = card.querySelectorAll('.setting-value span.fw-medium')[1]?.textContent.replace(' MB', '') || '10';
+            const maxFiles = card.querySelectorAll('.setting-value span.fw-medium')[2]?.textContent.replace(' 个', '') || '10';
+            const outputFormat = card.querySelector('.badge.bg-secondary')?.textContent.toLowerCase() || 'json';
+            
+            // 获取JSON数据
+            const destinationsEl = document.getElementById(`destinations_${settingId}`);
+            const filtersEl = document.getElementById(`filters_${settingId}`);
+            
+            let destinations = destinationsEl.textContent.trim();
+            let filters = filtersEl.textContent.trim();
+            
+            // 处理未配置的情况
+            if (destinations === '[未配置]') destinations = '[]';
+            if (filters === '[未配置]') filters = '{}';
+            
+            // 填充表单
+            document.getElementById('editSettingId').value = settingId;
+            document.getElementById('editLogType').value = logTypeBadge;
+            document.getElementById('editLevel').value = level;
+            document.getElementById('editEnabled').checked = enabled;
+            document.getElementById('editRetentionDays').value = retentionDays;
+            document.getElementById('editMaxFileSize').value = maxFileSize;
+            document.getElementById('editMaxFiles').value = maxFiles;
+            document.getElementById('editOutputFormat').value = outputFormat;
+            document.getElementById('editDestinations').value = destinations;
+            document.getElementById('editFilters').value = filters;
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('editSettingModal'));
+            modal.show();
+        }
+        
+        // 保存设置
+        function saveSetting() {
+            const settingId = document.getElementById('editSettingId').value;
+            const form = document.getElementById('editSettingForm');
+            
+            // 收集表单数据
+            const formData = {
+                enabled: document.getElementById('editEnabled').checked,
+                level: document.getElementById('editLevel').value,
+                retention_days: parseInt(document.getElementById('editRetentionDays').value),
+                max_file_size: parseInt(document.getElementById('editMaxFileSize').value),
+                max_files: parseInt(document.getElementById('editMaxFiles').value),
+                output_format: document.getElementById('editOutputFormat').value
+            };
+            
+            // 处理输出目标（尝试解析JSON）
+            try {
+                const destinationsText = document.getElementById('editDestinations').value.trim();
+                if (destinationsText) {
+                    formData.destinations = JSON.parse(destinationsText);
+                } else {
+                    formData.destinations = [];
+                }
+            } catch (e) {
+                alert('输出目标格式错误，请输入有效的JSON数组');
+                return;
+            }
+            
+            // 处理过滤器（尝试解析JSON）
+            try {
+                const filtersText = document.getElementById('editFilters').value.trim();
+                if (filtersText) {
+                    formData.filters = JSON.parse(filtersText);
+                } else {
+                    formData.filters = {};
+                }
+            } catch (e) {
+                alert('过滤器格式错误，请输入有效的JSON对象');
+                return;
+            }
+            
+            // 发送更新请求
+            updateSetting(settingId, formData);
+            
+            // 关闭模态框
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editSettingModal'));
+            modal.hide();
+        }
+        
+        // 更新设置
+        function updateSetting(settingId, data) {
+            // 显示加载状态
+            const saveBtn = document.getElementById('saveSettingBtn');
+            const originalText = saveBtn.textContent;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 保存中...';
+            saveBtn.disabled = true;
+            
+            fetch(`/config/api/log-settings/${settingId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 显示成功消息
+                    showAlert('设置已成功更新', 'success');
+                    
+                    // 重新加载页面以获取最新数据
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    showAlert('更新失败: ' + (result.message || '未知错误'), 'danger');
+                    saveBtn.textContent = originalText;
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('更新失败:', error);
+                showAlert('更新失败: ' + error.message, 'danger');
+                saveBtn.textContent = originalText;
+                saveBtn.disabled = false;
+            });
+        }
+        
+        // 显示提示消息
+        function showAlert(message, type) {
+            // 移除现有的提示
+            const existingAlert = document.querySelector('.alert-dismissible');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+            
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', alertHtml);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                const alert = document.querySelector('.alert-dismissible');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

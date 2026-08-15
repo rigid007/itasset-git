@@ -1,0 +1,792 @@
+{% extends "base.html" %}
+
+{% block title %}设备类型分布报表 - 数据中心管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 引入Chart.js用于图表 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .type-card {
+        transition: transform 0.3s;
+        border-left: 4px solid #007bff;
+    }
+    .type-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .stat-card {
+        border-left: 4px solid #007bff;
+        background-color: #f8f9fa;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 30px;
+    }
+    .type-table th {
+        border-top: none;
+    }
+    .progress {
+        height: 20px;
+    }
+    .export-btn {
+        margin-right: 10px;
+    }
+    .filter-btn {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    .vendor-logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-right: 10px;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: #666;
+    }
+    .type-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 500;
+        display: inline-block;
+    }
+    .type-server { background-color: #d4edda; color: #155724; }
+    .type-network { background-color: #cce5ff; color: #004085; }
+    .type-storage { background-color: #d1ecf1; color: #0c5460; }
+    .type-security { background-color: #f8d7da; color: #721c24; }
+    .type-virtual { background-color: #fff3cd; color: #856404; }
+    .type-appliance { background-color: #e2e3e5; color: #383d41; }
+    .type-other { background-color: #d6d8d9; color: #212529; }
+    
+    .tab-content {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        padding: 20px;
+        border-radius: 0 0 0.35rem 0.35rem;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: 600;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">设备类型分布报表</h1>
+            <p class="text-muted">统计系统中设备类型和品牌分布情况</p>
+        </div>
+        <div>
+            <button onclick="exportToCSV()" class="btn btn-outline-success export-btn">
+                <i class="fas fa-file-csv"></i> 导出CSV
+            </button>
+            <button onclick="printReport()" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> 打印报表
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计概览卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                设备类型总数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ type_stats|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-tags fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                服务器设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set server_count = type_stats|selectattr('device_type', 'equalto', 'server')|map(attribute='count')|first|default(0) %}
+                                {{ server_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                网络设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set network_count = type_stats|selectattr('device_type', 'equalto', 'network')|map(attribute='count')|first|default(0) %}
+                                {{ network_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-network-wired fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                存储设备
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set storage_count = type_stats|selectattr('device_type', 'equalto', 'storage')|map(attribute='count')|first|default(0) %}
+                                {{ storage_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-hdd fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设备类型和品牌分布 -->
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="type-tab" data-toggle="tab" href="#type" role="tab">
+                                <i class="fas fa-tags mr-1"></i> 设备类型分布
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="vendor-tab" data-toggle="tab" href="#vendor" role="tab">
+                                <i class="fas fa-building mr-1"></i> 品牌分布
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="comparison-tab" data-toggle="tab" href="#comparison" role="tab">
+                                <i class="fas fa-chart-bar mr-1"></i> 对比分析
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content" id="myTabContent">
+                    <!-- 设备类型分布标签页 -->
+                    <div class="tab-pane fade show active" id="type" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="chart-container">
+                                    <canvas id="typeChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered type-table" width="100%" cellspacing="0">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>设备类型</th>
+                                                <th>数量</th>
+                                                <th>占比</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% set total_count = type_stats|sum(attribute='count') %}
+                                            {% for stat in type_stats|sort(attribute='count', reverse=true) %}
+                                            <tr>
+                                                <td>
+                                                    <span class="type-badge type-{{ stat.device_type|default('other')|lower }}">
+                                                        {{ stat.device_type|default('其他')|upper }}
+                                                    </span>
+                                                </td>
+                                                <td class="font-weight-bold">{{ stat.count }}</td>
+                                                <td>
+                                                    <div class="progress">
+                                                        {% set percentage = (stat.count / total_count * 100) if total_count > 0 else 0 %}
+                                                        <div class="progress-bar" 
+                                                             role="progressbar" 
+                                                             style="width: {{ percentage }}%; background-color: {{ get_type_color(stat.device_type|default('other')) }}"
+                                                             aria-valuenow="{{ percentage }}" 
+                                                             aria-valuemin="0" 
+                                                             aria-valuemax="100">
+                                                            {{ "%.1f"|format(percentage) }}%
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                                                       class="btn btn-sm btn-outline-primary">
+                                                        <i class="fas fa-eye"></i> 查看
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 设备类型卡片 -->
+                        <div class="row mt-4">
+                            {% for stat in type_stats|sort(attribute='count', reverse=true) %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card type-card">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h5 class="card-title mb-1">
+                                                    <span class="type-badge type-{{ stat.device_type|default('other')|lower }}">
+                                                        {{ stat.device_type|default('其他')|upper }}
+                                                    </span>
+                                                </h5>
+                                                <p class="card-text mb-0">
+                                                    <span class="font-weight-bold">{{ stat.count }}</span> 台设备
+                                                    <span class="text-muted">({{ "%.1f"|format(stat.count / total_count * 100) if total_count > 0 else 0 }}%)</span>
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <i class="fas {{ get_type_icon(stat.device_type|default('other')) }} fa-2x text-{{ get_type_color_class(stat.device_type|default('other')) }}"></i>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3">
+                                            <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                                               class="btn btn-sm btn-outline-{{ get_type_color_class(stat.device_type|default('other')) }} btn-block">
+                                                查看详情 <i class="fas fa-arrow-right ml-1"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- 品牌分布标签页 -->
+                    <div class="tab-pane fade" id="vendor" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="chart-container">
+                                    <canvas id="vendorChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered type-table" width="100%" cellspacing="0">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>品牌</th>
+                                                <th>数量</th>
+                                                <th>占比</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% set vendor_total = vendor_stats|sum(attribute='count') %}
+                                            {% for stat in vendor_stats|sort(attribute='count', reverse=true) %}
+                                            <tr>
+                                                <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="vendor-logo">
+                                                            {{ stat.brand|default('未知')|first|upper if stat.brand else '?' }}
+                                                        </div>
+                                                        <span class="font-weight-bold">{{ stat.brand|default('未知品牌') }}</span>
+                                                    </div>
+                                                </td>
+                                                <td class="font-weight-bold">{{ stat.count }}</td>
+                                                <td>
+                                                    <div class="progress">
+                                                        {% set percentage = (stat.count / vendor_total * 100) if vendor_total > 0 else 0 %}
+                                                        <div class="progress-bar bg-info" 
+                                                             role="progressbar" 
+                                                             style="width: {{ percentage }}%"
+                                                             aria-valuenow="{{ percentage }}" 
+                                                             aria-valuemin="0" 
+                                                             aria-valuemax="100">
+                                                            {{ "%.1f"|format(percentage) }}%
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                                                       class="btn btn-sm btn-outline-info">
+                                                        <i class="fas fa-eye"></i> 查看
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 品牌分布卡片 -->
+                        <div class="row mt-4">
+                            {% for stat in vendor_stats|sort(attribute='count', reverse=true) if stat.brand %}
+                            <div class="col-md-3 mb-3">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <div class="vendor-logo mx-auto mb-3">
+                                            {{ stat.brand|first|upper }}
+                                        </div>
+                                        <h6 class="card-title mb-1">{{ stat.brand }}</h6>
+                                        <p class="card-text mb-2">
+                                            <span class="font-weight-bold">{{ stat.count }}</span> 台设备
+                                        </p>
+                                        <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                                           class="btn btn-sm btn-outline-info">
+                                            查看设备
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- 对比分析标签页 -->
+                    <div class="tab-pane fade" id="comparison" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="chart-container">
+                                    <canvas id="comparisonChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h5 class="mb-3">设备类型分布图例</h5>
+                                {% for stat in type_stats|sort(attribute='count', reverse=true) %}
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: {{ get_type_color(stat.device_type|default('other')) }};"></div>
+                                    <div>
+                                        <span class="font-weight-bold">{{ stat.device_type|default('其他')|upper }}</span>
+                                        <span class="text-muted ml-2">{{ stat.count }} 台 ({{ "%.1f"|format(stat.count / total_count * 100) if total_count > 0 else 0 }}%)</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h5 class="mb-3">Top 5 品牌</h5>
+                                <div class="list-group">
+                                    {% for stat in vendor_stats|sort(attribute='count', reverse=true)|slice(5) %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            <div class="vendor-logo mr-2">
+                                                {{ stat.brand|default('未知')|first|upper if stat.brand else '?' }}
+                                            </div>
+                                            <span>{{ stat.brand|default('未知品牌') }}</span>
+                                        </div>
+                                        <div>
+                                            <span class="badge badge-primary badge-pill">{{ stat.count }}</span>
+                                            <span class="text-muted ml-2">
+                                                ({{ "%.1f"|format(stat.count / vendor_total * 100) if vendor_total > 0 else 0 }}%)
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 快速筛选 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">快速筛选</h6>
+                </div>
+                <div class="card-body">
+                    <h6 class="mb-2">按设备类型筛选:</h6>
+                    <div class="mb-4">
+                        {% for stat in type_stats|sort(attribute='count', reverse=true) %}
+                        <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                           class="btn btn-sm btn-outline-{{ get_type_color_class(stat.device_type|default('other')) }} filter-btn">
+                            <i class="fas {{ get_type_icon(stat.device_type|default('other')) }} mr-1"></i>
+                            {{ stat.device_type|default('其他') }}
+                            <span class="badge badge-light ml-1">{{ stat.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    
+                    <h6 class="mb-2">按品牌筛选:</h6>
+                    <div>
+                        {% for stat in vendor_stats|sort(attribute='count', reverse=true) if stat.brand %}
+                        <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                           class="btn btn-sm btn-outline-secondary filter-btn">
+                            {{ stat.brand }}
+                            <span class="badge badge-light ml-1">{{ stat.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 获取设备类型统计数据
+    const typeStats = [
+        {% for stat in type_stats %}
+        {
+            type: '{{ stat.device_type|default("其他") }}',
+            count: {{ stat.count }},
+            color: '{{ get_type_color(stat.device_type|default("other")) }}'
+        },
+        {% endfor %}
+    ];
+
+    // 获取品牌统计数据
+    const vendorStats = [
+        {% for stat in vendor_stats %}
+        {
+            vendor: '{{ stat.brand|default("未知品牌") }}',
+            count: {{ stat.count }},
+        },
+        {% endfor %}
+    ];
+
+    // 计算总数
+    const typeTotal = typeStats.reduce((sum, stat) => sum + stat.count, 0);
+    const vendorTotal = vendorStats.reduce((sum, stat) => sum + stat.count, 0);
+
+    // 准备设备类型图表数据
+    const typeLabels = typeStats.map(stat => stat.type.toUpperCase());
+    const typeData = typeStats.map(stat => stat.count);
+    const typeColors = typeStats.map(stat => stat.color);
+
+    // 绘制设备类型饼图
+    const typeCtx = document.getElementById('typeChart').getContext('2d');
+    const typeChart = new Chart(typeCtx, {
+        type: 'pie',
+        data: {
+            labels: typeLabels,
+            datasets: [{
+                data: typeData,
+                backgroundColor: typeColors,
+                borderColor: '#fff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const percentage = typeTotal > 0 ? Math.round((value / typeTotal) * 100) : 0;
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 准备品牌图表数据 (只取前10个品牌)
+    const topVendors = vendorStats.slice(0, 10);
+    const vendorLabels = topVendors.map(stat => stat.vendor);
+    const vendorData = topVendors.map(stat => stat.count);
+    
+    // 生成品牌颜色
+    const vendorColors = vendorLabels.map((label, index) => {
+        const hue = (index * 137) % 360; // 使用黄金角近似值生成不同颜色
+        return `hsl(${hue}, 70%, 60%)`;
+    });
+
+    // 绘制品牌分布饼图
+    const vendorCtx = document.getElementById('vendorChart').getContext('2d');
+    const vendorChart = new Chart(vendorCtx, {
+        type: 'doughnut',
+        data: {
+            labels: vendorLabels,
+            datasets: [{
+                data: vendorData,
+                backgroundColor: vendorColors,
+                borderColor: '#fff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const percentage = vendorTotal > 0 ? Math.round((value / vendorTotal) * 100) : 0;
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 准备对比分析图表数据
+    const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+    
+    // 获取设备类型和品牌的交叉数据（这里简化处理，实际应该从后端获取）
+    // 我们创建一个简单的柱状图来显示前5个类型的数量
+    const comparisonLabels = typeStats.slice(0, 5).map(stat => stat.type.toUpperCase());
+    const comparisonData = typeStats.slice(0, 5).map(stat => stat.count);
+    const comparisonColors = typeStats.slice(0, 5).map(stat => stat.color);
+
+    // 绘制对比分析柱状图
+    const comparisonChart = new Chart(comparisonCtx, {
+        type: 'bar',
+        data: {
+            labels: comparisonLabels,
+            datasets: [{
+                label: '设备数量',
+                data: comparisonData,
+                backgroundColor: comparisonColors,
+                borderColor: comparisonColors.map(color => color.replace('0.8', '1')),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '设备数量'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: '设备类型'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.dataset.label || '';
+                            const value = context.raw || 0;
+                            const percentage = typeTotal > 0 ? Math.round((value / typeTotal) * 100) : 0;
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 导出CSV功能
+    function exportToCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        
+        // 添加设备类型统计
+        csvContent += "设备类型统计\r\n";
+        csvContent += "设备类型,数量,百分比\r\n";
+        
+        typeStats.forEach(stat => {
+            const percentage = typeTotal > 0 ? (stat.count / typeTotal * 100).toFixed(2) : 0;
+            csvContent += `${stat.type},${stat.count},${percentage}%\r\n`;
+        });
+        
+        csvContent += "\r\n品牌统计\r\n";
+        csvContent += "品牌,数量,百分比\r\n";
+        
+        vendorStats.forEach(stat => {
+            const percentage = vendorTotal > 0 ? (stat.count / vendorTotal * 100).toFixed(2) : 0;
+            csvContent += `${stat.vendor},${stat.count},${percentage}%\r\n`;
+        });
+        
+        // 创建下载链接
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `设备类型分布_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        
+        // 触发下载
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 打印报表功能
+    function printReport() {
+        const printContent = `
+            <html>
+            <head>
+                <title>设备类型分布报表</title>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .print-header { text-align: center; margin-bottom: 30px; }
+                    .print-header h1 { margin-bottom: 5px; }
+                    .print-header .date { color: #666; margin-bottom: 20px; }
+                    .stat-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .stat-table th, .stat-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .stat-table th { background-color: #f2f2f2; }
+                    .section-title { margin-top: 30px; margin-bottom: 15px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; }
+                    .summary { margin-top: 30px; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="print-header">
+                    <h1>设备类型分布报表</h1>
+                    <div class="date">生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+                </div>
+                
+                <div class="section-title">设备类型统计</div>
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>设备类型</th>
+                            <th>数量</th>
+                            <th>占比</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${typeStats.map(stat => `
+                            <tr>
+                                <td>${stat.type.toUpperCase()}</td>
+                                <td>${stat.count}</td>
+                                <td>${typeTotal > 0 ? (stat.count / typeTotal * 100).toFixed(1) : 0}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="section-title">品牌统计</div>
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>品牌</th>
+                            <th>数量</th>
+                            <th>占比</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${vendorStats.slice(0, 20).map(stat => `
+                            <tr>
+                                <td>${stat.vendor}</td>
+                                <td>${stat.count}</td>
+                                <td>${vendorTotal > 0 ? (stat.count / vendorTotal * 100).toFixed(1) : 0}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    设备类型总数: ${typeStats.length}<br>
+                    品牌总数: ${vendorStats.length}<br>
+                    生成单位: 数据中心管理系统
+                </div>
+            </body>
+            </html>
+        `;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        // 添加标签页切换事件
+        const tabLinks = document.querySelectorAll('#myTab a');
+        tabLinks.forEach(link => {
+            link.addEventListener('shown.bs.tab', function (e) {
+                // 重新渲染图表以适应新的大小
+                typeChart.resize();
+                vendorChart.resize();
+                comparisonChart.resize();
+            });
+        });
+    });
+</script>
+{% endblock %}

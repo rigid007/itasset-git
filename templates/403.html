@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}权限不足 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container text-center mt-5">
+    <h1 class="display-1">403</h1>
+    <h2>权限不足</h2>
+    <p class="lead">抱歉，您没有权限访问此页面。</p>
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">返回首页</a>
+</div>
+{% endblock %}

@@ -1,0 +1,1045 @@
+<!-- templates/config/escalation_policies.html -->
+{% extends "base.html" %}
+
+{% block title %}升级策略管理 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-level-up-alt text-primary"></i> 升级策略管理
+            </h1>
+            <p class="text-muted mb-0">配置告警升级策略和通知规则</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" id="addPolicyBtn">
+                <i class="fas fa-plus mr-1"></i> 添加策略
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 筛选和搜索区域 -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form id="filterForm" class="row g-3">
+                <div class="col-md-3">
+                    <label for="statusFilter" class="form-label">状态</label>
+                    <select id="statusFilter" class="form-control">
+                        <option value="">全部状态</option>
+                        <option value="enabled">已启用</option>
+                        <option value="disabled">已禁用</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="searchInput" class="form-label">搜索</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="searchInput" placeholder="策略名称或描述...">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label for="sortBy" class="form-label">排序</label>
+                    <select id="sortBy" class="form-control">
+                        <option value="name">按名称</option>
+                        <option value="created_at">按创建时间</option>
+                        <option value="updated_at">按更新时间</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-secondary w-100" id="clearFilterBtn">
+                        <i class="fas fa-filter"></i> 清除筛选
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 升级策略列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">升级策略列表</h6>
+            <div class="text-muted">
+                <span id="policyCount">{{ policies|length }}</span> 个策略
+            </div>
+        </div>
+        <div class="card-body">
+            {% if policies %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="policiesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>策略名称</th>
+                            <th>描述</th>
+                            <th>严重级别</th>
+                            <th>升级步骤</th>
+                            <th>重复间隔</th>
+                            <th>最大升级次数</th>
+                            <th>解决时通知</th>
+                            <th>状态</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for policy in policies %}
+                        <tr data-id="{{ policy.id }}">
+                            <td>{{ policy.id }}</td>
+                            <td>
+                                <strong>{{ policy.name }}</strong>
+                            </td>
+                            <td>
+                                {% if policy.description %}
+                                <small class="text-muted">{{ policy.description|truncate(50) }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if policy.severity_levels %}
+                                {% for level in policy.severity_levels %}
+                                <span class="badge 
+                                    {% if level == 'critical' %}badge-danger
+                                    {% elif level == 'warning' %}badge-warning
+                                    {% elif level == 'info' %}badge-info
+                                    {% else %}badge-secondary{% endif %}
+                                    mr-1">{{ level }}</span>
+                                {% endfor %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    {% if policy.escalation_steps and policy.escalation_steps|length > 0 %}
+                                        {{ policy.escalation_steps|length }} 步
+                                        <button type="button" class="btn btn-sm btn-link p-0 ml-1 view-steps-btn" 
+                                                data-steps='{{ policy.escalation_steps|tojson|safe }}'>
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    {% else %}
+                                        <span class="text-muted">未配置</span>
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                {% if policy.repeat_interval %}
+                                {{ policy.repeat_interval // 60 }} 分钟
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ policy.max_escalations }}</td>
+                            <td>
+                                {% if policy.notify_on_resolve %}
+                                <span class="badge badge-success">是</span>
+                                {% else %}
+                                <span class="badge badge-secondary">否</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input toggle-status" 
+                                           id="status_{{ policy.id }}" 
+                                           data-id="{{ policy.id }}"
+                                           {% if policy.enabled %}checked{% endif %}>
+                                    <label class="custom-control-label" for="status_{{ policy.id }}">
+                                        {% if policy.enabled %}
+                                        <span class="text-success">启用</span>
+                                        {% else %}
+                                        <span class="text-danger">禁用</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </td>
+                            <td>
+                                <small class="text-muted">
+                                    {% if policy.updated_at %}
+                                    {{ policy.updated_at.strftime('%Y-%m-%d') }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-info edit-policy" 
+                                            data-id="{{ policy.id }}" 
+                                            title="编辑">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary copy-policy" 
+                                            data-id="{{ policy.id }}"
+                                            title="复制">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger delete-policy" 
+                                            data-id="{{ policy.id }}"
+                                            data-name="{{ policy.name }}"
+                                            title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-3">
+                    <i class="fas fa-level-up-alt fa-4x text-muted"></i>
+                </div>
+                <h5 class="text-muted">暂无升级策略</h5>
+                <p class="text-muted">点击右上角的"添加策略"按钮创建您的第一个升级策略</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑策略模态框 -->
+<div class="modal fade" id="policyModal" tabindex="-1" role="dialog" aria-labelledby="policyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="policyModalLabel">添加升级策略</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="closeModalBtn">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="policyForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="policyName">策略名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="policyName" name="name" required>
+                                <small class="form-text text-muted">策略的唯一标识名称</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="maxEscalations">最大升级次数 <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="maxEscalations" name="max_escalations" 
+                                       min="1" max="10" value="3" required>
+                                <small class="form-text text-muted">告警最多升级的次数</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="policyDescription">描述</label>
+                        <textarea class="form-control" id="policyDescription" name="description" rows="2"></textarea>
+                        <small class="form-text text-muted">策略的详细描述信息</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="repeatInterval">重复间隔（分钟） <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="repeatInterval" name="repeat_interval" 
+                                       min="5" max="1440" value="60" required>
+                                <small class="form-text text-muted">告警升级的重复通知间隔时间</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>解决时通知</label>
+                                <div class="custom-control custom-checkbox mt-2">
+                                    <input type="checkbox" class="custom-control-input" id="notifyOnResolve" name="notify_on_resolve" checked>
+                                    <label class="custom-control-label" for="notifyOnResolve">
+                                        当告警解决时发送通知
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>适用严重级别 <span class="text-danger">*</span></label>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input severity-checkbox" id="severity_critical" value="critical" checked>
+                                    <label class="custom-control-label" for="severity_critical">
+                                        <span class="badge badge-danger">Critical</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input severity-checkbox" id="severity_warning" value="warning" checked>
+                                    <label class="custom-control-label" for="severity_warning">
+                                        <span class="badge badge-warning">Warning</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input severity-checkbox" id="severity_info" value="info">
+                                    <label class="custom-control-label" for="severity_info">
+                                        <span class="badge badge-info">Info</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input severity-checkbox" id="severity_other" value="other">
+                                    <label class="custom-control-label" for="severity_other">
+                                        <span class="badge badge-secondary">Other</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="severityLevels" name="severity_levels" value='["critical", "warning"]'>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>升级步骤配置 <span class="text-danger">*</span></label>
+                        <div id="escalationStepsContainer">
+                            <!-- 升级步骤将动态添加到这里 -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="addStepBtn">
+                            <i class="fas fa-plus mr-1"></i> 添加升级步骤
+                        </button>
+                        <input type="hidden" id="escalationSteps" name="escalation_steps" value='[]'>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="policyEnabled" name="enabled" checked>
+                            <label class="custom-control-label" for="policyEnabled">
+                                启用此策略
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal" id="cancelModalBtn">取消</button>
+                    <button type="submit" class="btn btn-primary" id="savePolicyBtn">
+                        <span id="saveBtnText">保存策略</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <input type="hidden" id="policyId" name="id" value="">
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 查看升级步骤详情模态框 -->
+<div class="modal fade" id="stepsModal" tabindex="-1" role="dialog" aria-labelledby="stepsModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stepsModalLabel">升级步骤详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="closeStepsModalBtn">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="stepsContent">
+                    <!-- 步骤详情将动态加载到这里 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" id="cancelStepsModalBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 确保jQuery和Bootstrap已加载
+if (typeof jQuery === 'undefined') {
+    console.error('jQuery is not loaded!');
+}
+
+if (typeof $.fn.modal === 'undefined') {
+    console.error('Bootstrap modal is not loaded!');
+}
+
+// 显示步骤详情
+function showSteps(steps) {
+    let content = '';
+    if (steps && steps.length > 0) {
+        content += '<div class="list-group">';
+        steps.forEach((step, index) => {
+            content += `
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">第 ${index + 1} 步</h6>
+                    <small class="text-muted">延迟: ${step.delay || 0} 分钟</small>
+                </div>
+                <p class="mb-1"><strong>操作:</strong> ${step.action || '未指定'}</p>
+                <small><strong>通知渠道:</strong> ${(step.notification_channels || []).join(', ') || '无'}</small>
+                ${step.description ? `<p class="mb-1 mt-1"><strong>描述:</strong> ${step.description}</p>` : ''}
+            </div>`;
+        });
+        content += '</div>';
+    } else {
+        content = '<p class="text-muted">暂无升级步骤配置</p>';
+    }
+    document.getElementById('stepsContent').innerHTML = content;
+    $('#stepsModal').modal('show');
+}
+
+// 手动关闭模态框的函数
+function closeModal(modalId) {
+    $(modalId).modal('hide');
+    $(modalId).removeClass('show');
+    $('.modal-backdrop').remove();
+    $('body').removeClass('modal-open');
+    $('body').css('padding-right', '');
+}
+
+// 升级步骤模板
+function getStepTemplate(stepIndex, stepData = {}) {
+    const stepId = `step_${Date.now()}_${stepIndex}`;
+    return `
+    <div class="card mb-2 step-card" data-index="${stepIndex}" id="${stepId}">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">第 ${stepIndex + 1} 步</h6>
+            <button type="button" class="btn btn-sm btn-danger remove-step" data-index="${stepIndex}">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>延迟时间（分钟）</label>
+                        <input type="number" class="form-control step-delay" 
+                               value="${stepData.delay || 0}" min="0" max="1440" required>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>操作类型</label>
+                        <select class="form-control step-action" required>
+                            <option value="notify" ${(stepData.action === 'notify') ? 'selected' : ''}>发送通知</option>
+                            <option value="assign" ${(stepData.action === 'assign') ? 'selected' : ''}>分配负责人</option>
+                            <option value="escalate" ${(stepData.action === 'escalate') ? 'selected' : ''}>升级到上级</option>
+                            <option value="auto_resolve" ${(stepData.action === 'auto_resolve') ? 'selected' : ''}>自动解决</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>通知渠道</label>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input channel-checkbox" 
+                                   id="email_${stepId}" value="email" 
+                                   ${(stepData.notification_channels && stepData.notification_channels.includes('email')) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="email_${stepId}">邮件</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input channel-checkbox" 
+                                   id="sms_${stepId}" value="sms"
+                                   ${(stepData.notification_channels && stepData.notification_channels.includes('sms')) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="sms_${stepId}">短信</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input channel-checkbox" 
+                                   id="wechat_${stepId}" value="wechat"
+                                   ${(stepData.notification_channels && stepData.notification_channels.includes('wechat')) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="wechat_${stepId}">微信</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input channel-checkbox" 
+                                   id="webhook_${stepId}" value="webhook"
+                                   ${(stepData.notification_channels && stepData.notification_channels.includes('webhook')) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="webhook_${stepId}">Webhook</label>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" class="step-channels" value='${stepData.notification_channels ? JSON.stringify(stepData.notification_channels) : '[]'}'>
+            </div>
+            <div class="form-group">
+                <label>操作描述</label>
+                <textarea class="form-control step-description" rows="2">${stepData.description || ''}</textarea>
+            </div>
+        </div>
+    </div>`;
+}
+
+// 更新步骤数据
+function updateStepsData() {
+    const steps = [];
+    $('.step-card').each(function() {
+        const stepIndex = $(this).data('index');
+        const step = {
+            delay: parseInt($(this).find('.step-delay').val()) || 0,
+            action: $(this).find('.step-action').val(),
+            notification_channels: JSON.parse($(this).find('.step-channels').val()),
+            description: $(this).find('.step-description').val()
+        };
+        steps.push(step);
+    });
+    $('#escalationSteps').val(JSON.stringify(steps));
+}
+
+// 页面加载完成后执行
+$(document).ready(function() {
+    console.log('页面加载完成，初始化升级策略管理页面');
+    
+    let stepCount = 0;
+    
+    // 初始化步骤
+    function initSteps(steps = []) {
+        $('#escalationStepsContainer').empty();
+        stepCount = 0;
+        
+        if (steps && steps.length > 0) {
+            steps.forEach(step => {
+                $('#escalationStepsContainer').append(getStepTemplate(stepCount, step));
+                stepCount++;
+            });
+        } else {
+            // 添加一个默认步骤
+            addDefaultStep();
+        }
+        updateStepsData();
+    }
+    
+    // 添加默认步骤
+    function addDefaultStep() {
+        $('#escalationStepsContainer').append(getStepTemplate(stepCount, {
+            delay: 0,
+            action: 'notify',
+            notification_channels: ['email'],
+            description: '首次通知相关人员'
+        }));
+        stepCount++;
+        updateStepsData();
+    }
+    
+    // 手动绑定模态框关闭事件
+    $('#closeModalBtn').click(function(e) {
+        e.preventDefault();
+        closeModal('#policyModal');
+    });
+    
+    $('#cancelModalBtn').click(function(e) {
+        e.preventDefault();
+        closeModal('#policyModal');
+    });
+    
+    $('#closeStepsModalBtn').click(function(e) {
+        e.preventDefault();
+        closeModal('#stepsModal');
+    });
+    
+    $('#cancelStepsModalBtn').click(function(e) {
+        e.preventDefault();
+        closeModal('#stepsModal');
+    });
+    
+    // 添加步骤按钮点击事件
+    $('#addStepBtn').click(function() {
+        $('#escalationStepsContainer').append(getStepTemplate(stepCount));
+        stepCount++;
+        updateStepsData();
+    });
+    
+    // 移除步骤
+    $(document).on('click', '.remove-step', function() {
+        if ($('.step-card').length > 1) {
+            $(this).closest('.step-card').remove();
+            // 重新索引
+            $('.step-card').each(function(index) {
+                $(this).data('index', index);
+                $(this).find('.card-header h6').text(`第 ${index + 1} 步`);
+            });
+            stepCount = $('.step-card').length;
+            updateStepsData();
+        } else {
+            alert('至少需要一个升级步骤');
+        }
+    });
+    
+    // 更新渠道选择
+    $(document).on('change', '.channel-checkbox', function() {
+        const stepCard = $(this).closest('.step-card');
+        const channels = [];
+        
+        stepCard.find('.channel-checkbox:checked').each(function() {
+            channels.push($(this).val());
+        });
+        
+        stepCard.find('.step-channels').val(JSON.stringify(channels));
+        updateStepsData();
+    });
+    
+    // 更新步骤字段
+    $(document).on('change', '.step-delay, .step-action, .step-description', function() {
+        updateStepsData();
+    });
+    
+    // 严重级别选择
+    $('.severity-checkbox').change(function() {
+        const levels = [];
+        $('.severity-checkbox:checked').each(function() {
+            levels.push($(this).val());
+        });
+        $('#severityLevels').val(JSON.stringify(levels));
+    });
+    
+    // 打开添加策略模态框
+    $('#addPolicyBtn').click(function() {
+        $('#policyModalLabel').text('添加升级策略');
+        $('#policyForm')[0].reset();
+        $('#policyId').val('');
+        $('#severityLevels').val('["critical", "warning"]');
+        $('.severity-checkbox').prop('checked', false);
+        $('#severity_critical').prop('checked', true);
+        $('#severity_warning').prop('checked', true);
+        initSteps();
+        $('#policyModal').modal('show');
+    });
+    
+    // 查看步骤详情
+    $(document).on('click', '.view-steps-btn', function() {
+        const stepsData = $(this).data('steps');
+        showSteps(stepsData);
+    });
+    
+    // 编辑策略
+    $(document).on('click', '.edit-policy', function() {
+        const policyId = $(this).data('id');
+        
+        // 显示加载状态
+        const saveBtn = $('#savePolicyBtn');
+        saveBtn.find('.spinner-border').removeClass('d-none');
+        saveBtn.prop('disabled', true);
+        
+        // 获取策略详情
+        fetch(`/config/api/escalation-policies/${policyId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    const policy = data.policy;
+                    
+                    $('#policyModalLabel').text('编辑升级策略');
+                    $('#policyId').val(policy.id);
+                    $('#policyName').val(policy.name);
+                    $('#policyDescription').val(policy.description || '');
+                    $('#maxEscalations').val(policy.max_escalations || 3);
+                    $('#repeatInterval').val(policy.repeat_interval ? policy.repeat_interval / 60 : 60);
+                    $('#notifyOnResolve').prop('checked', policy.notify_on_resolve !== false);
+                    $('#policyEnabled').prop('checked', policy.enabled !== false);
+                    
+                    // 设置严重级别
+                    $('.severity-checkbox').prop('checked', false);
+                    if (policy.severity_levels && policy.severity_levels.length > 0) {
+                        policy.severity_levels.forEach(level => {
+                            $(`#severity_${level}`).prop('checked', true);
+                        });
+                    } else {
+                        // 默认选中critical和warning
+                        $('#severity_critical').prop('checked', true);
+                        $('#severity_warning').prop('checked', true);
+                    }
+                    $('#severityLevels').val(JSON.stringify(policy.severity_levels || ["critical", "warning"]));
+                    
+                    // 初始化步骤
+                    initSteps(policy.escalation_steps || []);
+                    
+                    $('#policyModal').modal('show');
+                } else {
+                    alert(data.message || '获取策略详情失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('获取策略详情失败: ' + error.message);
+            })
+            .finally(() => {
+                saveBtn.find('.spinner-border').addClass('d-none');
+                saveBtn.prop('disabled', false);
+            });
+    });
+    
+    // 复制策略
+    $(document).on('click', '.copy-policy', function() {
+        const policyId = $(this).data('id');
+        
+        // 显示加载状态
+        const saveBtn = $('#savePolicyBtn');
+        saveBtn.find('.spinner-border').removeClass('d-none');
+        saveBtn.prop('disabled', true);
+        
+        // 获取策略详情
+        fetch(`/config/api/escalation-policies/${policyId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    const policy = data.policy;
+                    
+                    $('#policyModalLabel').text('复制升级策略');
+                    $('#policyId').val('');
+                    $('#policyName').val(policy.name + ' (副本)');
+                    $('#policyDescription').val(policy.description || '');
+                    $('#maxEscalations').val(policy.max_escalations || 3);
+                    $('#repeatInterval').val(policy.repeat_interval ? policy.repeat_interval / 60 : 60);
+                    $('#notifyOnResolve').prop('checked', policy.notify_on_resolve !== false);
+                    $('#policyEnabled').prop('checked', policy.enabled !== false);
+                    
+                    // 设置严重级别
+                    $('.severity-checkbox').prop('checked', false);
+                    if (policy.severity_levels && policy.severity_levels.length > 0) {
+                        policy.severity_levels.forEach(level => {
+                            $(`#severity_${level}`).prop('checked', true);
+                        });
+                    } else {
+                        // 默认选中critical和warning
+                        $('#severity_critical').prop('checked', true);
+                        $('#severity_warning').prop('checked', true);
+                    }
+                    $('#severityLevels').val(JSON.stringify(policy.severity_levels || ["critical", "warning"]));
+                    
+                    // 初始化步骤
+                    initSteps(policy.escalation_steps || []);
+                    
+                    $('#policyModal').modal('show');
+                } else {
+                    alert(data.message || '获取策略详情失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('获取策略详情失败: ' + error.message);
+            })
+            .finally(() => {
+                saveBtn.find('.spinner-border').addClass('d-none');
+                saveBtn.prop('disabled', false);
+            });
+    });
+    
+    // 保存策略表单提交
+    $('#policyForm').submit(function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            id: $('#policyId').val(),
+            name: $('#policyName').val(),
+            description: $('#policyDescription').val(),
+            severity_levels: JSON.parse($('#severityLevels').val()),
+            escalation_steps: JSON.parse($('#escalationSteps').val()),
+            repeat_interval: $('#repeatInterval').val() * 60, // 转换为秒
+            max_escalations: $('#maxEscalations').val(),
+            notify_on_resolve: $('#notifyOnResolve').prop('checked'),
+            enabled: $('#policyEnabled').prop('checked')
+        };
+        
+        // 显示加载状态
+        const saveBtn = $('#savePolicyBtn');
+        saveBtn.find('.spinner-border').removeClass('d-none');
+        saveBtn.prop('disabled', true);
+        
+        // 确定请求方法和URL
+        const method = formData.id ? 'PUT' : 'POST';
+        const url = formData.id ? `/config/api/escalation-policies/${formData.id}` : '/config/api/escalation-policies';
+        
+        // 发送请求
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(data.message || '策略保存成功');
+                closeModal('#policyModal');
+                location.reload(); // 重新加载页面
+            } else {
+                alert(data.message || '策略保存失败');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('策略保存失败: ' + error.message);
+        })
+        .finally(() => {
+            saveBtn.find('.spinner-border').addClass('d-none');
+            saveBtn.prop('disabled', false);
+        });
+    });
+    
+    // 切换策略状态
+    $(document).on('change', '.toggle-status', function() {
+        const policyId = $(this).data('id');
+        const enabled = $(this).prop('checked');
+        
+        // 发送状态更新请求
+        fetch(`/config/api/escalation-policies/${policyId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ enabled: enabled })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                // 如果失败，恢复复选框状态
+                $(this).prop('checked', !enabled);
+                alert(data.message || '状态更新失败');
+            } else {
+                // 更新标签文本
+                const label = $(this).next('.custom-control-label');
+                if (enabled) {
+                    label.find('span').text('启用').removeClass('text-danger').addClass('text-success');
+                } else {
+                    label.find('span').text('禁用').removeClass('text-success').addClass('text-danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            $(this).prop('checked', !enabled);
+            alert('状态更新失败: ' + error.message);
+        });
+    });
+    
+    // 删除策略
+    $(document).on('click', '.delete-policy', function() {
+        const policyId = $(this).data('id');
+        const policyName = $(this).data('name');
+        
+        if (confirm(`确定要删除策略"${policyName}"吗？此操作不可撤销。`)) {
+            fetch(`/config/api/escalation-policies/${policyId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert(data.message || '策略删除成功');
+                    location.reload(); // 重新加载页面
+                } else {
+                    alert(data.message || '策略删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('策略删除失败: ' + error.message);
+            });
+        }
+    });
+    
+    // 筛选和搜索功能
+    $('#searchBtn').click(function() {
+        applyFilters();
+    });
+    
+    $('#searchInput').keypress(function(e) {
+        if (e.which === 13) {
+            applyFilters();
+        }
+    });
+    
+    $('#statusFilter, #sortBy').change(function() {
+        applyFilters();
+    });
+    
+    $('#clearFilterBtn').click(function() {
+        $('#filterForm')[0].reset();
+        applyFilters();
+    });
+    
+    function applyFilters() {
+        const searchTerm = $('#searchInput').val().toLowerCase();
+        const statusFilter = $('#statusFilter').val();
+        const sortBy = $('#sortBy').val();
+        
+        // 这里应该实现实际的筛选逻辑
+        // 目前只是简单的前端筛选
+        $('#policiesTable tbody tr').each(function() {
+            const $row = $(this);
+            const name = $row.find('td:nth-child(2)').text().toLowerCase();
+            const description = $row.find('td:nth-child(3)').text().toLowerCase();
+            const status = $row.find('.toggle-status').prop('checked') ? 'enabled' : 'disabled';
+            
+            let show = true;
+            
+            // 搜索筛选
+            if (searchTerm && !name.includes(searchTerm) && !description.includes(searchTerm)) {
+                show = false;
+            }
+            
+            // 状态筛选
+            if (statusFilter && status !== statusFilter) {
+                show = false;
+            }
+            
+            if (show) {
+                $row.show();
+            } else {
+                $row.hide();
+            }
+        });
+        
+        // 更新计数
+        const visibleCount = $('#policiesTable tbody tr:visible').length;
+        $('#policyCount').text(visibleCount);
+    }
+    
+    // 刷新按钮
+    $('#refreshBtn').click(function() {
+        location.reload();
+    });
+    
+    // 初始化页面
+    console.log('初始化页面完成');
+});
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.step-card {
+    border-left: 4px solid #4e73df;
+}
+
+.step-card .card-header {
+    background-color: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+}
+
+.badge {
+    font-size: 85%;
+    font-weight: 500;
+    padding: 0.25em 0.5em;
+}
+
+.custom-switch .custom-control-label::after {
+    background-color: #fff;
+}
+
+.custom-control-input:checked~.custom-control-label::before {
+    border-color: #4e73df;
+    background-color: #4e73df;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(78, 115, 223, 0.05);
+}
+
+.btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+}
+
+.btn-link {
+    text-decoration: none;
+}
+
+.btn-link:hover {
+    text-decoration: underline;
+}
+
+.form-control:focus {
+    border-color: #4e73df;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+}
+
+.custom-checkbox .custom-control-input:checked~.custom-control-label::before {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+.custom-switch .custom-control-input:checked~.custom-control-label::before {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+.modal {
+    display: none;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1050;
+    outline: 0;
+}
+
+.modal.show {
+    display: block;
+}
+
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1040;
+    background-color: #000;
+}
+
+.modal-backdrop.fade {
+    opacity: 0;
+}
+
+.modal-backdrop.show {
+    opacity: 0.5;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}添加机柜 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}添加新机柜{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> 返回机柜列表
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* 复用编辑页面的样式，与 cabinet_edit.html 完全一致 */
+.form-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007bff;
+}
+.form-section h5 {
+    color: #495057;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+.required-field::after {
+    content: " *";
+    color: #dc3545;
+}
+.help-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+.is-invalid {
+    border-color: #dc3545 !important;
+}
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 0.875em;
+    margin-top: 0.25rem;
+}
+.form-control.is-invalid ~ .invalid-feedback,
+.form-select.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+@media (max-width: 768px) {
+    .form-section { padding: 15px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Flash 消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('cabinet.cabinet_add') }}" id="cabinetForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+
+            <!-- 基本信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-info-circle me-2"></i>基本信息</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label required-field">机柜名称</label>
+                        <input type="text" class="form-control" id="name" name="name" required maxlength="128">
+                        <div class="invalid-feedback">请输入机柜名称</div>
+                        <div class="help-text">机柜的唯一标识，建议使用清晰明确的名称</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="location_id" class="form-label required-field">所属位置</label>
+                        <select class="form-select" id="location_id" name="location_id" required>
+                            <option value="">请选择位置</option>
+                            {% for location in locations %}
+                                <option value="{{ location.id }}">{{ location.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">请选择所属位置</div>
+                        <div class="help-text">机柜所在的物理位置</div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="model" class="form-label">机柜型号</label>
+                        <input type="text" class="form-control" id="model" name="model" maxlength="64">
+                        <div class="help-text">机柜的具体型号</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="manufacturer" class="form-label">制造厂商</label>
+                        <input type="text" class="form-control" id="manufacturer" name="manufacturer" maxlength="64">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 规格参数 -->
+            <div class="form-section">
+                <h5><i class="fas fa-ruler me-2"></i>规格参数</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="height_u" class="form-label required-field">U位高度</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="height_u" name="height_u" required
+                                   value="42" min="1" max="100">
+                            <span class="input-group-text">U</span>
+                        </div>
+                        <div class="invalid-feedback">请输入有效的U位高度（1-100）</div>
+                        <div class="help-text">标准机柜通常为42U</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="width" class="form-label">宽度(mm)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="width" name="width" min="1" step="1">
+                            <span class="input-group-text">mm</span>
+                        </div>
+                        <div class="help-text">标准机柜宽度通常为600mm或800mm</div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="depth" class="form-label">深度(mm)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="depth" name="depth" min="1" step="1">
+                            <span class="input-group-text">mm</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="weight_capacity" class="form-label">承重(kg)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="weight_capacity" name="weight_capacity" min="1" step="1">
+                            <span class="input-group-text">kg</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-cog me-2"></i>配置信息</h5>
+                <div class="mb-3">
+                    <label for="power_supply" class="form-label">电源配置</label>
+                    <textarea class="form-control" id="power_supply" name="power_supply" rows="2"
+                              placeholder="例如：双路UPS供电，32A"></textarea>
+                    <div class="help-text">描述机柜的电源配置情况</div>
+                </div>
+                <div class="mb-3">
+                    <label for="network_access" class="form-label">网络接入</label>
+                    <textarea class="form-control" id="network_access" name="network_access" rows="2"
+                              placeholder="例如：双万兆上联，24口千兆交换机"></textarea>
+                    <div class="help-text">描述机柜的网络接入情况</div>
+                </div>
+                <div class="mb-3">
+                    <label for="cooling_system" class="form-label">制冷系统</label>
+                    <input type="text" class="form-control" id="cooling_system" name="cooling_system"
+                           placeholder="例如：前门进风，后门出风">
+                </div>
+            </div>
+
+            <!-- 其他信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-sticky-note me-2"></i>其他信息</h5>
+                <div class="mb-3">
+                    <label for="description" class="form-label">描述说明</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"
+                              placeholder="机柜的详细描述"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="notes" class="form-label">备注</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3"
+                              placeholder="其他需要说明的信息"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="tags" class="form-label">标签</label>
+                    <input type="text" class="form-control" id="tags" name="tags"
+                           placeholder="例如：核心、生产环境、备份 (用逗号分隔)">
+                    <div class="help-text">用于快速分类和搜索，用逗号分隔多个标签</div>
+                </div>
+            </div>
+
+            <!-- 表单操作按钮 -->
+            <div class="d-flex justify-content-between mt-4 mb-5">
+                <a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 取消
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 保存机柜
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 右侧帮助信息 -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>添加机柜指南</h5>
+            </div>
+            <div class="card-body">
+                <h6>必填字段：</h6>
+                <ul>
+                    <li><strong>机柜名称</strong>：唯一标识，建议清晰命名</li>
+                    <li><strong>所属位置</strong>：机柜所在的物理位置</li>
+                    <li><strong>U位高度</strong>：机柜的标准高度</li>
+                </ul>
+                <h6 class="mt-3">U位管理说明：</h6>
+                <ul>
+                    <li>U位高度决定了机柜的设备容纳能力</li>
+                    <li>标准机柜通常为42U（约2米高）</li>
+                    <li>添加设备时需指定起始U位和占用U数</li>
+                </ul>
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>注意：</strong>创建后可在编辑页面继续完善详细信息。
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('cabinetForm');
+    const nameInput = document.getElementById('name');
+    const locationSelect = document.getElementById('location_id');
+    const heightInput = document.getElementById('height_u');
+
+    // 表单提交验证
+    form.addEventListener('submit', function(event) {
+        let isValid = true;
+
+        // 验证名称
+        if (!nameInput.value.trim()) {
+            nameInput.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            nameInput.classList.remove('is-invalid');
+        }
+
+        // 验证位置
+        if (!locationSelect.value) {
+            locationSelect.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            locationSelect.classList.remove('is-invalid');
+        }
+
+        // 验证U位高度
+        if (heightInput.value) {
+            const height = parseInt(heightInput.value);
+            if (height < 1 || height > 100) {
+                heightInput.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                heightInput.classList.remove('is-invalid');
+            }
+        } else {
+            heightInput.classList.add('is-invalid');
+            isValid = false;
+        }
+
+        if (!isValid) {
+            event.preventDefault();
+            const firstInvalid = form.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+        }
+    });
+
+    // 实时清除错误样式
+    const fields = form.querySelectorAll('input, select, textarea');
+    fields.forEach(field => {
+        field.addEventListener('blur', function() {
+            if (this.required && !this.value.trim()) {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+            }
+        });
+        field.addEventListener('input', function() {
+            if (this.classList.contains('is-invalid')) {
+                this.classList.remove('is-invalid');
+            }
+        });
+    });
+
+    // 键盘快捷键 Ctrl+S 保存
+    document.addEventListener('keydown', function(event) {
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault();
+            form.dispatchEvent(new Event('submit'));
+        }
+    });
+});
+</script>
+{% endblock %}

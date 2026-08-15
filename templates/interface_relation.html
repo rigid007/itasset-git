@@ -1,0 +1,746 @@
+{% extends "base.html" %}
+
+{% block title %}接口关系管理 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        font-weight: 600;
+    }
+    
+    .table th {
+        font-weight: 600;
+        background-color: #f8f9fa;
+    }
+    
+    /* 搜索区域样式 */
+    .search-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    /* 进度条样式 */
+    .scan-progress {
+        margin-top: 1rem;
+    }
+    
+    .progress-text {
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* 接口状态指示器 */
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .status-up { background-color: #28a745; }
+    .status-down { background-color: #dc3545; }
+    .status-unknown { background-color: #6c757d; }
+    
+    /* 邻居连接线可视化 */
+    .neighbor-line {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 10px;
+    }
+    
+    .neighbor-line i {
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
+    
+    /* 协议徽章 */
+    .protocol-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* IP地址段输入样式 */
+    .ip-range-input {
+        font-family: 'Courier New', monospace;
+    }
+    
+    /* 搜索结果统计 */
+    .result-stats {
+        background-color: #e9ecef;
+        padding: 0.5rem 1rem;
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* 筛选按钮组 */
+    .filter-buttons {
+        margin-bottom: 1rem;
+    }
+    
+    /* 空状态提示 */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        color: #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+接口关系管理
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('interface.interface_add') }}" class="btn btn-primary btn-sm ms-2">
+        <i class="fas fa-plus"></i> 添加接口
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- 搜索区域 -->
+<div class="search-card">
+    <h5 class="mb-3"><i class="fas fa-search"></i> 网络设备发现</h5>
+    
+    <form id="discoveryForm" method="POST" action="{{ url_for('interface.interface_discover') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="ip_range" class="form-label">IP地址段</label>
+                <div class="input-group">
+                    <input type="text" class="form-control ip-range-input" id="ip_range" 
+                           name="ip_range" placeholder="如: 192.168.1.0/24 或 192.168.1.1-192.168.1.100">
+                    <button class="btn btn-outline-secondary" type="button" id="scanCurrentNetwork">
+                        <i class="fas fa-network-wired"></i> 扫描当前网络
+                    </button>
+                </div>
+                <div class="form-text">
+                    支持CIDR格式 (如: 192.168.1.0/24) 或范围格式 (如: 192.168.1.1-192.168.1.100)
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="protocol" class="form-label">发现协议</label>
+                <select class="form-select" id="protocol" name="protocol">
+                    <option value="both">LLDP + CDP</option>
+                    <option value="lldp">仅 LLDP</option>
+                    <option value="cdp">仅 CDP</option>
+                    <option value="snmp">SNMP 邻居发现</option>
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="community" class="form-label">SNMP Community</label>
+                <input type="text" class="form-control" id="community" name="community" 
+                       placeholder="public" value="public">
+            </div>
+        </div>
+        
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <label for="threads" class="form-label">并发线程数</label>
+                <input type="number" class="form-control" id="threads" name="threads" 
+                       value="10" min="1" max="100">
+            </div>
+            
+            <div class="col-md-3">
+                <label for="timeout" class="form-label">超时时间(秒)</label>
+                <input type="number" class="form-control" id="timeout" name="timeout" 
+                       value="2" min="1" max="30" step="0.5">
+            </div>
+            
+            <div class="col-md-3">
+                <label for="port" class="form-label">端口</label>
+                <input type="number" class="form-control" id="port" name="port" 
+                       value="161" min="1" max="65535">
+            </div>
+            
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100" id="startDiscoveryBtn">
+                    <i class="fas fa-play"></i> 开始发现
+                </button>
+            </div>
+        </div>
+    </form>
+    
+    <!-- 扫描进度条 -->
+    <div class="scan-progress" id="scanProgress" style="display: none;">
+        <div class="d-flex justify-content-between mb-1">
+            <span>发现进度</span>
+            <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress" style="height: 20px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                 id="progressBar" role="progressbar" style="width: 0%;"></div>
+        </div>
+        <div class="progress-text">
+            <span id="progressText">准备开始扫描...</span>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="cancelScanBtn" style="display: none;">
+                <i class="fas fa-stop"></i> 停止扫描
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 结果统计 -->
+<div class="result-stats" id="resultStats" style="display: none;">
+    <div class="row">
+        <div class="col-md-3">
+            <strong>发现设备:</strong> <span id="discoveredDevices">0</span> 台
+        </div>
+        <div class="col-md-3">
+            <strong>发现接口:</strong> <span id="discoveredInterfaces">0</span> 个
+        </div>
+        <div class="col-md-3">
+            <strong>邻居关系:</strong> <span id="discoveredNeighbors">0</span> 个
+        </div>
+        <div class="col-md-3">
+            <strong>协议分布:</strong> 
+            <span class="badge bg-info me-1" id="lldpCount">LLDP: 0</span>
+            <span class="badge bg-success me-1" id="cdpCount">CDP: 0</span>
+            <span class="badge bg-warning" id="otherCount">其他: 0</span>
+        </div>
+    </div>
+</div>
+
+<!-- 接口关系列表 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>接口关系列表</span>
+        <div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="exportBtn">
+                <i class="fas fa-download"></i> 导出
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body p-0">
+        {% if interfaces %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="interfaceTable">
+                <thead>
+                    <tr>
+                        <th>本地设备</th>
+                        <th>本地接口</th>
+                        <th>接口状态</th>
+                        <th>协议</th>
+                        <th>邻居设备</th>
+                        <th>邻居接口</th>
+                        <th>邻居IP</th>
+                        <th>邻居MAC</th>
+                        <th>发现时间</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for interface in interfaces %}
+                    <tr class="interface-row" 
+                        data-protocol="{{ interface.discovery_protocol or 'unknown' }}"
+                        data-status="{{ interface.oper_status or 'unknown' }}">
+                        <td>
+                            {% if interface.device %}
+                            <a href="{{ url_for('device_detail', id=interface.device.id) }}" class="text-decoration-none">
+                                <i class="fas fa-hdd"></i> {{ interface.device.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">设备未识别</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ interface.name }}</strong>
+                            {% if interface.description %}
+                            <br><small class="text-muted">{{ interface.description|truncate(30) }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.oper_status == 'up' %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-circle status-indicator status-up"></i> 运行
+                            </span>
+                            {% elif interface.oper_status == 'down' %}
+                            <span class="badge bg-danger">
+                                <i class="fas fa-circle status-indicator status-down"></i> 关闭
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-circle status-indicator status-unknown"></i> 未知
+                            </span>
+                            {% endif %}
+                            
+                            {% if interface.admin_status == 'up' %}
+                            <span class="badge bg-primary ms-1">启用</span>
+                            {% elif interface.admin_status == 'down' %}
+                            <span class="badge bg-secondary ms-1">禁用</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.discovery_protocol %}
+                            <span class="badge protocol-badge 
+                                {% if interface.discovery_protocol == 'LLDP' %}bg-info
+                                {% elif interface.discovery_protocol == 'CDP' %}bg-success
+                                {% else %}bg-warning{% endif %}">
+                                {{ interface.discovery_protocol }}
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary protocol-badge">未知</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.neighbor_device %}
+                            <a href="{{ url_for('device_detail', id=interface.neighbor_device.id) }}" class="text-decoration-none">
+                                <i class="fas fa-hdd"></i> {{ interface.neighbor_device.name }}
+                            </a>
+                            {% elif interface.neighbor_ip %}
+                            <span class="text-muted">{{ interface.neighbor_ip }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.neighbor_interface %}
+                            <span class="badge bg-light text-dark">{{ interface.neighbor_interface }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.neighbor_ip %}
+                            <code>{{ interface.neighbor_ip }}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.neighbor_mac %}
+                            <code>{{ interface.neighbor_mac }}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if interface.last_discovered %}
+                            <small>{{ interface.last_discovered.strftime('%Y-%m-%d %H:%M') }}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary view-details-btn" 
+                                        data-interface-id="{{ interface.id }}"
+                                        title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <a href="{{ url_for('interface_edit', id=interface.id) }}" class="btn btn-outline-secondary"
+                                   title="编辑">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <!-- 空状态提示 -->
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-ethernet"></i>
+            </div>
+            <h5>暂无接口关系数据</h5>
+            <p class="text-muted mb-4">使用上方的搜索功能发现网络设备接口关系</p>
+            <a href="{{ url_for('interface.interface_add') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> 添加接口
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 接口详情模态框 -->
+<div class="modal fade" id="interfaceDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">接口详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="interfaceDetailContent">
+                <!-- 详情内容将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // 网络发现表单提交
+        $('#discoveryForm').submit(function(e) {
+            e.preventDefault();
+            
+            var formData = $(this).serialize();
+            var ipRange = $('#ip_range').val().trim();
+            
+            if (!ipRange) {
+                alert('请输入IP地址段');
+                $('#ip_range').focus();
+                return false;
+            }
+            
+            // 验证IP地址段格式
+            if (!isValidIPRange(ipRange)) {
+                alert('请输入有效的IP地址段格式（CIDR或范围）');
+                $('#ip_range').focus();
+                return false;
+            }
+            
+            // 显示进度条
+            $('#scanProgress').show();
+            $('#startDiscoveryBtn').prop('disabled', true);
+            $('#cancelScanBtn').show();
+            
+            // 开始扫描
+            startDiscovery(formData);
+            
+            return false;
+        });
+        
+        // 扫描当前网络
+        $('#scanCurrentNetwork').click(function() {
+            // 这里可以尝试获取当前网络IP段
+            // 暂时设置为常见的内网网段
+            $('#ip_range').val('192.168.1.0/24');
+        });
+        
+        // 停止扫描按钮
+        $('#cancelScanBtn').click(function() {
+            if (confirm('确定要停止扫描吗？')) {
+                cancelDiscovery();
+            }
+        });
+        
+        // 刷新按钮
+        $('#refreshBtn').click(function() {
+            window.location.reload();
+        });
+        
+        // 导出按钮
+        $('#exportBtn').click(function() {
+            exportInterfaceData();
+        });
+        
+        // 查看接口详情
+        $(document).on('click', '.view-details-btn', function() {
+            var interfaceId = $(this).data('interface-id');
+            showInterfaceDetails(interfaceId);
+        });
+        
+        // 验证IP地址段格式的函数
+        function isValidIPRange(ipRange) {
+            // CIDR格式: 192.168.1.0/24
+            var cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+            
+            // 范围格式: 192.168.1.1-192.168.1.100
+            var rangeRegex = /^(\d{1,3}\.){3}\d{1,3}-(\d{1,3}\.){3}\d{1,3}$/;
+            
+            // 单个IP格式: 192.168.1.1
+            var singleIPRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            
+            return cidrRegex.test(ipRange) || rangeRegex.test(ipRange) || singleIPRegex.test(ipRange);
+        }
+        
+        // 开始网络发现
+        function startDiscovery(formData) {
+            var progress = 0;
+            var progressInterval;
+            
+            // 模拟进度更新
+            progressInterval = setInterval(function() {
+                progress += Math.random() * 5;
+                if (progress > 100) progress = 100;
+                
+                updateProgress(progress, '扫描中...');
+                
+                if (progress >= 100) {
+                    clearInterval(progressInterval);
+                    discoveryComplete();
+                }
+            }, 500);
+            
+            // 保存进度条引用以便取消
+            window.currentScanInterval = progressInterval;
+            
+            // 发送AJAX请求到服务器
+            $.ajax({
+                url: '{{ url_for("interface.interface_discover") }}',
+                method: 'POST',
+                data: formData,
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                success: function(response) {
+                    clearInterval(progressInterval);
+                    if (response.success) {
+                        updateProgress(100, '扫描完成！');
+                        setTimeout(function() {
+                            $('#scanProgress').hide();
+                            $('#startDiscoveryBtn').prop('disabled', false);
+                            $('#cancelScanBtn').hide();
+                            showDiscoveryResults(response.data);
+                            // 重新加载页面以显示新发现的接口
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 2000);
+                        }, 1000);
+                    } else {
+                        updateProgress(0, '扫描失败: ' + response.message);
+                        $('#startDiscoveryBtn').prop('disabled', false);
+                        $('#cancelScanBtn').hide();
+                        alert('扫描失败: ' + response.message);
+                    }
+                },
+                error: function() {
+                    clearInterval(progressInterval);
+                    updateProgress(0, '扫描请求失败');
+                    $('#startDiscoveryBtn').prop('disabled', false);
+                    $('#cancelScanBtn').hide();
+                    alert('扫描请求失败，请检查网络连接');
+                }
+            });
+        }
+        
+        // 取消发现
+        function cancelDiscovery() {
+            if (window.currentScanInterval) {
+                clearInterval(window.currentScanInterval);
+                window.currentScanInterval = null;
+            }
+            
+            updateProgress(0, '扫描已取消');
+            $('#startDiscoveryBtn').prop('disabled', false);
+            $('#cancelScanBtn').hide();
+            
+            setTimeout(function() {
+                $('#scanProgress').hide();
+            }, 2000);
+        }
+        
+        // 发现完成
+        function discoveryComplete() {
+            updateProgress(100, '扫描完成！');
+            
+            setTimeout(function() {
+                $('#scanProgress').hide();
+                $('#startDiscoveryBtn').prop('disabled', false);
+                $('#cancelScanBtn').hide();
+                // 重新加载页面
+                window.location.reload();
+            }, 1500);
+        }
+        
+        // 更新进度条
+        function updateProgress(percent, text) {
+            $('#progressBar').css('width', percent + '%');
+            $('#progressPercent').text(percent.toFixed(0) + '%');
+            $('#progressText').text(text);
+        }
+        
+        // 显示发现结果
+        function showDiscoveryResults(results) {
+            $('#resultStats').show();
+            $('#discoveredDevices').text(results.devices);
+            $('#discoveredInterfaces').text(results.interfaces);
+            $('#discoveredNeighbors').text(results.neighbors);
+            $('#lldpCount').text('LLDP: ' + results.lldp);
+            $('#cdpCount').text('CDP: ' + results.cdp);
+            $('#otherCount').text('其他: ' + results.other);
+            
+            // 显示成功消息
+            showAlert('success', '网络发现完成！共发现 ' + results.devices + ' 台设备，' + 
+                     results.interfaces + ' 个接口，' + results.neighbors + ' 个邻居关系。');
+        }
+        
+        // 导出接口数据
+        function exportInterfaceData() {
+            var csvContent = "data:text/csv;charset=utf-8,";
+            
+            // 添加表头
+            var headers = ["本地设备", "本地接口", "接口状态", "协议", "邻居设备", "邻居接口", "邻居IP", "邻居MAC", "发现时间"];
+            csvContent += headers.join(",") + "\n";
+            
+            // 添加数据行
+            $('.interface-row').each(function() {
+                var row = [];
+                $(this).find('td').slice(0, 9).each(function() {
+                    var text = $(this).text().trim();
+                    // 处理包含逗号的文本
+                    if (text.indexOf(',') !== -1) {
+                        text = '"' + text + '"';
+                    }
+                    row.push(text);
+                });
+                csvContent += row.join(",") + "\n";
+            });
+            
+            // 创建下载链接
+            var encodedUri = encodeURI(csvContent);
+            var link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "接口关系_" + new Date().toISOString().split('T')[0] + ".csv");
+            document.body.appendChild(link);
+            
+            // 触发下载
+            link.click();
+            document.body.removeChild(link);
+            
+            showAlert('success', '数据导出成功！');
+        }
+        
+        // 显示接口详情
+        function showInterfaceDetails(interfaceId) {
+            // 显示加载状态
+            $('#interfaceDetailContent').html(`
+                <div class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    加载接口详情中...
+                </div>
+            `);
+            
+            // 显示模态框
+            var detailModal = new bootstrap.Modal(document.getElementById('interfaceDetailModal'));
+            detailModal.show();
+            
+            // 获取接口详情
+            $.ajax({
+                url: '/interface/' + interfaceId + '/details',
+                method: 'GET',
+                success: function(response) {
+                    var details = response;
+                    $('#interfaceDetailContent').html(`
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>基本信息</h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">接口名称:</dt>
+                                    <dd class="col-sm-8">${details.name}</dd>
+                                    
+                                    <dt class="col-sm-4">描述:</dt>
+                                    <dd class="col-sm-8">${details.description || '-'}</dd>
+                                    
+                                    <dt class="col-sm-4">设备:</dt>
+                                    <dd class="col-sm-8">${details.device_name}</dd>
+                                    
+                                    <dt class="col-sm-4">IP地址:</dt>
+                                    <dd class="col-sm-8">${details.ip_address || '-'}</dd>
+                                    
+                                    <dt class="col-sm-4">MAC地址:</dt>
+                                    <dd class="col-sm-8">${details.mac_address || '-'}</dd>
+                                </dl>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>状态信息</h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">管理状态:</dt>
+                                    <dd class="col-sm-8">${details.admin_status ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>'}</dd>
+                                    
+                                    <dt class="col-sm-4">运行状态:</dt>
+                                    <dd class="col-sm-8">${details.oper_status === 'up' ? '<span class="badge bg-success">运行</span>' : '<span class="badge bg-danger">关闭</span>'}</dd>
+                                    
+                                    <dt class="col-sm-4">速度:</dt>
+                                    <dd class="col-sm-8">${details.speed ? formatSpeed(details.speed) : '-'}</dd>
+                                    
+                                    <dt class="col-sm-4">MTU:</dt>
+                                    <dd class="col-sm-8">${details.mtu || '-'}</dd>
+                                    
+                                    <dt class="col-sm-4">发现协议:</dt>
+                                    <dd class="col-sm-8">${details.discovery_protocol ? '<span class="badge bg-info">' + details.discovery_protocol + '</span>' : '-'}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <h6>邻居信息</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>邻居设备:</strong> ${details.neighbor_device_name || details.neighbor_ip || '-'}<br>
+                                                <strong>邻居接口:</strong> ${details.neighbor_interface || '-'}<br>
+                                                <strong>邻居IP:</strong> ${details.neighbor_ip || '-'}<br>
+                                                <strong>邻居MAC:</strong> ${details.neighbor_mac || '-'}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>发现时间:</strong> ${details.last_discovered || '-'}<br>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                },
+                error: function() {
+                    $('#interfaceDetailContent').html(`
+                        <div class="alert alert-danger">
+                            加载接口详情失败，请稍后重试。
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // 格式化速度显示
+        function formatSpeed(speed) {
+            if (speed >= 1000000000) {
+                return (speed / 1000000000).toFixed(1) + ' Gbps';
+            } else if (speed >= 1000000) {
+                return (speed / 1000000).toFixed(1) + ' Mbps';
+            } else {
+                return speed + ' bps';
+            }
+        }
+        
+        // 显示提示消息
+        function showAlert(type, message) {
+            var alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            // 在页面顶部显示提示
+            $('.container-fluid').prepend(alertHtml);
+            
+            // 3秒后自动消失
+            setTimeout(function() {
+                $('.alert').alert('close');
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

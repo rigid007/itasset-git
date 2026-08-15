@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ audit.name }} - 盘点报告{% endblock %}
+{% block page_title %}盘点报告{% endblock %}
+{% block page_subtitle %}{{ audit.name }} ({{ audit.audit_no }}){% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('asset_extra.audit_detail', id=audit.id) }}" class="btn btn-primary"><i class="fas fa-list"></i> 盘点明细</a>
+<button onclick="window.print()" class="btn btn-info"><i class="fas fa-print"></i> 打印</button>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">盘点概览</h5></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3"><strong>盘点编号:</strong> {{ audit.audit_no }}</div>
+                    <div class="col-md-3"><strong>盘点类型:</strong> {{ audit.audit_type }}</div>
+                    <div class="col-md-3"><strong>计划日期:</strong> {{ audit.scheduled_date }}</div>
+                    <div class="col-md-3"><strong>完成日期:</strong> {{ audit.completed_date or '-' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary text-center">
+            <div class="card-body"><h3 class="text-primary">{{ audit.total_assets }}</h3><small>应盘总数</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success text-center">
+            <div class="card-body"><h3 class="text-success">{{ audit.matched_count }}</h3><small>一致 ({{ "%.1f"|format((audit.matched_count/audit.total_assets*100) if audit.total_assets > 0 else 0) }}%)</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning text-center">
+            <div class="card-body"><h3 class="text-warning">{{ audit.discrepancy_count }}</h3><small>差异</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger text-center">
+            <div class="card-body"><h3 class="text-danger">{{ audit.missing_count }}</h3><small>缺失</small></div>
+        </div>
+    </div>
+</div>
+
+<!-- 进度条 -->
+<div class="progress mb-4" style="height:30px">
+    {% set t = audit.total_assets or 1 %}
+    {% set mp = (audit.matched_count / t * 100)|round %}
+    {% set dp = (audit.discrepancy_count / t * 100)|round %}
+    {% set mip = (audit.missing_count / t * 100)|round %}
+    {% set dap = (audit.damaged_count / t * 100)|round %}
+    <div class="progress-bar bg-success" style="width:{{ mp }}%">一致{{ mp }}%</div>
+    <div class="progress-bar bg-warning" style="width:{{ dp }}%">差异{{ dp }}%</div>
+    <div class="progress-bar bg-danger" style="width:{{ mip }}%">缺失{{ mip }}%</div>
+    <div class="progress-bar bg-dark" style="width:{{ dap }}%">损坏{{ dap }}%</div>
+</div>
+
+<!-- 明细 -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">盘点明细</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr><th>资产编号</th><th>资产名称</th><th>预期位置</th><th>实际位置</th><th>结果</th><th>备注</th></tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="{% if item.status == 'matched' %}table-success{% elif item.status == 'mismatched' %}table-warning{% elif item.status == 'missing' %}table-danger{% endif %}">
+                    <td><code>{{ item.asset_number or '' }}</code></td>
+                    <td>{{ item.asset_name }}</td>
+                    <td>{{ item.expected_location or '-' }}</td>
+                    <td>{{ item.actual_location or '-' }}</td>
+                    <td>
+                        {% if item.status == 'matched' %}<span class="badge bg-success">一致</span>
+                        {% elif item.status == 'mismatched' %}<span class="badge bg-warning">差异</span>
+                        {% elif item.status == 'missing' %}<span class="badge bg-danger">缺失</span>
+                        {% elif item.status == 'damaged' %}<span class="badge bg-dark">损坏</span>
+                        {% else %}<span class="badge bg-secondary">{{ item.status }}</span>{% endif %}
+                    </td>
+                    <td>{{ item.notes or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if audit.notes %}
+<div class="card mt-4">
+    <div class="card-header"><h5 class="mb-0">备注</h5></div>
+    <div class="card-body"><pre class="mb-0">{{ audit.notes }}</pre></div>
+</div>
+{% endif %}
+{% endblock %}

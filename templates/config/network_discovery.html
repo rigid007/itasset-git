@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block title %}网络发现配置 - 系统配置{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    :root {
+        --primary-color: #3498db;
+        --success-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --info-color: #17a2b8;
+        --light-bg: #f8f9fa;
+        --border-color: #dee2e6;
+    }
+
+    .discovery-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        margin-bottom: 20px;
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .discovery-card:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .discovery-card.disabled {
+        border-left-color: #95a5a6;
+        opacity: 0.8;
+    }
+
+    .scan-type-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+
+    .scan-type-ping {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .scan-type-port {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .scan-type-snmp {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .scan-type-custom {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .schedule-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background-color: #e8f4fc;
+        color: #2c3e50;
+    }
+
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+
+    .status-running {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .status-completed {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .status-failed {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .status-stopped {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .status-disabled {
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+
+    .target-range {
+        font-family: monospace;
+        background-color: #f8f9fa;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        overflow-x: auto;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+
+    .action-buttons button {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+
+    .search-container {
+        position: relative;
+    }
+
+    .search-container i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+
+    .search-container input {
+        padding-left: 40px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #dee2e6;
+    }
+
+    .form-section {
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .form-section h6 {
+        color: #495057;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    
+    .required::after {
+        content: " *";
+        color: #e74c3c;
+    }
+    
+    .port-tag {
+        display: inline-block;
+        background-color: #e8f4fc;
+        color: #2c3e50;
+        border: 1px solid #b3d7ff;
+        border-radius: 12px;
+        padding: 2px 8px;
+        margin: 2px;
+        font-size: 0.85rem;
+    }
+    
+    .alert-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 400px;
+    }
+    
+    .results-table th {
+        position: sticky;
+        top: 0;
+        background-color: white;
+        z-index: 10;
+    }
+    
+    .progress-container {
+        height: 10px;
+        background-color: #e9ecef;
+        border-radius: 5px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    
+    .progress-bar {
+        height: 100%;
+        border-radius: 5px;
+        transition: width 0.3s ease;
+    }
+    
+    .ip-example {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .scan-options {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 20px;
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2 text-gray-800">网络发现配置</h1>
+            <p class="mb-0">配置和管理网络设备发现任务，自动发现网络中的设备和资源</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" id="addDiscoveryBtn">
+                <i class="fas fa-plus-circle mr-2"></i>添加发现配置
+            </button>
+            <button class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt mr-2"></i>刷新
+            </button>
+        </div>
+    </div>
+
+
+    <!-- 搜索和筛选 -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="search-container">
+                        <i class="fas fa-search"></i>
+                        <input type="text" class="form-control" id="searchInput" placeholder="搜索配置名称、目标范围...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="typeFilter">
+                        <option value="">所有扫描类型</option>
+                        <option value="ping">Ping扫描</option>
+                        <option value="port">端口扫描</option>
+                        <option value="snmp">SNMP扫描</option>
+                        <option value="custom">自定义扫描</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="statusFilter">
+                        <option value="">所有状态</option>
+                        <option value="enabled">已启用</option>
+                        <option value="disabled">已禁用</option>
+                        <option value="running">运行中</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 发现配置列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">发现配置列表</h6>
+        </div>
+        <div class="card-body">
+            <div id="discoveryContainer">
+                <!-- 配置卡片将通过JavaScript动态加载 -->
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载发现配置数据...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑发现配置模态框 -->
+<div class="modal fade" id="discoveryModal" tabindex="-1" role="dialog" aria-labelledby="discoveryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="discoveryModalLabel">添加发现配置</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="discoveryForm">
+                <div class="modal-body">
+                    <input type="hidden" id="configId" name="id">
+                    
+                    <div class="form-section">
+                        <h6>基本配置</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="name" class="required">配置名称</label>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                    <small class="form-text text-muted">用于标识此发现配置的唯一名称</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="scan_type" class="required">扫描类型</label>
+                                    <select class="form-control" id="scan_type" name="scan_type" required>
+                                        <option value="ping">Ping扫描</option>
+                                        <option value="port">端口扫描</option>
+                                        <option value="snmp">SNMP扫描</option>
+                                        <option value="custom">自定义扫描</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="target_range" class="required">目标范围</label>
+                            <textarea class="form-control" id="target_range" name="target_range" rows="3" required 
+                                      placeholder="请输入IP地址范围、CIDR或逗号分隔的IP地址"></textarea>
+                            <small class="form-text text-muted ip-example">
+                                支持格式: 
+                                <br>1. IP范围: 192.168.1.1-192.168.1.100
+                                <br>2. CIDR: 192.168.1.0/24
+                                <br>3. 逗号分隔: 192.168.1.1, 192.168.1.2, 192.168.1.3
+                                <br>4. 混合格式: 192.168.1.0/24, 192.168.2.1-192.168.2.50
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- 动态扫描选项 -->
+                    <div id="scanOptions">
+                        <!-- Ping扫描选项 / IP段批量导入 -->
+                        <div class="form-section" id="pingOptions">
+                            <h6>IP段批量导入设置</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="device_type">默认设备类型</label>
+                                        <select class="form-control" id="device_type" name="device_type">
+                                            <option value="unknown">自动识别</option>
+                                            <option value="server">服务器</option>
+                                            <option value="switch">交换机</option>
+                                            <option value="router">路由器</option>
+                                            <option value="firewall">防火墙</option>
+                                            <option value="pc">PC</option>
+                                            <option value="ap">AP</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="manufacturer">厂商</label>
+                                        <input type="text" class="form-control" id="manufacturer" name="manufacturer" placeholder="例如: Cisco, Huawei">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="cabinet_id">所属机柜（可选）</label>
+                                        <select class="form-control" id="cabinet_id" name="cabinet_id">
+                                            <option value="">不指定机柜</option>
+                                            {% for cabinet in cabinets %}
+                                            <option value="{{ cabinet.id }}">{{ cabinet.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="timeout">Ping超时（秒）</label>
+                                        <input type="number" class="form-control" id="timeout" name="timeout" min="1" max="60" value="2">
+                                        <small class="form-text text-muted">Ping等待响应的最长时间</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="max_threads">并发数</label>
+                                        <input type="number" class="form-control" id="max_threads" name="max_threads" min="1" max="500" value="20">
+                                        <small class="form-text text-muted">同时扫描的最大线程数量</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="use_ping" name="use_ping" checked>
+                                            <label class="custom-control-label" for="use_ping">Ping检测</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="auto_naming" name="auto_naming" checked>
+                                            <label class="custom-control-label" for="auto_naming">自动命名</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="import_auto_add" name="auto_add_devices" checked>
+                                            <label class="custom-control-label" for="import_auto_add">自动添加设备</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 端口扫描选项 -->
+                        <div class="form-section" id="portOptions" style="display: none;">
+                            <h6>端口扫描设置</h6>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="form-group">
+                                        <label for="ports">扫描端口</label>
+                                        <input type="text" class="form-control" id="ports" name="ports" 
+                                               placeholder="输入端口号，用逗号分隔（例如：22,80,443,3389）">
+                                        <small class="form-text text-muted">要扫描的端口列表，留空则扫描常用端口</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="timeout">超时时间（秒）</label>
+                                        <input type="number" class="form-control" id="port_timeout" name="port_timeout" min="1" max="60" value="5">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="max_threads">最大线程数</label>
+                                        <input type="number" class="form-control" id="port_max_threads" name="port_max_threads" min="1" max="500" value="50">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SNMP扫描选项 -->
+                        <div class="form-section" id="snmpOptions" style="display: none;">
+                            <h6>SNMP扫描设置</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="snmp_community">SNMP Community</label>
+                                        <input type="text" class="form-control" id="snmp_community" name="snmp_community"
+                                               placeholder="public">
+                                        <small class="form-text text-muted">SNMP community字符串</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="snmp_version">SNMP版本</label>
+                                        <select class="form-control" id="snmp_version" name="snmp_version">
+                                            <option value="1">v1</option>
+                                            <option value="2c" selected>v2c</option>
+                                            <option value="3">v3</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="snmp_timeout">超时时间（秒）</label>
+                                        <input type="number" class="form-control" id="snmp_timeout" name="snmp_timeout" min="1" max="60" value="2">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="snmp_retries">重试次数</label>
+                                        <input type="number" class="form-control" id="snmp_retries" name="snmp_retries" min="0" max="10" value="2">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="snmp_auto_add" name="auto_add_devices">
+                                            <label class="custom-control-label" for="snmp_auto_add">自动添加设备</label>
+                                        </div>
+                                        <small class="form-text text-muted">发现设备后自动添加到设备库</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 调度配置 -->
+                    <div class="form-section">
+                        <h6>调度配置</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="schedule_type">执行方式</label>
+                                    <select class="form-control" id="schedule_type" name="schedule_type">
+                                        <option value="manual">手动执行</option>
+                                        <option value="daily">每日</option>
+                                        <option value="weekly">每周</option>
+                                        <option value="monthly">每月</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group" id="scheduleTimeGroup">
+                                    <label for="schedule_time">执行时间</label>
+                                    <input type="time" class="form-control" id="schedule_time" name="schedule_time" value="02:00">
+                                    <small class="form-text text-muted">每日的执行时间</small>
+                                </div>
+                                <div class="form-group" id="scheduleDayGroup" style="display: none;">
+                                    <label for="schedule_day">执行日期</label>
+                                    <select class="form-control" id="schedule_day" name="schedule_day">
+                                        <option value="1">星期一</option>
+                                        <option value="2">星期二</option>
+                                        <option value="3">星期三</option>
+                                        <option value="4">星期四</option>
+                                        <option value="5">星期五</option>
+                                        <option value="6">星期六</option>
+                                        <option value="0">星期日</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="scheduleMonthDayGroup" style="display: none;">
+                                    <label for="schedule_month_day">每月第几天</label>
+                                    <select class="form-control" id="schedule_month_day" name="schedule_month_day">
+                                        {% for i in range(1, 32) %}
+                                        <option value="{{ i }}">{{ i }}日</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 其他配置 -->
+                    <div class="form-section">
+                        <h6>其他配置</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="auto_add_devices" name="auto_add_devices">
+                                        <label class="custom-control-label" for="auto_add_devices">自动添加设备</label>
+                                    </div>
+                                    <small class="form-text text-muted">发现设备后自动添加到设备库</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
+                                        <label class="custom-control-label" for="enabled">启用此配置</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="saveConfigBtn">
+                        <i class="fas fa-save mr-2"></i>保存配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 发现配置详情模态框 -->
+<div class="modal fade" id="configDetailModal" tabindex="-1" role="dialog" aria-labelledby="configDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="configDetailModalLabel">发现配置详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="configDetailContent">
+                    <!-- 详情内容将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="editFromDetailBtn">
+                    <i class="fas fa-edit mr-2"></i>编辑
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除这个发现配置吗？此操作不可撤销。</p>
+                <p class="text-danger"><strong>警告：</strong>删除配置将同时删除相关的发现记录。</p>
+                <input type="hidden" id="configToDelete">
+                <div id="deleteConfigInfo" class="mt-3 p-3 bg-light rounded">
+                    <!-- 删除的配置信息将在这里显示 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 执行发现模态框 -->
+<div class="modal fade" id="runDiscoveryModal" tabindex="-1" role="dialog" aria-labelledby="runDiscoveryModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="runDiscoveryModalLabel">执行发现任务</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="runDiscoveryContent">
+                    <p>正在准备执行发现任务...</p>
+                    <div class="progress mb-3" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <div id="runResult" class="mt-3"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="viewResultsBtn" style="display: none;">
+                    <i class="fas fa-eye mr-2"></i>查看结果
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 发现结果模态框 -->
+<div class="modal fade" id="resultsModal" tabindex="-1" role="dialog" aria-labelledby="resultsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resultsModalLabel">发现结果</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="resultsContent">
+                    <!-- 结果内容将通过JavaScript动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-success" id="exportResultsBtn">
+                    <i class="fas fa-download mr-2"></i>导出结果
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    $(document).ready(function() {
+        console.log("网络发现配置页面加载完成");
+        
+        // 全局变量
+        let discoveryConfigs = [];
+        let csrfToken = $('meta[name="csrf-token"]').attr('content') || '';
+        let currentRunningConfigId = null;
+        
+        // 初始化页面
+        loadDiscoveryConfigs();
+        
+        // 添加配置按钮事件
+        $('#addDiscoveryBtn').on('click', function() {
+            console.log("添加发现配置按钮被点击");
+            openDiscoveryModal();
+        });
+        
+        // 刷新按钮事件
+        $('#refreshBtn').on('click', function() {
+            console.log("刷新按钮被点击");
+            loadDiscoveryConfigs();
+        });
+        
+        // 搜索功能
+        $('#searchInput').on('keyup', debounce(function() {
+            filterConfigs();
+        }, 300));
+        
+        // 类型筛选
+        $('#typeFilter').change(function() {
+            filterConfigs();
+        });
+        
+        // 状态筛选
+        $('#statusFilter').change(function() {
+            filterConfigs();
+        });
+        
+        // 扫描类型变化时显示/隐藏相关字段
+        $('#scan_type').change(function() {
+            handleScanTypeChange();
+        });
+        
+        // 调度类型变化时显示/隐藏相关字段
+        $('#schedule_type').change(function() {
+            handleScheduleTypeChange();
+        });
+        
+        // 配置表单提交
+        $('#discoveryForm').submit(function(e) {
+            e.preventDefault();
+            saveDiscoveryConfig();
+        });
+        
+        // 确认删除按钮事件
+        $('#confirmDeleteBtn').on('click', function() {
+            const id = $('#configToDelete').val();
+            if (id) {
+                deleteDiscoveryConfig(id);
+            }
+        });
+        
+        // 从详情页编辑按钮
+        $('#editFromDetailBtn').on('click', function() {
+            $('#configDetailModal').modal('hide');
+            const id = $('#editFromDetailBtn').data('config-id');
+            if (id) {
+                setTimeout(() => {
+                    editDiscoveryConfig(id);
+                }, 300);
+            }
+        });
+        
+        // 查看结果按钮
+        $('#viewResultsBtn').on('click', function() {
+            if (currentRunningConfigId) {
+                viewResults(currentRunningConfigId);
+            }
+        });
+        
+        // 导出结果按钮
+        $('#exportResultsBtn').on('click', function() {
+            exportResults();
+        });
+        
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // 加载发现配置数据
+        function loadDiscoveryConfigs() {
+            console.log("开始加载发现配置数据...");
+            
+            $('#discoveryContainer').html(`
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载发现配置数据...</p>
+                </div>
+            `);
+            
+            $.ajax({
+                url: '/config/api/discovery-configs',
+                method: 'GET',
+                success: function(data) {
+                    console.log("发现配置数据加载成功，数量:", data.length);
+                    discoveryConfigs = data;
+                    renderDiscoveryConfigs(data);
+                },
+                error: function(xhr, status, error) {
+                    console.error('加载发现配置失败:', error, xhr.responseText);
+                    showToast('加载发现配置失败: ' + (xhr.responseJSON?.error || error), 'danger');
+                    $('#discoveryContainer').html(`
+                        <div class="empty-state">
+                            <i class="fas fa-exclamation-circle text-danger"></i>
+                            <h4>加载发现配置失败</h4>
+                            <p>无法从服务器获取配置数据，请检查网络连接或刷新页面重试。</p>
+                            <button class="btn btn-primary" onclick="location.reload()">刷新页面</button>
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // 渲染发现配置列表
+        function renderDiscoveryConfigs(configList) {
+            console.log("渲染发现配置列表，数量:", configList.length);
+            
+            if (configList.length === 0) {
+                $('#discoveryContainer').html(`
+                    <div class="empty-state">
+                        <i class="fas fa-search-network"></i>
+                        <h4>暂无发现配置</h4>
+                        <p>您尚未添加任何发现配置，点击右上角的"添加发现配置"按钮开始创建。</p>
+                        <button class="btn btn-primary" id="addDiscoveryEmptyBtn">
+                            <i class="fas fa-plus-circle mr-2"></i>添加发现配置
+                        </button>
+                    </div>
+                `);
+                
+                // 为空状态下的添加按钮绑定事件
+                $('#addDiscoveryEmptyBtn').on('click', function() {
+                    openDiscoveryModal();
+                });
+                return;
+            }
+            
+            let html = '<div class="row">';
+            
+            configList.forEach(config => {
+                const isDisabled = !config.enabled;
+                const scanType = config.scan_type;
+                const scheduleType = config.schedule_type;
+                const lastRunStatus = config.last_run_status;
+                
+                let scanTypeBadgeClass = '';
+                let scanTypeText = '';
+                
+                switch(scanType) {
+                    case 'ping':
+                        scanTypeBadgeClass = 'scan-type-ping';
+                        scanTypeText = 'Ping扫描';
+                        break;
+                    case 'port':
+                        scanTypeBadgeClass = 'scan-type-port';
+                        scanTypeText = '端口扫描';
+                        break;
+                    case 'snmp':
+                        scanTypeBadgeClass = 'scan-type-snmp';
+                        scanTypeText = 'SNMP扫描';
+                        break;
+                    case 'custom':
+                        scanTypeBadgeClass = 'scan-type-custom';
+                        scanTypeText = '自定义扫描';
+                        break;
+                }
+                
+                let statusBadgeClass = '';
+                let statusText = '';
+                
+                if (isDisabled) {
+                    statusBadgeClass = 'status-disabled';
+                    statusText = '已禁用';
+                } else if (lastRunStatus) {
+                    switch(lastRunStatus) {
+                        case 'running':
+                            statusBadgeClass = 'status-running';
+                            statusText = '运行中';
+                            break;
+                        case 'completed':
+                            statusBadgeClass = 'status-completed';
+                            statusText = '已完成';
+                            break;
+                        case 'failed':
+                            statusBadgeClass = 'status-failed';
+                            statusText = '失败';
+                            break;
+                        case 'stopped':
+                            statusBadgeClass = 'status-stopped';
+                            statusText = '已停止';
+                            break;
+                        default:
+                            statusBadgeClass = 'badge-secondary';
+                            statusText = lastRunStatus;
+                    }
+                } else {
+                    statusBadgeClass = 'badge-secondary';
+                    statusText = '未运行';
+                }
+                
+                let scheduleText = '';
+                switch(scheduleType) {
+                    case 'manual':
+                        scheduleText = '手动执行';
+                        break;
+                    case 'daily':
+                        scheduleText = '每日';
+                        break;
+                    case 'weekly':
+                        scheduleText = '每周';
+                        break;
+                    case 'monthly':
+                        scheduleText = '每月';
+                        break;
+                }
+                
+                // 显示端口
+                let portsHtml = '';
+                if (config.ports && config.ports.length > 0) {
+                    config.ports.slice(0, 5).forEach(port => {
+                        portsHtml += `<span class="port-tag">${port}</span>`;
+                    });
+                    if (config.ports.length > 5) {
+                        portsHtml += `<span class="port-tag">+${config.ports.length - 5}</span>`;
+                    }
+                }
+                
+                html += `
+                <div class="col-lg-6 col-xl-4">
+                    <div class="card discovery-card ${isDisabled ? 'disabled' : ''}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h5 class="card-title mb-1">
+                                        ${config.name}
+                                        <span class="badge ${statusBadgeClass} status-badge ml-2">${statusText}</span>
+                                    </h5>
+                                    <p class="card-text text-muted small mb-2">
+                                        <i class="fas fa-cogs mr-1"></i>${scanTypeText}
+                                        <i class="fas fa-calendar-alt ml-3 mr-1"></i>${scheduleText}
+                                    </p>
+                                </div>
+                                <div>
+                                    <span class="badge ${scanTypeBadgeClass} scan-type-badge">${scanTypeText}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="target-range">${config.target_range}</div>
+                            </div>
+                            
+                            ${portsHtml ? `<div class="mb-3">${portsHtml}</div>` : ''}
+                            
+                            ${config.snmp_community ? `<p class="card-text small text-muted mb-1"><i class="fas fa-key mr-1"></i>SNMP: ${config.snmp_community} (v${config.snmp_version || '2c'})</p>` : ''}
+
+                            ${config.scan_type === 'ping' && config.device_type && config.device_type !== 'unknown' ? `<p class="card-text small text-muted mb-1"><i class="fas fa-tag mr-1"></i>设备类型: ${config.device_type}</p>` : ''}
+                            ${config.manufacturer ? `<p class="card-text small text-muted mb-1"><i class="fas fa-industry mr-1"></i>厂商: ${config.manufacturer}</p>` : ''}
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="text-muted small">
+                                    <i class="fas fa-clock mr-1"></i>超时: ${config.timeout}s
+                                    <i class="fas fa-users ml-3 mr-1"></i>线程: ${config.max_threads}
+                                </div>
+                                <div class="text-muted small">
+                                    ${config.last_run_at ? `最后执行: ${formatDate(config.last_run_at)}` : '从未执行'}
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <div>
+                                    ${config.auto_add_devices ? '<span class="badge badge-info">自动添加</span>' : ''}
+                                </div>
+                                <div class="action-buttons">
+                                    <button class="btn btn-sm btn-outline-info view-config" data-id="${config.id}" title="查看详情">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success run-discovery" data-id="${config.id}" title="执行发现" ${isDisabled ? 'disabled' : ''}>
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary edit-config" data-id="${config.id}" title="编辑">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger delete-config" data-id="${config.id}" title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+            
+            html += '</div>';
+            $('#discoveryContainer').html(html);
+            
+            // 绑定按钮事件
+            bindDiscoveryActions();
+        }
+        
+        // 绑定发现配置操作事件
+        function bindDiscoveryActions() {
+            console.log("绑定发现配置操作事件...");
+            
+            // 查看配置
+            $('.view-config').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("查看配置，ID:", id);
+                viewDiscoveryConfig(id);
+            });
+            
+            // 执行发现
+            $('.run-discovery').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("执行发现，ID:", id);
+                runDiscovery(id);
+            });
+            
+            // 编辑配置
+            $('.edit-config').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("编辑配置，ID:", id);
+                editDiscoveryConfig(id);
+            });
+            
+            // 删除配置
+            $('.delete-config').off('click').on('click', function() {
+                const id = $(this).data('id');
+                console.log("删除配置，ID:", id);
+                confirmDeleteDiscoveryConfig(id);
+            });
+        }
+        
+        // 筛选配置
+        function filterConfigs() {
+            const searchTerm = $('#searchInput').val().toLowerCase();
+            const typeFilter = $('#typeFilter').val();
+            const statusFilter = $('#statusFilter').val();
+            
+            const filtered = discoveryConfigs.filter(config => {
+                // 搜索条件
+                const matchesSearch = !searchTerm ||
+                    config.name.toLowerCase().includes(searchTerm) ||
+                    config.target_range.toLowerCase().includes(searchTerm) ||
+                    (config.snmp_community && config.snmp_community.toLowerCase().includes(searchTerm)) ||
+                    (config.manufacturer && config.manufacturer.toLowerCase().includes(searchTerm)) ||
+                    (config.device_type && config.device_type.toLowerCase().includes(searchTerm));
+                
+                // 类型筛选
+                const matchesType = !typeFilter || config.scan_type === typeFilter;
+                
+                // 状态筛选
+                let matchesStatus = true;
+                if (statusFilter === 'enabled') {
+                    matchesStatus = config.enabled === true;
+                } else if (statusFilter === 'disabled') {
+                    matchesStatus = config.enabled === false;
+                } else if (statusFilter === 'running') {
+                    matchesStatus = config.last_run_status === 'running';
+                }
+                
+                return matchesSearch && matchesType && matchesStatus;
+            });
+            
+            renderDiscoveryConfigs(filtered);
+        }
+        
+        // 查看发现配置详情
+        function viewDiscoveryConfig(id) {
+            // 先从当前数据中查找配置信息
+            let config = discoveryConfigs.find(c => c.id === id);
+            if (!config) {
+                showToast('找不到要查看的配置', 'danger');
+                return;
+            }
+            
+            let html = `
+                <div class="detail-row">
+                    <div class="detail-label">配置名称</div>
+                    <div class="detail-value">${config.name}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">扫描类型</div>
+                    <div class="detail-value">
+                        <span class="badge ${getScanTypeBadgeClass(config.scan_type)}">
+                            ${getScanTypeText(config.scan_type)}
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">目标范围</div>
+                    <div class="detail-value">
+                        <div class="target-range">${config.target_range}</div>
+                    </div>
+                </div>
+            `;
+            
+            if (config.ports && config.ports.length > 0) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">扫描端口</div>
+                    <div class="detail-value">
+                        ${config.ports.map(port => `<span class="port-tag">${port}</span>`).join('')}
+                    </div>
+                </div>
+                `;
+            }
+            
+            if (config.snmp_community) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">SNMP Community</div>
+                    <div class="detail-value">${config.snmp_community}</div>
+                </div>
+                `;
+            }
+
+            if (config.scan_type === 'snmp') {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">SNMP版本</div>
+                    <div class="detail-value">v${config.snmp_version || '2c'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">SNMP重试次数</div>
+                    <div class="detail-value">${config.snmp_retries || 2}</div>
+                </div>
+                `;
+            }
+
+            if (config.scan_type === 'ping' || config.scan_type === 'custom') {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">默认设备类型</div>
+                    <div class="detail-value">${config.device_type || 'unknown'}</div>
+                </div>
+                ${config.manufacturer ? `
+                <div class="detail-row">
+                    <div class="detail-label">厂商</div>
+                    <div class="detail-value">${config.manufacturer}</div>
+                </div>` : ''}
+                ${config.cabinet_id ? `
+                <div class="detail-row">
+                    <div class="detail-label">机柜ID</div>
+                    <div class="detail-value">${config.cabinet_id}</div>
+                </div>` : ''}
+                <div class="detail-row">
+                    <div class="detail-label">Ping检测</div>
+                    <div class="detail-value">${config.use_ping !== false ? '<span class="badge badge-success">是</span>' : '<span class="badge badge-secondary">否</span>'}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">自动命名</div>
+                    <div class="detail-value">${config.auto_naming !== false ? '<span class="badge badge-success">是</span>' : '<span class="badge badge-secondary">否</span>'}</div>
+                </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-row">
+                    <div class="detail-label">超时时间</div>
+                    <div class="detail-value">${config.timeout} 秒</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">最大线程数</div>
+                    <div class="detail-value">${config.max_threads}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">执行方式</div>
+                    <div class="detail-value">
+                        <span class="badge schedule-badge">${getScheduleTypeText(config.schedule_type)}</span>
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">自动添加设备</div>
+                    <div class="detail-value">
+                        ${config.auto_add_devices ? 
+                            '<span class="badge badge-success">是</span>' : 
+                            '<span class="badge badge-secondary">否</span>'
+                        }
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">状态</div>
+                    <div class="detail-value">
+                        ${config.enabled ? 
+                            '<span class="badge badge-success">已启用</span>' : 
+                            '<span class="badge badge-secondary">已禁用</span>'
+                        }
+                    </div>
+                </div>
+            `;
+            
+            if (config.last_run_at) {
+                html += `
+                <div class="detail-row">
+                    <div class="detail-label">最后执行时间</div>
+                    <div class="detail-value">${formatDate(config.last_run_at)}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">最后执行状态</div>
+                    <div class="detail-value">
+                        <span class="badge ${getStatusBadgeClass(config.last_run_status)}">
+                            ${getStatusText(config.last_run_status)}
+                        </span>
+                    </div>
+                </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-row">
+                    <div class="detail-label">创建时间</div>
+                    <div class="detail-value">${formatDate(config.created_at)}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">更新时间</div>
+                    <div class="detail-value">${formatDate(config.updated_at)}</div>
+                </div>
+            `;
+            
+            $('#configDetailContent').html(html);
+            $('#editFromDetailBtn').data('config-id', id);
+            $('#configDetailModal').modal('show');
+        }
+        
+        // 执行发现任务
+        function runDiscovery(id) {
+            currentRunningConfigId = id;
+            $('#runDiscoveryModal').modal('show');
+            
+            $.ajax({
+                url: `/config/api/discovery-configs/${id}/run`,
+                method: 'POST',
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    $('#runResult').html(`
+                        <div class="alert alert-success">
+                            <h5><i class="fas fa-check-circle mr-2"></i>发现任务已启动</h5>
+                            <p>${response.message || '发现任务已成功启动，请稍后查看结果。'}</p>
+                        </div>
+                    `);
+                    $('#viewResultsBtn').show();
+                    
+                    // 重新加载配置列表以更新状态
+                    setTimeout(() => {
+                        loadDiscoveryConfigs();
+                    }, 1000);
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '启动发现任务失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 404) {
+                        errorMsg = '发现配置不存在';
+                    }
+                    
+                    $('#runResult').html(`
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-times-circle mr-2"></i>启动失败</h5>
+                            <p>${errorMsg}</p>
+                        </div>
+                    `);
+                    $('#viewResultsBtn').hide();
+                }
+            });
+        }
+        
+        // 查看发现结果（进度管理器模式）
+        function viewResults(id) {
+            $('#runDiscoveryModal').modal('hide');
+            $('#resultsModal').modal('show');
+
+            $('#resultsContent').html(`
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载发现结果...</p>
+                </div>
+            `);
+
+            // 轮询结果
+            pollDiscoveryResults(id);
+        }
+
+        // 轮询发现结果
+        function pollDiscoveryResults(id, attempt) {
+            attempt = attempt || 0;
+
+            $.ajax({
+                url: `/config/api/discovery-configs/${id}/results`,
+                method: 'GET',
+                success: function(response) {
+                    const isRunning = response.task_status === 'running';
+                    const isCompleted = response.task_status === 'completed';
+                    const isFailed = response.task_status === 'failed';
+                    const hasResults = response.results && response.results.length > 0;
+
+                    // 统计卡片
+                    let html = `
+                        <div class="mb-4">
+                            <h6>发现任务信息</h6>
+                            <p><strong>配置名称:</strong> ${response.config_name || ''}</p>
+                    `;
+
+                    if (response.last_run) {
+                        html += `<p><strong>执行时间:</strong> ${formatDate(response.last_run)}</p>`;
+                    }
+
+                    if (response.task_id) {
+                        const statusMap = {
+                            'running': ['badge-warning', '运行中'],
+                            'completed': ['badge-success', '已完成'],
+                            'failed': ['badge-danger', '失败'],
+                            'no_task': ['badge-secondary', '无任务']
+                        };
+                        const [sc, st] = statusMap[response.task_status] || ['badge-secondary', response.task_status || '未知'];
+                        html += `
+                            <p><strong>任务状态:</strong> <span class="badge ${sc}">${st}</span></p>
+                        `;
+                    } else {
+                        html += `<p class="text-muted">尚未执行过发现任务</p>`;
+                    }
+
+                    html += `</div>`;
+
+                    // 进度条
+                    if (response.task_id) {
+                        const pct = response.task_progress || 0;
+                        html += `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>进度: ${pct}%</span>
+                            </div>
+                            <div class="progress-container">
+                                <div class="progress-bar bg-${isRunning ? 'warning' : isCompleted ? 'success' : isFailed ? 'danger' : 'primary'}"
+                                     style="width: ${pct}%"></div>
+                            </div>
+                            ${response.current_step ? `<small class="text-muted">${response.current_step}</small>` : ''}
+                            ${response.message ? `<div class="mt-2"><small class="text-muted">${response.message}</small></div>` : ''}
+                        </div>
+                        `;
+                    }
+
+                    // 统计数字
+                    if (response.task_id) {
+                        html += `
+                        <div class="row mb-3">
+                            <div class="col-md-3 col-6 mb-2">
+                                <div class="card bg-light text-center p-2">
+                                    <div class="h5 mb-0">${response.total_targets || 0}</div>
+                                    <small class="text-muted">目标总数</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-2">
+                                <div class="card bg-success text-white text-center p-2">
+                                    <div class="h5 mb-0">${response.added || 0}</div>
+                                    <small>已添加</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-2">
+                                <div class="card bg-warning text-center p-2">
+                                    <div class="h5 mb-0">${response.skipped || 0}</div>
+                                    <small class="text-muted">已跳过</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-2">
+                                <div class="card bg-danger text-white text-center p-2">
+                                    <div class="h5 mb-0">${response.failed || 0}</div>
+                                    <small>失败</small>
+                                </div>
+                            </div>
+                        </div>
+                        `;
+                    }
+
+                    // 结果表格
+                    if (hasResults) {
+                        html += `
+                        <h6>发现结果详情 (${response.results.length}条)</h6>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-bordered table-hover results-table">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>IP地址</th>
+                                        <th>设备名称</th>
+                                        <th>状态</th>
+                                        <th>类型</th>
+                                        <th>品牌/厂商</th>
+                                        <th>MAC地址</th>
+                                        <th>说明</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+
+                        response.results.forEach(function(result) {
+                            const ip = result.ip || result.discovered_ip || '-';
+                            const deviceName = result.device_name || result.discovered_hostname || '-';
+                            const deviceType = result.device_type || result.type || result.discovered_device_type || '-';
+                            const brand = result.brand || result.manufacturer || result.discovered_vendor || '';
+                            const mac = result.mac_address || result.discovered_mac || '';
+                            const status = result.status || (result.snmp_status === '支持' ? 'online' : 'unknown');
+                            const reason = result.reason || result.description || result.message || '';
+
+                            let statusBadge = '';
+                            if (status === 'added' || status === 'online' || result.added) {
+                                statusBadge = '<span class="badge badge-success">已添加</span>';
+                            } else if (status === 'skipped' || result.skipped) {
+                                statusBadge = '<span class="badge badge-warning">已跳过</span>';
+                            } else if (status === 'failed') {
+                                statusBadge = '<span class="badge badge-danger">失败</span>';
+                            } else {
+                                statusBadge = '<span class="badge badge-secondary">' + (status || '-') + '</span>';
+                            }
+
+                            html += `
+                                <tr>
+                                    <td><code>${ip}</code></td>
+                                    <td>${deviceName}</td>
+                                    <td>${statusBadge}</td>
+                                    <td>${deviceType}</td>
+                                    <td>${brand || '-'}</td>
+                                    <td><code>${mac || '-'}</code></td>
+                                    <td><small>${reason || '-'}</small></td>
+                                </tr>
+                            `;
+                        });
+
+                        html += `
+                                </tbody>
+                            </table>
+                        </div>
+                        `;
+                    } else if (response.task_id) {
+                        html += `
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            ${isRunning ? '任务正在运行中，暂未发现设备结果。' : '未发现任何设备。'}
+                        </div>
+                        `;
+                    }
+
+                    $('#resultsContent').html(html);
+
+                    // 如果任务仍在运行，继续轮询
+                    if (isRunning && attempt < 60) {
+                        setTimeout(function() {
+                            pollDiscoveryResults(id, attempt + 1);
+                        }, 2000);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '加载发现结果失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    }
+
+                    $('#resultsContent').html(`
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-times-circle mr-2"></i>加载失败</h5>
+                            <p>${errorMsg}</p>
+                        </div>
+                    `);
+                }
+            });
+        }
+        
+        // 导出结果
+        function exportResults() {
+            // 这里可以实现导出功能
+            showToast('导出功能开发中...', 'info');
+        }
+        
+        // 打开发现配置模态框（添加）
+        function openDiscoveryModal() {
+            console.log("打开发现配置模态框");
+            
+            // 重置表单
+            $('#discoveryForm')[0].reset();
+            $('#configId').val('');
+            $('#discoveryModalLabel').text('添加发现配置');
+            
+            // 设置默认值
+            $('#timeout').val(2);
+            $('#port_timeout').val(5);
+            $('#snmp_timeout').val(2);
+            $('#max_threads').val(20);
+            $('#port_max_threads').val(50);
+            $('#snmp_max_threads').val(50);
+            $('#schedule_time').val('02:00');
+            $('#enabled').prop('checked', true);
+            $('#snmp_version').val('2c');
+            $('#snmp_retries').val(2);
+            $('#device_type').val('unknown');
+            $('#cabinet_id').val('');
+            $('#manufacturer').val('');
+            $('#use_ping').prop('checked', true);
+            $('#auto_naming').prop('checked', true);
+            $('#import_auto_add').prop('checked', true);
+            $('#snmp_auto_add').prop('checked', false);
+            $('#auto_add_devices').prop('checked', false);
+            
+            // 隐藏所有扫描选项，然后显示默认的
+            $('#pingOptions').show();
+            $('#portOptions').hide();
+            $('#snmpOptions').hide();
+            
+            // 设置默认调度类型
+            $('#schedule_type').val('manual');
+            handleScheduleTypeChange();
+            
+            // 显示模态框
+            $('#discoveryModal').modal('show');
+        }
+        
+        // 编辑发现配置
+        function editDiscoveryConfig(id) {
+            console.log("编辑发现配置，ID:", id);
+            
+            // 先尝试从当前数据中获取配置信息
+            let config = discoveryConfigs.find(c => c.id === id);
+            if (!config) {
+                showToast('找不到要编辑的配置', 'danger');
+                return;
+            }
+            
+            // 填充表单
+            $('#configId').val(config.id);
+            $('#name').val(config.name);
+            $('#scan_type').val(config.scan_type);
+            $('#target_range').val(config.target_range);
+            $('#timeout').val(config.timeout);
+            $('#port_timeout').val(config.timeout);
+            $('#snmp_timeout').val(config.timeout);
+            $('#max_threads').val(config.max_threads);
+            $('#port_max_threads').val(config.max_threads);
+            $('#snmp_max_threads').val(config.max_threads);
+            $('#schedule_type').val(config.schedule_type);
+            $('#enabled').prop('checked', config.enabled);
+
+            // 新字段 — SNMP
+            if (config.snmp_version) {
+                $('#snmp_version').val(config.snmp_version);
+            } else {
+                $('#snmp_version').val('2c');
+            }
+            if (config.snmp_retries !== undefined) {
+                $('#snmp_retries').val(config.snmp_retries);
+            } else {
+                $('#snmp_retries').val(2);
+            }
+
+            // 新字段 — 批量导入（ping）
+            if (config.device_type) {
+                $('#device_type').val(config.device_type);
+            } else {
+                $('#device_type').val('unknown');
+            }
+            if (config.cabinet_id) {
+                $('#cabinet_id').val(config.cabinet_id);
+            } else {
+                $('#cabinet_id').val('');
+            }
+            if (config.manufacturer) {
+                $('#manufacturer').val(config.manufacturer);
+            } else {
+                $('#manufacturer').val('');
+            }
+            $('#use_ping').prop('checked', config.use_ping !== false);
+            $('#auto_naming').prop('checked', config.auto_naming !== false);
+
+            // auto_add_devices — 根据扫描类型勾选正确的checkbox
+            $('#auto_add_devices').prop('checked', config.auto_add_devices === true);
+            $('#import_auto_add').prop('checked', config.auto_add_devices === true);
+            $('#snmp_auto_add').prop('checked', config.auto_add_devices === true);
+            
+            // 处理端口
+            if (config.ports && config.ports.length > 0) {
+                $('#ports').val(config.ports.join(', '));
+            } else {
+                $('#ports').val('');
+            }
+            
+            // 处理SNMP community
+            if (config.snmp_community) {
+                $('#snmp_community').val(config.snmp_community);
+            } else {
+                $('#snmp_community').val('');
+            }
+            
+            // 处理调度配置
+            if (config.schedule_config) {
+                // 这里可以解析schedule_config并设置相关字段
+                // 简化处理：只设置schedule_type
+            }
+            
+            // 根据类型显示/隐藏字段
+            handleScanTypeChange();
+            handleScheduleTypeChange();
+            
+            // 更新模态框标题
+            $('#discoveryModalLabel').text('编辑发现配置');
+            $('#discoveryModal').modal('show');
+        }
+        
+        // 保存发现配置
+        function saveDiscoveryConfig() {
+            console.log("保存发现配置...");
+
+            const scanType = $('#scan_type').val();
+
+            const formData = {
+                id: $('#configId').val() || null,
+                name: $('#name').val(),
+                scan_type: scanType,
+                target_range: $('#target_range').val(),
+                schedule_type: $('#schedule_type').val(),
+                enabled: $('#enabled').is(':checked')
+            };
+
+            // 根据扫描类型添加特定字段
+            if (scanType === 'port') {
+                const ports = $('#ports').val();
+                if (ports) {
+                    formData.ports = ports;
+                }
+                formData.timeout = parseInt($('#port_timeout').val()) || 5;
+                formData.max_threads = parseInt($('#port_max_threads').val()) || 50;
+                formData.auto_add_devices = $('#auto_add_devices').is(':checked');
+            } else if (scanType === 'snmp') {
+                const snmpCommunity = $('#snmp_community').val();
+                if (snmpCommunity) {
+                    formData.snmp_community = snmpCommunity;
+                }
+                formData.snmp_version = $('#snmp_version').val();
+                formData.snmp_retries = parseInt($('#snmp_retries').val()) || 2;
+                formData.timeout = parseInt($('#snmp_timeout').val()) || 2;
+                formData.max_threads = parseInt($('#max_threads').val()) || 50;
+                formData.auto_add_devices = $('#snmp_auto_add').is(':checked');
+            } else {
+                // ping / custom — IP段批量导入
+                formData.device_type = $('#device_type').val();
+                formData.cabinet_id = $('#cabinet_id').val() ? parseInt($('#cabinet_id').val()) : null;
+                formData.manufacturer = $('#manufacturer').val();
+                formData.use_ping = $('#use_ping').is(':checked');
+                formData.auto_naming = $('#auto_naming').is(':checked');
+                formData.timeout = parseInt($('#timeout').val()) || 2;
+                formData.max_threads = parseInt($('#max_threads').val()) || 20;
+                formData.auto_add_devices = $('#import_auto_add').is(':checked');
+            }
+            
+            // 处理调度配置
+            const scheduleType = $('#schedule_type').val();
+            let scheduleConfig = {};
+            
+            if (scheduleType === 'daily') {
+                scheduleConfig.time = $('#schedule_time').val();
+            } else if (scheduleType === 'weekly') {
+                scheduleConfig.day = $('#schedule_day').val();
+                scheduleConfig.time = $('#schedule_time').val();
+            } else if (scheduleType === 'monthly') {
+                scheduleConfig.day = $('#schedule_month_day').val();
+                scheduleConfig.time = $('#schedule_time').val();
+            }
+            
+            if (Object.keys(scheduleConfig).length > 0) {
+                formData.schedule_config = scheduleConfig;
+            }
+            
+            console.log("表单数据:", formData);
+            
+            // 验证必填字段
+            if (!formData.name || !formData.target_range) {
+                showToast('配置名称和目标范围是必填项', 'danger');
+                return;
+            }
+            
+            // 验证目标范围格式
+            if (!validateTargetRange(formData.target_range)) {
+                showToast('目标范围格式无效，请使用IP范围、CIDR或逗号分隔的IP地址', 'danger');
+                return;
+            }
+            
+            $('#saveConfigBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>保存中...');
+            
+            // 根据是否有ID决定是添加还是更新
+            const method = formData.id ? 'PUT' : 'POST';
+            const url = formData.id ? `/config/api/discovery-configs/${formData.id}` : '/config/api/discovery-configs';
+            
+            $.ajax({
+                url: url,
+                method: method,
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    $('#saveConfigBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存配置');
+                    $('#discoveryModal').modal('hide');
+                    
+                    showToast(response.message || '发现配置保存成功', 'success');
+                    
+                    // 重新加载配置列表
+                    loadDiscoveryConfigs();
+                },
+                error: function(xhr, status, error) {
+                    $('#saveConfigBtn').prop('disabled', false).html('<i class="fas fa-save mr-2"></i>保存配置');
+                    
+                    let errorMsg = '保存发现配置失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法保存配置';
+                    } else if (xhr.status === 400) {
+                        errorMsg = '请求数据有误';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 确认删除发现配置
+        function confirmDeleteDiscoveryConfig(id) {
+            const config = discoveryConfigs.find(c => c.id === id);
+            if (!config) {
+                showToast('找不到要删除的配置', 'danger');
+                return;
+            }
+            
+            $('#configToDelete').val(id);
+            
+            // 显示要删除的配置信息
+            $('#deleteConfigInfo').html(`
+                <h6>即将删除的配置：</h6>
+                <p><strong>名称：</strong>${config.name}</p>
+                <p><strong>扫描类型：</strong>${getScanTypeText(config.scan_type)}</p>
+                <p><strong>目标范围：</strong>${config.target_range}</p>
+                ${config.last_run_at ? `<p><strong>最后执行：</strong>${formatDate(config.last_run_at)}</p>` : ''}
+            `);
+            
+            $('#deleteConfirmModal').modal('show');
+        }
+        
+        // 删除发现配置
+        function deleteDiscoveryConfig(id) {
+            $('#deleteConfirmModal').modal('hide');
+            
+            $.ajax({
+                url: `/config/api/discovery-configs/${id}`,
+                method: 'DELETE',
+                beforeSend: function(xhr) {
+                    if (csrfToken) {
+                        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                    }
+                },
+                success: function(response) {
+                    showToast(response.message || '发现配置删除成功', 'success');
+                    loadDiscoveryConfigs();
+                },
+                error: function(xhr, status, error) {
+                    let errorMsg = '删除发现配置失败';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ': ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 401) {
+                        errorMsg = '未授权，请重新登录';
+                    } else if (xhr.status === 403) {
+                        errorMsg = '权限不足，无法删除配置';
+                    } else if (xhr.status === 404) {
+                        errorMsg = '发现配置不存在或已被删除';
+                    }
+                    
+                    showToast(errorMsg, 'danger');
+                }
+            });
+        }
+        
+        // 处理扫描类型变化
+        function handleScanTypeChange() {
+            const type = $('#scan_type').val();
+            
+            // 隐藏所有选项
+            $('#pingOptions').hide();
+            $('#portOptions').hide();
+            $('#snmpOptions').hide();
+            
+            // 显示对应的选项
+            if (type === 'ping') {
+                $('#pingOptions').show();
+            } else if (type === 'port') {
+                $('#portOptions').show();
+            } else if (type === 'snmp') {
+                $('#snmpOptions').show();
+            }
+            // custom类型没有特殊选项
+        }
+        
+        // 处理调度类型变化
+        function handleScheduleTypeChange() {
+            const type = $('#schedule_type').val();
+            
+            // 隐藏所有调度选项
+            $('#scheduleTimeGroup').hide();
+            $('#scheduleDayGroup').hide();
+            $('#scheduleMonthDayGroup').hide();
+            
+            // 显示对应的选项
+            if (type === 'daily') {
+                $('#scheduleTimeGroup').show();
+            } else if (type === 'weekly') {
+                $('#scheduleTimeGroup').show();
+                $('#scheduleDayGroup').show();
+            } else if (type === 'monthly') {
+                $('#scheduleTimeGroup').show();
+                $('#scheduleMonthDayGroup').show();
+            }
+            // manual类型没有调度选项
+        }
+        
+        // 验证目标范围格式
+        function validateTargetRange(targetRange) {
+            if (!targetRange || targetRange.trim() === '') {
+                return false;
+            }
+            
+            // 简单的验证逻辑，实际应该在后端进行完整验证
+            // 这里只检查是否包含有效的IP地址格式
+            const ipPattern = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+            return ipPattern.test(targetRange);
+        }
+        
+        // 显示提示信息
+        function showToast(message, type) {
+            // 移除现有提示
+            $('.alert-toast').remove();
+            
+            const toast = $(`
+                <div class="alert alert-${type} alert-dismissible fade show alert-toast" role="alert">
+                    ${message}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `);
+            
+            $('body').append(toast);
+            
+            // 自动关闭
+            setTimeout(() => {
+                toast.alert('close');
+            }, 5000);
+        }
+        
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        // 获取扫描类型徽章类名
+        function getScanTypeBadgeClass(type) {
+            switch(type) {
+                case 'ping': return 'scan-type-ping';
+                case 'port': return 'scan-type-port';
+                case 'snmp': return 'scan-type-snmp';
+                case 'custom': return 'scan-type-custom';
+                default: return 'badge-secondary';
+            }
+        }
+        
+        // 获取扫描类型文本
+        function getScanTypeText(type) {
+            switch(type) {
+                case 'ping': return 'Ping扫描';
+                case 'port': return '端口扫描';
+                case 'snmp': return 'SNMP扫描';
+                case 'custom': return '自定义扫描';
+                default: return '未知';
+            }
+        }
+        
+        // 获取调度类型文本
+        function getScheduleTypeText(type) {
+            switch(type) {
+                case 'manual': return '手动执行';
+                case 'daily': return '每日';
+                case 'weekly': return '每周';
+                case 'monthly': return '每月';
+                default: return '未知';
+            }
+        }
+        
+        // 获取状态徽章类名
+        function getStatusBadgeClass(status) {
+            switch(status) {
+                case 'running': return 'status-running';
+                case 'completed': return 'status-completed';
+                case 'failed': return 'status-failed';
+                case 'stopped': return 'status-stopped';
+                default: return 'badge-secondary';
+            }
+        }
+        
+        // 获取状态文本
+        function getStatusText(status) {
+            switch(status) {
+                case 'running': return '运行中';
+                case 'completed': return '已完成';
+                case 'failed': return '失败';
+                case 'stopped': return '已停止';
+                default: return status || '未运行';
+            }
+        }
+    });
+</script>
+{% endblock %}

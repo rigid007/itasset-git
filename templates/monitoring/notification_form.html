@@ -1,0 +1,115 @@
+{# templates/monitoring/notification_form.html #}
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}编辑通知配置 - {{ notification.name }}{% else %}新建通知配置{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi {% if is_edit %}bi-pencil-square{% else %}bi-plus-circle{% endif %} me-2"></i>
+                        {% if is_edit %}编辑通知配置{% else %}新建通知配置{% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{% if is_edit %}{{ url_for('monitoring.notification_edit', notification_id=notification.id) }}{% else %}{{ url_for('monitoring.notification_create') }}{% endif %}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <!-- 基本信息 -->
+                        <div class="mb-3">
+                            <label for="name" class="form-label">名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ notification.name if is_edit else '' }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" name="description" rows="2">{{ notification.description if is_edit else '' }}</textarea>
+                        </div>
+                        
+                        <!-- 通知类型 -->
+                        <div class="mb-3">
+                            <label for="notification_type" class="form-label">通知类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="notification_type" name="notification_type" required>
+                                <option value="">请选择</option>
+                                <option value="email" {% if is_edit and notification.notification_type == 'email' %}selected{% endif %}>邮件 (Email)</option>
+                                <option value="sms" {% if is_edit and notification.notification_type == 'sms' %}selected{% endif %}>短信 (SMS)</option>
+                                <option value="webhook" {% if is_edit and notification.notification_type == 'webhook' %}selected{% endif %}>Webhook</option>
+                                <option value="slack" {% if is_edit and notification.notification_type == 'slack' %}selected{% endif %}>Slack</option>
+                                <option value="wechat" {% if is_edit and notification.notification_type == 'wechat' %}selected{% endif %}>企业微信</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 接收者列表 -->
+                        <div class="mb-3">
+                            <label for="receivers" class="form-label">接收者</label>
+                            <textarea class="form-control" id="receivers" name="receivers" rows="3" 
+                                      placeholder="每行一个接收者（邮箱、手机号、Webhook URL等）">{% if is_edit %}{% for r in notification.get_receivers() %}{{ r }}
+{% endfor %}{% endif %}</textarea>
+                            <div class="form-text">根据通知类型填写对应的接收地址，每行一个。</div>
+                        </div>
+                        
+                        <!-- 触发条件 -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="trigger_on" class="form-label">触发级别</label>
+                                <select class="form-select" id="trigger_on" name="trigger_on">
+                                    <option value="all" {% if is_edit and notification.trigger_on == 'all' %}selected{% endif %}>所有级别</option>
+                                    <option value="critical" {% if is_edit and notification.trigger_on == 'critical' %}selected{% endif %}>严重</option>
+                                    <option value="error" {% if is_edit and notification.trigger_on == 'error' %}selected{% endif %}>错误</option>
+                                    <option value="warning" {% if is_edit and notification.trigger_on == 'warning' %}selected{% endif %}>警告</option>
+                                    <option value="info" {% if is_edit and notification.trigger_on == 'info' %}selected{% endif %}>信息</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="trigger_delay" class="form-label">触发延迟（秒）</label>
+                                <input type="number" class="form-control" id="trigger_delay" name="trigger_delay" value="{% if is_edit %}{{ notification.trigger_delay }}{% else %}0{% endif %}" min="0">
+                            </div>
+                        </div>
+                        
+                        <!-- 最大通知次数 -->
+                        <div class="mb-3">
+                            <label for="max_notifications" class="form-label">最大通知次数（0表示无限制）</label>
+                            <input type="number" class="form-control" id="max_notifications" name="max_notifications" value="{% if is_edit %}{{ notification.max_notifications }}{% else %}10{% endif %}" min="0">
+                        </div>
+                        
+                        <!-- 模板 - 使用转义显示示例变量 -->
+                        <div class="mb-3">
+                            <label for="title_template" class="form-label">标题模板</label>
+                            <input type="text" class="form-control" id="title_template" name="title_template" 
+                                   value="{{ notification.title_template if is_edit else '' }}"
+                                   placeholder="如：【监控告警】{{ '{{' }} alert.name {{ '}}' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="message_template" class="form-label">内容模板</label>
+                            <textarea class="form-control" id="message_template" name="message_template" rows="4" 
+                                      placeholder="支持变量，如：{{ '{{' }} alert.description {{ '}}' }}">{{ notification.message_template if is_edit else '' }}</textarea>
+                        </div>
+                        
+                        <!-- 特定类型配置（JSON） -->
+                        <div class="mb-3">
+                            <label for="config" class="form-label">特定配置 (JSON)</label>
+                            <textarea class="form-control" id="config" name="config" rows="3" 
+                                      placeholder='{"api_key": "xxx", "channel": "#general"}'>{% if is_edit %}{{ notification.config | tojson(indent=2) if notification.config else '{}' }}{% else %}{}{% endif %}</textarea>
+                            <div class="form-text">根据通知类型填写额外配置，如 Webhook 的 headers、Slack 的频道等。</div>
+                        </div>
+                        
+                        <!-- 启用状态 -->
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" {% if not is_edit or notification.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="enabled">
+                                启用
+                            </label>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('monitoring.notification_list') }}" class="btn btn-secondary">取消</a>
+                            <button type="submit" class="btn btn-primary">{% if is_edit %}保存修改{% else %}保存{% endif %}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

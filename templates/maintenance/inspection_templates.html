@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block title %}巡检模板管理 - IT资产管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .template-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .template-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .template-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 1rem;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    
+    .template-body {
+        padding: 1rem;
+    }
+    
+    .template-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        padding: 0.75rem 1rem;
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
+    
+    .items-list {
+        max-height: 150px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+    }
+    
+    .item-tag {
+        display: inline-block;
+        background-color: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.25rem 0.5rem;
+        margin: 0.125rem;
+        font-size: 0.875rem;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stat-card {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+    
+    .stat-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: bold;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .device-type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .vendor-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .model-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #198754;
+        color: white;
+    }
+    
+    .search-highlight {
+        background-color: #fff3cd;
+        padding: 0.125rem 0.25rem;
+        border-radius: 2px;
+    }
+    
+    .modal-lg {
+        max-width: 800px;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .template-card {
+            margin-bottom: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">巡检模板管理</h1>
+            <p class="text-muted mb-0">管理设备巡检模板，标准化巡检流程</p>
+        </div>
+        <div class="action-buttons">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+                <i class="fas fa-plus me-2"></i>创建新模板
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">模板总数</h6>
+                        <div class="stat-number">{{ templates|length }}</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-clipboard-list text-primary" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">服务器模板</h6>
+                        <div class="stat-number">
+                            {% set server_count = 0 %}
+                            {% for template in templates %}
+                                {% if template.device_type == 'server' %}
+                                    {% set server_count = server_count + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ server_count }}
+                        </div>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-server text-info" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">网络设备模板</h6>
+                        <div class="stat-number">
+                            {% set network_count = 0 %}
+                            {% for template in templates %}
+                                {% if template.device_type == 'network' %}
+                                    {% set network_count = network_count + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ network_count }}
+                        </div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-network-wired text-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">通用模板</h6>
+                        <div class="stat-number">
+                            {% set general_count = 0 %}
+                            {% for template in templates %}
+                                {% if not template.device_type or template.device_type == '' %}
+                                    {% set general_count = general_count + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ general_count }}
+                        </div>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-cogs text-success" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 筛选和搜索区域 -->
+    <div class="filter-section">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="deviceTypeFilter" class="form-label">设备类型筛选</label>
+                <select class="form-select" id="deviceTypeFilter">
+                    <option value="">所有类型</option>
+                    <option value="server">服务器</option>
+                    <option value="network">网络设备</option>
+                    <option value="storage">存储设备</option>
+                    <option value="security">安全设备</option>
+                    <option value="desktop">台式机</option>
+                    <option value="laptop">笔记本</option>
+                    <option value="printer">打印机</option>
+                    <option value="other">其他</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="vendorFilter" class="form-label">厂商筛选</label>
+                <input type="text" class="form-control" id="vendorFilter" placeholder="输入厂商名称...">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="searchInput" class="form-label">搜索模板</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索模板名称、描述或检查项...">
+                    <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" id="clearFiltersBtn">
+                        <i class="fas fa-times"></i> 清除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 模板列表 -->
+    <div class="row" id="templatesContainer">
+        {% if templates %}
+            {% for template in templates %}
+            {% set template_items = [] %}
+            {% if template.inspection_items %}
+                {% if template.inspection_items is string %}
+                    {% if template.inspection_items.startswith('[') and template.inspection_items.endswith(']') %}
+                        {% set template_items = template.inspection_items|safe|fromjson %}
+                    {% else %}
+                        {% set template_items = template.inspection_items.split('\n') %}
+                    {% endif %}
+                {% else %}
+                    {% set template_items = template.inspection_items %}
+                {% endif %}
+            {% endif %}
+            
+            <div class="col-lg-4 col-md-6 mb-4 template-item" 
+                 data-device-type="{{ template.device_type or '' }}"
+                 data-vendor="{{ template.vendor or '' }}"
+                 data-search-text="{{ template.name.lower() }} {{ template.description.lower() if template.description else '' }}">
+                <div class="template-card h-100">
+                    <div class="template-header">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="mb-1 template-name">{{ template.name }}</h5>
+                                {% if template.device_type %}
+                                <span class="device-type-badge me-1">{{ template.device_type }}</span>
+                                {% endif %}
+                                {% if template.vendor %}
+                                <span class="vendor-badge me-1">{{ template.vendor }}</span>
+                                {% endif %}
+                                {% if template.model %}
+                                <span class="model-badge">{{ template.model }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="#" onclick="viewTemplate({{ template.id }})">
+                                            <i class="fas fa-eye me-2"></i>查看详情
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#" onclick="editTemplate({{ template.id }})">
+                                            <i class="fas fa-edit me-2"></i>编辑模板
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="#" onclick="deleteTemplate({{ template.id }})">
+                                            <i class="fas fa-trash me-2"></i>删除模板
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="template-body">
+                        {% if template.description %}
+                        <p class="text-muted small template-description">{{ template.description|truncate(100) }}</p>
+                        {% else %}
+                        <p class="text-muted small">暂无描述</p>
+                        {% endif %}
+                        
+                        <div class="mb-3">
+                            <h6 class="small text-muted mb-2">检查项目 ({{ template_items|length }})</h6>
+                            <div class="items-list">
+                                {% if template_items %}
+                                    {% for item in template_items[:5] %}
+                                        {% if item is mapping %}
+                                            <div class="item-tag">{{ item.name|default(item) }}</div>
+                                        {% else %}
+                                            <div class="item-tag">{{ item }}</div>
+                                        {% endif %}
+                                    {% endfor %}
+                                    
+                                    {% if template_items|length > 5 %}
+                                        <div class="item-tag">+{{ template_items|length - 5 }} 更多...</div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="text-muted small">暂无检查项</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="template-footer d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">
+                            创建: {{ template.created_at.strftime('%Y-%m-%d') if template.created_at else '未知' }}
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="createTaskFromTemplate({{ template.id }})">
+                                <i class="fas fa-play me-1"></i>创建任务
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="col-12">
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-clipboard-list"></i>
+                </div>
+                <h4 class="mb-3">暂无巡检模板</h4>
+                <p class="text-muted mb-4">您还没有创建任何巡检模板，点击右上角按钮创建第一个模板</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+                    <i class="fas fa-plus me-2"></i>创建巡检模板
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 分页 -->
+    {% if templates %}
+    <div class="d-flex justify-content-center mt-4">
+        <nav aria-label="模板分页">
+            <ul class="pagination">
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1">上一页</a>
+                </li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item disabled">
+                    <a class="page-link" href="#">下一页</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 创建模板模态框 -->
+<div class="modal fade" id="createTemplateModal" tabindex="-1" aria-labelledby="createTemplateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTemplateModalLabel">创建巡检模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createTemplateForm" method="POST" action="#">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="templateName" class="form-label">模板名称 *</label>
+                            <input type="text" class="form-control" id="templateName" name="name" required>
+                            <div class="form-text">建议包含设备类型和检查类型，如"服务器常规巡检"</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="templateType" class="form-label">巡检类型 *</label>
+                            <select class="form-select" id="templateType" name="template_type" required>
+                                <option value="">请选择类型</option>
+                                <option value="daily">每日巡检</option>
+                                <option value="weekly">每周巡检</option>
+                                <option value="monthly">每月巡检</option>
+                                <option value="quarterly">每季度巡检</option>
+                                <option value="annual">年度巡检</option>
+                                <option value="special">特殊巡检</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="templateDeviceType" class="form-label">设备类型</label>
+                            <select class="form-select" id="templateDeviceType" name="device_type">
+                                <option value="">通用模板</option>
+                                <option value="server">服务器</option>
+                                <option value="network">网络设备</option>
+                                <option value="storage">存储设备</option>
+                                <option value="security">安全设备</option>
+                                <option value="desktop">台式机</option>
+                                <option value="laptop">笔记本</option>
+                                <option value="printer">打印机</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="templateVendor" class="form-label">厂商</label>
+                            <input type="text" class="form-control" id="templateVendor" name="vendor" placeholder="如: Dell, Cisco, HPE">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="templateModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="templateModel" name="model" placeholder="如: PowerEdge R740, Catalyst 3850">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="templateDescription" class="form-label">模板描述</label>
+                        <textarea class="form-control" id="templateDescription" name="description" rows="3" 
+                                  placeholder="描述模板的用途、适用场景等"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="templateItems" class="form-label">检查项目 *</label>
+                        <div class="form-text mb-2">每行一个检查项，可以使用JSON格式的复杂检查项</div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addQuickItem('检查CPU使用率')">
+                                        CPU使用率
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addQuickItem('检查内存使用率')">
+                                        内存使用率
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addQuickItem('检查磁盘空间')">
+                                        磁盘空间
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addQuickItem('检查系统日志')">
+                                        系统日志
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addQuickItem('检查网络连接')">
+                                        网络连接
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="showAdvancedItems()">
+                                    <i class="fas fa-code me-1"></i>JSON格式
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <textarea class="form-control" id="templateItems" name="inspection_items" rows="8" required 
+                                  placeholder="例如：
+检查CPU使用率是否正常
+检查内存使用率是否正常
+检查磁盘空间是否充足
+检查系统日志是否有错误
+检查网络连接是否正常"></textarea>
+                        
+                        <div class="mt-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="useJsonFormat" onchange="toggleJsonFormat()">
+                                <label class="form-check-label" for="useJsonFormat">使用JSON格式</label>
+                            </div>
+                        </div>
+                        
+                        <div id="jsonHelp" class="mt-2 small text-muted" style="display: none;">
+                            <strong>JSON格式示例：</strong><br>
+                            <code class="d-block mt-1 p-2 bg-light rounded">
+[
+  {"name": "检查CPU使用率", "description": "检查CPU使用率是否超过80%"},
+  {"name": "检查内存使用率", "description": "检查内存使用率是否超过85%"},
+  {"name": "检查磁盘空间", "description": "检查磁盘空间是否充足"}
+]
+                            </code>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建模板</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 模板详情模态框 -->
+<div class="modal fade" id="templateDetailModal" tabindex="-1" aria-labelledby="templateDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="templateDetailModalLabel">模板详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="templateDetailContent">
+                <!-- 模板详情将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="editTemplateFromDetail()">编辑模板</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑模板模态框 -->
+<div class="modal fade" id="editTemplateModal" tabindex="-1" aria-labelledby="editTemplateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editTemplateModalLabel">编辑巡检模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editTemplateForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body" id="editTemplateContent">
+                    <!-- 编辑表单将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 创建任务模态框 -->
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-labelledby="createTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTaskModalLabel">从模板创建巡检任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createTaskForm" method="POST" action="#">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body" id="createTaskContent">
+                    <!-- 创建任务表单将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建任务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 初始化页面
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        initializeFilters();
+        
+        const createForm = document.getElementById('createTemplateForm');
+        if (createForm) {
+            createForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                createTemplate();
+            });
+        }
+        
+        document.getElementById('clearFiltersBtn').addEventListener('click', function() {
+            clearAllFilters();
+        });
+        
+        const createTaskForm = document.getElementById('createTaskForm');
+        if (createTaskForm) {
+            createTaskForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const templateId = document.getElementById('createTaskContent').dataset.templateId;
+                if (templateId) {
+                    createTaskWithTemplate(templateId);
+                }
+            });
+        }
+    });
+    
+    // 初始化筛选功能
+    function initializeFilters() {
+        const deviceTypeFilter = document.getElementById('deviceTypeFilter');
+        const vendorFilter = document.getElementById('vendorFilter');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        
+        if (deviceTypeFilter) {
+            deviceTypeFilter.addEventListener('change', filterTemplates);
+        }
+        
+        if (vendorFilter) {
+            vendorFilter.addEventListener('input', function() {
+                setTimeout(filterTemplates, 300);
+            });
+        }
+        
+        if (searchBtn) {
+            searchBtn.addEventListener('click', filterTemplates);
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    filterTemplates();
+                } else {
+                    clearTimeout(this.timer);
+                    this.timer = setTimeout(filterTemplates, 300);
+                }
+            });
+        }
+    }
+    
+    // 筛选模板
+    function filterTemplates() {
+        const deviceTypeFilter = document.getElementById('deviceTypeFilter').value.toLowerCase();
+        const vendorFilter = document.getElementById('vendorFilter').value.toLowerCase();
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+        const templates = document.querySelectorAll('.template-item');
+        let visibleCount = 0;
+        
+        templates.forEach(template => {
+            let showTemplate = true;
+            
+            if (deviceTypeFilter) {
+                const deviceType = template.dataset.deviceType.toLowerCase();
+                if (deviceType !== deviceTypeFilter) {
+                    showTemplate = false;
+                }
+            }
+            
+            if (vendorFilter && showTemplate) {
+                const vendor = template.dataset.vendor.toLowerCase();
+                if (!vendor.includes(vendorFilter)) {
+                    showTemplate = false;
+                }
+            }
+            
+            if (searchQuery && showTemplate) {
+                const searchText = template.dataset.searchText;
+                if (!searchText.includes(searchQuery)) {
+                    showTemplate = false;
+                }
+            }
+            
+            template.style.display = showTemplate ? '' : 'none';
+            if (showTemplate) visibleCount++;
+        });
+        
+        const container = document.getElementById('templatesContainer');
+        const existingEmptyState = container.querySelector('.empty-state');
+        const templateItems = container.querySelectorAll('.template-item');
+        
+        if (visibleCount === 0 && templateItems.length > 0) {
+            if (!existingEmptyState || (existingEmptyState && !existingEmptyState.closest('.col-12'))) {
+                if (existingEmptyState && existingEmptyState.parentElement && existingEmptyState.parentElement.tagName !== 'DIV') {
+                    existingEmptyState.remove();
+                }
+                
+                const emptyStateDiv = document.createElement('div');
+                emptyStateDiv.className = 'col-12';
+                emptyStateDiv.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <h4 class="mb-3">未找到匹配的模板</h4>
+                        <p class="text-muted mb-4">请尝试其他筛选条件或搜索关键词</p>
+                        <button type="button" class="btn btn-outline-secondary" onclick="clearAllFilters()">
+                            清除所有筛选
+                        </button>
+                    </div>
+                `;
+                
+                const currentEmptyState = container.querySelector('.col-12 .empty-state');
+                if (!currentEmptyState) {
+                    container.appendChild(emptyStateDiv);
+                }
+            }
+        } else if (existingEmptyState && existingEmptyState.closest('.col-12')) {
+            const emptyStateContainer = existingEmptyState.closest('.col-12');
+            if (emptyStateContainer) {
+                emptyStateContainer.remove();
+            }
+        }
+        
+        if (searchQuery) {
+            highlightSearchResults(searchQuery);
+        }
+    }
+    
+    function clearAllFilters() {
+        document.getElementById('deviceTypeFilter').value = '';
+        document.getElementById('vendorFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        filterTemplates();
+    }
+    
+    function highlightSearchResults(searchQuery) {
+        const templates = document.querySelectorAll('.template-item[style*="display: block"], .template-item:not([style*="display: none"])');
+        
+        templates.forEach(template => {
+            const nameElements = template.querySelectorAll('.template-name .search-highlight');
+            const descElements = template.querySelectorAll('.template-description .search-highlight');
+            
+            nameElements.forEach(el => {
+                const parent = el.parentNode;
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                parent.removeChild(el);
+            });
+            
+            descElements.forEach(el => {
+                const parent = el.parentNode;
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                parent.removeChild(el);
+            });
+            
+            const nameElement = template.querySelector('.template-name');
+            const descElement = template.querySelector('.template-description');
+            
+            if (nameElement) {
+                highlightText(nameElement, searchQuery);
+            }
+            
+            if (descElement) {
+                highlightText(descElement, searchQuery);
+            }
+        });
+    }
+    
+    function highlightText(element, searchQuery) {
+        if (!searchQuery.trim()) return;
+        
+        const text = element.textContent;
+        const regex = new RegExp(`(${escapeRegExp(searchQuery)})`, 'gi');
+        const newText = text.replace(regex, '<span class="search-highlight">$1</span>');
+        
+        if (newText !== text) {
+            element.innerHTML = newText;
+        }
+    }
+    
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    
+    // 查看模板详情
+    function viewTemplate(templateId) {
+        fetch(`/maintenance/api/inspection_templates/${templateId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('获取模板详情失败');
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success || !res.data) {
+                    alert(res.error || '模板不存在');
+                    return;
+                }
+                const template = res.data;
+                
+                let deviceTypeBadge = template.device_type ? `<span class="device-type-badge">${template.device_type}</span>` : '';
+                let vendorBadge = template.vendor ? `<span class="vendor-badge">${template.vendor}</span>` : '';
+                let modelBadge = template.model ? `<span class="model-badge">${template.model}</span>` : '';
+                
+                let itemsHtml = '';
+                if (template.items && Array.isArray(template.items) && template.items.length > 0) {
+                    itemsHtml = '<div class="items-list mb-3" style="max-height: 300px;">';
+                    template.items.forEach(item => {
+                        if (typeof item === 'object' && item !== null) {
+                            itemsHtml += `
+                                <div class="mb-2 p-2 border rounded">
+                                    <div class="fw-bold">${item.name || '未命名'}</div>
+                                    ${item.description ? `<div class="text-muted small mt-1">${item.description}</div>` : ''}
+                                    ${item.expected ? `<div class="text-muted small">期望值: ${item.expected}</div>` : ''}
+                                </div>
+                            `;
+                        } else {
+                            itemsHtml += `<div class="item-tag">${item}</div>`;
+                        }
+                    });
+                    itemsHtml += '</div>';
+                } else {
+                    itemsHtml = '<p class="text-muted">暂无检查项</p>';
+                }
+                
+                const createdDate = template.created_at ? new Date(template.created_at).toLocaleString() : '未知';
+                const updatedDate = template.updated_at ? new Date(template.updated_at).toLocaleString() : createdDate;
+                
+                const detailHtml = `
+                    <div class="mb-4">
+                        <h4>${template.name}</h4>
+                        <div class="mb-3">
+                            ${deviceTypeBadge}
+                            ${vendorBadge}
+                            ${modelBadge}
+                        </div>
+                        
+                        ${template.description ? `
+                        <div class="mb-3">
+                            <h6>模板描述</h6>
+                            <p>${template.description}</p>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>检查项目 (${template.item_count})</h6>
+                        ${itemsHtml}
+                    </div>
+                    
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="text-muted small">
+                                    <div><strong>创建时间:</strong> ${createdDate}</div>
+                                    <div><strong>最后更新:</strong> ${updatedDate}</div>
+                                    <div><strong>状态:</strong> ${template.is_active ? '启用' : '禁用'}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <button class="btn btn-outline-primary" onclick="createTaskFromTemplate(${template.id})">
+                                    <i class="fas fa-play me-1"></i>从此模板创建任务
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('templateDetailContent').innerHTML = detailHtml;
+                document.getElementById('templateDetailContent').dataset.templateId = templateId;
+                
+                const modal = new bootstrap.Modal(document.getElementById('templateDetailModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching template details:', error);
+                alert('获取模板详情失败: ' + error.message);
+            });
+    }
+    
+    function editTemplateFromDetail() {
+        const templateId = document.getElementById('templateDetailContent').dataset.templateId;
+        if (templateId) {
+            const detailModal = bootstrap.Modal.getInstance(document.getElementById('templateDetailModal'));
+            if (detailModal) detailModal.hide();
+            editTemplate(templateId);
+        }
+    }
+    
+    // 编辑模板
+    function editTemplate(templateId) {
+        const detailModal = bootstrap.Modal.getInstance(document.getElementById('templateDetailModal'));
+        if (detailModal) detailModal.hide();
+        
+        fetch(`/maintenance/api/inspection_templates/${templateId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('获取模板信息失败');
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success || !res.data) {
+                    alert(res.error || '模板不存在');
+                    return;
+                }
+                const template = res.data;
+                
+                // 处理检查项目：将 items 转换为适合编辑的文本格式
+                let itemsText = '';
+                if (template.items) {
+                    if (Array.isArray(template.items)) {
+                        if (template.items.length > 0 && typeof template.items[0] === 'object') {
+                            itemsText = JSON.stringify(template.items, null, 2);
+                        } else {
+                            itemsText = template.items.join('\n');
+                        }
+                    } else if (typeof template.items === 'string') {
+                        itemsText = template.items;
+                    }
+                }
+                
+                const editHtml = `
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="editTemplateName" class="form-label">模板名称 *</label>
+                            <input type="text" class="form-control" id="editTemplateName" name="name" 
+                                   value="${template.name.replace(/"/g, '&quot;')}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editTemplateType" class="form-label">巡检类型 *</label>
+                            <select class="form-select" id="editTemplateType" name="template_type" required>
+                                <option value="daily" ${template.template_type === 'daily' ? 'selected' : ''}>每日巡检</option>
+                                <option value="weekly" ${template.template_type === 'weekly' ? 'selected' : ''}>每周巡检</option>
+                                <option value="monthly" ${template.template_type === 'monthly' ? 'selected' : ''}>每月巡检</option>
+                                <option value="quarterly" ${template.template_type === 'quarterly' ? 'selected' : ''}>每季度巡检</option>
+                                <option value="annual" ${template.template_type === 'annual' ? 'selected' : ''}>年度巡检</option>
+                                <option value="special" ${template.template_type === 'special' ? 'selected' : ''}>特殊巡检</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="editTemplateDeviceType" class="form-label">设备类型</label>
+                            <select class="form-select" id="editTemplateDeviceType" name="device_type">
+                                <option value="">通用模板</option>
+                                <option value="server" ${template.device_type === 'server' ? 'selected' : ''}>服务器</option>
+                                <option value="network" ${template.device_type === 'network' ? 'selected' : ''}>网络设备</option>
+                                <option value="storage" ${template.device_type === 'storage' ? 'selected' : ''}>存储设备</option>
+                                <option value="security" ${template.device_type === 'security' ? 'selected' : ''}>安全设备</option>
+                                <option value="desktop" ${template.device_type === 'desktop' ? 'selected' : ''}>台式机</option>
+                                <option value="laptop" ${template.device_type === 'laptop' ? 'selected' : ''}>笔记本</option>
+                                <option value="printer" ${template.device_type === 'printer' ? 'selected' : ''}>打印机</option>
+                                <option value="other" ${template.device_type === 'other' ? 'selected' : ''}>其他</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editTemplateVendor" class="form-label">厂商</label>
+                            <input type="text" class="form-control" id="editTemplateVendor" name="vendor" 
+                                   value="${template.vendor ? template.vendor.replace(/"/g, '&quot;') : ''}" placeholder="如: Dell, Cisco, HPE">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editTemplateModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="editTemplateModel" name="model" 
+                                   value="${template.model ? template.model.replace(/"/g, '&quot;') : ''}" placeholder="如: PowerEdge R740, Catalyst 3850">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editTemplateDescription" class="form-label">模板描述</label>
+                        <textarea class="form-control" id="editTemplateDescription" name="description" rows="3">${template.description ? template.description.replace(/"/g, '&quot;') : ''}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editTemplateItems" class="form-label">检查项目 *</label>
+                        <textarea class="form-control" id="editTemplateItems" name="inspection_items" rows="8" required>${itemsText.replace(/"/g, '&quot;')}</textarea>
+                        <div class="form-text">每行一个检查项，或使用 JSON 格式</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editTemplateIsActive" name="is_active" ${template.is_active ? 'checked' : ''}>
+                            <label class="form-check-label" for="editTemplateIsActive">
+                                启用模板
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" name="template_id" value="${template.id}">
+                `;
+                
+                document.getElementById('editTemplateContent').innerHTML = editHtml;
+                document.getElementById('editTemplateForm').action = '#';
+                document.getElementById('editTemplateForm').onsubmit = function(e) {
+                    e.preventDefault();
+                    updateTemplate(templateId);
+                };
+                
+                const modal = new bootstrap.Modal(document.getElementById('editTemplateModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching template for edit:', error);
+                alert('获取模板信息失败: ' + error.message);
+            });
+    }
+    
+    // 创建模板
+    function createTemplate() {
+        const form = document.getElementById('createTemplateForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // 处理检查项目字段名：inspection_items → items
+        if (data.inspection_items) {
+            const useJsonFormat = document.getElementById('useJsonFormat').checked;
+            if (useJsonFormat) {
+                try {
+                    JSON.parse(data.inspection_items);
+                } catch (e) {
+                    alert('检查项目不是有效的JSON格式，请检查语法');
+                    return;
+                }
+                data.items = data.inspection_items;
+            } else {
+                const items = data.inspection_items.split('\n')
+                    .filter(item => item.trim())
+                    .map(item => item.trim());
+                data.items = JSON.stringify(items);
+            }
+            delete data.inspection_items;
+        } else {
+            alert('检查项目不能为空');
+            return;
+        }
+        
+        if (!data.template_type) {
+            alert('请选择巡检类型');
+            return;
+        }
+        
+        fetch('/maintenance/api/inspection_templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('模板创建成功');
+                try {
+                    const modalElement = document.getElementById('createTemplateModal');
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                        const modal = bootstrap.Modal.getInstance(modalElement);
+                        if (modal) modal.hide();
+                    } else {
+                        modalElement.classList.remove('show');
+                        modalElement.style.display = 'none';
+                        document.body.classList.remove('modal-open');
+                        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    }
+                } catch (e) {
+                    console.warn('关闭模态框失败', e);
+                }
+                window.location.reload();
+            } else {
+                alert('创建模板失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error creating template:', error);
+            alert('创建模板失败: ' + error.message);
+        });
+    }
+    
+    // 更新模板（修复 is_active 类型问题）
+    function updateTemplate(templateId) {
+        const form = document.getElementById('editTemplateForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // 处理复选框 is_active
+        const isActiveCheckbox = document.getElementById('editTemplateIsActive');
+        data.is_active = isActiveCheckbox.checked; // true/false
+
+        // 处理检查项目字段名：inspection_items → items
+        if (data.inspection_items) {
+            const trimmed = data.inspection_items.trim();
+            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                try {
+                    JSON.parse(trimmed);
+                    data.items = trimmed;
+                } catch (e) {
+                    alert('JSON 格式无效，请检查');
+                    return;
+                }
+            } else {
+                const items = trimmed.split('\n')
+                    .filter(item => item.trim())
+                    .map(item => item.trim());
+                data.items = JSON.stringify(items);
+            }
+            delete data.inspection_items;
+        }
+        
+        fetch(`/maintenance/api/inspection_templates/${templateId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('模板更新成功');
+                try {
+                    const modalElement = document.getElementById('editTemplateModal');
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                        const modal = bootstrap.Modal.getInstance(modalElement);
+                        if (modal) modal.hide();
+                    } else {
+                        modalElement.classList.remove('show');
+                        modalElement.style.display = 'none';
+                        document.body.classList.remove('modal-open');
+                        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    }
+                } catch (e) {
+                    console.warn('关闭模态框失败', e);
+                }
+                window.location.reload();
+            } else {
+                alert('更新模板失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error updating template:', error);
+            alert('更新模板失败: ' + error.message);
+        });
+    }
+    
+    // 删除模板
+    function deleteTemplate(templateId) {
+        if (!confirm('确定要删除这个巡检模板吗？此操作不可撤销。')) return;
+        
+        fetch(`/maintenance/api/inspection_templates/${templateId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('模板删除成功');
+                window.location.reload();
+            } else {
+                alert('删除模板失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting template:', error);
+            alert('删除模板失败: ' + error.message);
+        });
+    }
+    
+    // 从模板创建任务
+    function createTaskFromTemplate(templateId) {
+        // 关闭详情模态框（如果存在）
+        const detailModal = bootstrap.Modal.getInstance(document.getElementById('templateDetailModal'));
+        if (detailModal) detailModal.hide();
+
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+const taskHtml = `
+    <div class="mb-3">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>将从模板创建新的巡检任务
+        </div>
+    </div>
+    
+    <div class="mb-3">
+        <label for="taskName" class="form-label">任务名称 *</label>
+        <input type="text" class="form-control" id="taskName" name="name" 
+               value="巡检任务 - ${new Date().toLocaleDateString()}" required>
+    </div>
+    
+    <div class="mb-3">
+        <label for="taskDueDate" class="form-label">截止日期 *</label>
+        <input type="date" class="form-control" id="taskDueDate" name="due_date" 
+               value="${nextWeekStr}" required min="${today.toISOString().split('T')[0]}">
+    </div>
+    
+    <div class="mb-3">
+        <label for="taskPriority" class="form-label">优先级</label>
+        <select class="form-select" id="taskPriority" name="priority">
+            <option value="low">低</option>
+            <option value="medium" selected>中</option>
+            <option value="high">高</option>
+            <option value="critical">紧急</option>
+        </select>
+    </div>
+    
+    <div class="mb-3">
+        <label for="taskDescription" class="form-label">任务描述</label>
+        <textarea class="form-control" id="taskDescription" name="description" rows="3" placeholder="可选的巡检任务描述..."></textarea>
+    </div>
+    
+    <input type="hidden" name="template_id" value="${templateId}">
+`;
+
+        document.getElementById('createTaskContent').innerHTML = taskHtml;
+        document.getElementById('createTaskContent').dataset.templateId = templateId;
+
+        if (typeof bootstrap !== 'undefined') {
+            const modal = new bootstrap.Modal(document.getElementById('createTaskModal'));
+            modal.show();
+        } else {
+            alert('Bootstrap 未加载，无法打开模态框');
+        }
+    }
+    
+    function createTaskWithTemplate(templateId) {
+        const form = document.getElementById('createTaskForm');
+        const formData = new FormData(form);
+        const data = {
+            name: formData.get('name'),
+            due_date: formData.get('due_date'),
+            template_id: templateId,
+            description: formData.get('description') || ''
+        };
+
+        fetch('/maintenance/api/inspection_tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('巡检任务创建成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
+                if (modal) modal.hide();
+                window.location.href = '/maintenance/inspection/tasks';  // ✅ 正确路径
+            } else {
+                alert('创建任务失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error creating task:', error);
+            alert('创建任务失败: ' + error.message);
+        });
+    }
+        
+    // 添加快速检查项
+    function addQuickItem(item) {
+        const textarea = document.getElementById('templateItems');
+        const currentValue = textarea.value;
+        const newValue = currentValue + (currentValue && !currentValue.endsWith('\n') ? '\n' : '') + item;
+        textarea.value = newValue;
+        textarea.focus();
+        textarea.scrollTop = textarea.scrollHeight;
+    }
+    
+    function showAdvancedItems() {
+        const textarea = document.getElementById('templateItems');
+        const exampleJson = `[
+  {
+    "name": "检查CPU使用率",
+    "description": "检查CPU使用率是否超过80%",
+    "expected": "≤ 80%"
+  },
+  {
+    "name": "检查内存使用率",
+    "description": "检查内存使用率是否超过85%",
+    "expected": "≤ 85%"
+  },
+  {
+    "name": "检查磁盘空间",
+    "description": "检查系统盘剩余空间",
+    "expected": "≥ 20GB"
+  }
+]`;
+        textarea.value = exampleJson;
+        document.getElementById('useJsonFormat').checked = true;
+        toggleJsonFormat();
+        textarea.focus();
+    }
+    
+    function toggleJsonFormat() {
+        const useJson = document.getElementById('useJsonFormat').checked;
+        const jsonHelp = document.getElementById('jsonHelp');
+        const textarea = document.getElementById('templateItems');
+        
+        if (useJson) {
+            jsonHelp.style.display = 'block';
+            textarea.placeholder = '请输入JSON格式的检查项数组...';
+        } else {
+            jsonHelp.style.display = 'none';
+            textarea.placeholder = '例如：\n检查CPU使用率是否正常\n检查内存使用率是否正常\n检查磁盘空间是否充足\n检查系统日志是否有错误\n检查网络连接是否正常';
+        }
+    }
+</script>
+{% endblock %}

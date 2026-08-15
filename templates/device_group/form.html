@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('device_group.list_view') }}">设备分组</a></li>
+                    <li class="breadcrumb-item active">{{ title }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2">{{ title }}</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {{ form.hidden_tag() }}
+
+                        <div class="mb-3">
+                            {{ form.name.label(class='form-label') }}
+                            {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else '')) }}
+                            {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.description.label(class='form-label') }}
+                            {{ form.description(class='form-control', rows=3) }}
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.color.label(class='form-label') }}
+                                <div class="input-group">
+                                    {{ form.color(class='form-control form-control-color' + (' is-invalid' if form.color.errors else ''), type='color') }}
+                                </div>
+                                {% for e in form.color.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.icon.label(class='form-label') }}
+                                {{ form.icon(class='form-control' + (' is-invalid' if form.icon.errors else ''), placeholder='fa-folder') }}
+                                <div class="form-text">Font Awesome 图标名称</div>
+                                {% for e in form.icon.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.sort_order.label(class='form-label') }}
+                                {{ form.sort_order(class='form-control' + (' is-invalid' if form.sort_order.errors else ''), type='number') }}
+                                {% for e in form.sort_order.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.parent_id.label(class='form-label') }}
+                            {{ form.parent_id(class='form-select' + (' is-invalid' if form.parent_id.errors else '')) }}
+                            <div class="form-text">选择父级分组以建立树形层级</div>
+                            {% for e in form.parent_id.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                        </div>
+
+                        <hr>
+                        <h6><i class="fas fa-robot me-1"></i>自动归类规则（可选）</h6>
+                        <p class="text-muted small">设置规则后，执行"自动归类"操作时会根据规则自动将设备归入此分组</p>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.auto_rule_type.label(class='form-label') }}
+                                {{ form.auto_rule_type(class='form-select' + (' is-invalid' if form.auto_rule_type.errors else ''), id='autoRuleType') }}
+                                {% for e in form.auto_rule_type.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-8">
+                                {{ form.auto_rule_value.label(class='form-label') }}
+                                {{ form.auto_rule_value(class='form-control' + (' is-invalid' if form.auto_rule_value.errors else ''), id='autoRuleValue', placeholder='例如: 192.168.1. 或 SW-%') }}
+                                <div class="form-text" id="ruleHelp">
+                                    IP网段: 输入IP前三段加小数点，如 <code>192.168.1.</code><br>
+                                    名称匹配: 使用 % 通配符，如 <code>SW-%</code> 匹配 SW- 开头的设备
+                                </div>
+                                {% for e in form.auto_rule_value.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                            <a href="{{ url_for('device_group.list_view') }}" class="btn btn-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ruleType = document.getElementById('autoRuleType');
+    const ruleValue = document.getElementById('autoRuleValue');
+    const ruleHelp = document.getElementById('ruleHelp');
+
+    function updateHelp() {
+        if (ruleType.value === 'ip_subnet') {
+            ruleHelp.innerHTML = '输入IP网段前缀，如 <code>192.168.1.</code>（将匹配所有 192.168.1.x 的设备）';
+            ruleValue.placeholder = '192.168.1.';
+        } else if (ruleType.value === 'name_pattern') {
+            ruleHelp.innerHTML = '使用 % 通配符匹配设备名称，如 <code>SW-%</code> 匹配所有以 SW- 开头的设备';
+            ruleValue.placeholder = 'SW-%';
+        } else {
+            ruleHelp.innerHTML = '选择规则类型后，此处会显示对应的格式说明';
+            ruleValue.placeholder = '';
+        }
+    }
+
+    ruleType.addEventListener('change', updateHelp);
+    updateHelp();
+});
+</script>
+{% endblock %}

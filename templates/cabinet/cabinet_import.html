@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}机柜导入 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    /* 原有样式保持不变（省略以节省篇幅，实际使用时请复制原样式） */
+    .upload-area { border: 2px dashed #dee2e6; border-radius: 8px; padding: 40px 20px; text-align: center; background-color: #f8f9fa; cursor: pointer; transition: all 0.3s ease; margin-bottom: 20px; }
+    .upload-area:hover { border-color: #007bff; background-color: #e7f1ff; }
+    .upload-area.dragover { border-color: #28a745; background-color: #d4edda; }
+    .upload-icon { font-size: 48px; color: #6c757d; margin-bottom: 15px; }
+    .file-name { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-top: 10px; display: none; }
+    .file-name.show { display: block; }
+    .template-download, .import-stats, .progress-container { /* 原有样式 */ }
+    .column-info code { background-color: #e9ecef; padding: 2px 4px; border-radius: 3px; }
+    .example-table { font-size: 0.85rem; margin-top: 15px; }
+    .error-list { max-height: 200px; overflow-y: auto; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 10px; margin-top: 10px; display: none; }
+    .error-list.show { display: block; }
+    .error-item { color: #856404; font-size: 0.85rem; margin-bottom: 5px; padding: 5px; border-bottom: 1px dashed #ffeaa7; }
+    /* 响应式调整 */
+    @media (max-width: 768px) { .upload-area { padding: 30px 15px; } .upload-icon { font-size: 36px; } }
+</style>
+{% endblock %}
+
+{% block page_title %}机柜导入{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-secondary btn-sm me-2">
+        <i class="fas fa-arrow-left"></i> 返回列表
+    </a>
+    <a href="{{ url_for('cabinet.cabinet_add') }}" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus"></i> 手动添加
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- 导入表单 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-file-import me-2"></i>导入Excel文件</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('cabinet.cabinet_import') }}" enctype="multipart/form-data" id="importForm">
+                    {{ form.csrf_token }}
+                    
+                    <!-- 文件上传区域 -->
+                    <div class="mb-4">
+                        <label for="file" class="form-label required-field">选择Excel文件</label>
+                        <div id="uploadArea" class="upload-area">
+                            <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                            <h5>拖拽文件到此处或点击选择</h5>
+                            <p class="text-muted mb-3">支持 .xlsx 或 .xls 格式，最大文件大小 10MB</p>
+                            <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('file').click()">
+                                <i class="fas fa-folder-open me-2"></i>选择文件
+                            </button>
+                        </div>
+                        {{ form.file(class="form-control d-none", id="file", accept=".xlsx,.xls", required=True) }}
+                        <div id="fileName" class="file-name">
+                            <i class="fas fa-file-excel text-success me-2"></i>
+                            <span id="fileNameText"></span>
+                            <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="clearFile()"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="invalid-feedback" id="fileError">请选择有效的Excel文件</div>
+                        {% if form.file.errors %}{% for error in form.file.errors %}<div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ error }}</div>{% endfor %}{% endif %}
+                    </div>
+                    
+                    <!-- 导入选项 -->
+                    <div class="mb-4">
+                        <h6 class="mb-3"><i class="fas fa-cog me-2"></i>导入选项</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="skipDuplicates" name="skip_duplicates" checked>
+                                    <label class="form-check-label" for="skipDuplicates">跳过重复记录</label>
+                                    <div class="help-text">如果机柜名称已存在，则跳过该记录</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="updateExisting" name="update_existing">
+                                    <label class="form-check-label" for="updateExisting">更新现有记录</label>
+                                    <div class="help-text">如果机柜已存在，则更新其信息（需要机柜名称匹配）</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="validateLocation" name="validate_location" checked>
+                                    <label class="form-check-label" for="validateLocation">验证位置ID</label>
+                                    <div class="help-text">检查位置ID是否存在于系统中</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 进度条 -->
+                    <div id="progressContainer" class="progress-container">
+                        <div class="d-flex justify-content-between mb-2"><span>导入进度</span><span id="progressPercentage">0%</span></div>
+                        <div class="progress"><div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div></div>
+                        <div id="progressMessage" class="text-center mt-2 small text-muted">准备导入...</div>
+                    </div>
+                    
+                    <!-- 导入结果 -->
+                    <div id="importStats" class="import-stats">
+                        <h6 class="mb-3"><i class="fas fa-chart-bar me-2"></i>导入结果</h6>
+                        <div id="statItems"></div>
+                        <div id="errorList" class="error-list"><h6 class="mb-2"><i class="fas fa-exclamation-triangle me-2"></i>错误信息</h6><div id="errorItems"></div></div>
+                    </div>
+                    
+                    <!-- 提交按钮 -->
+                    <div class="d-flex justify-content-between mt-4">
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='{{ url_for('cabinet.cabinet_list') }}'"><i class="fas fa-times me-2"></i>取消</button>
+                        <div>
+                            <button type="button" class="btn btn-outline-primary me-2" onclick="downloadTemplate()"><i class="fas fa-download me-2"></i>下载模板</button>
+                            <button type="submit" class="btn btn-primary" id="submitBtn"><i class="fas fa-upload me-2"></i>开始导入</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 右侧信息面板 -->
+    <div class="col-lg-4">
+        <!-- 模板信息 -->
+        <div class="card mb-4">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-file-excel me-2"></i>模板说明</h6></div>
+            <div class="card-body">
+                <p class="mb-3">下载模板文件，按照指定的列名和格式填写数据，然后上传导入。</p>
+                <div class="mb-3"><h6>必填列：</h6><div class="column-info"><p><code>机柜名称</code> - 机柜的唯一标识名称</p><p><code>位置ID</code> - 机柜所属位置的ID（整数）</p></div></div>
+                <div class="mb-3"><h6>可选列：</h6><div class="column-info">
+                    <p><code>机柜型号</code> - 机柜型号（文本）</p>
+                    <p><code>制造厂商</code> - 制造商（文本）</p>
+                    <p><code>U位高度</code> - 机柜高度（整数，默认42）</p>
+                    <p><code>宽度(mm)</code> - 宽度（整数）</p>
+                    <p><code>深度(mm)</code> - 深度（整数）</p>
+                    <p><code>承重(kg)</code> - 最大承重（整数）</p>
+                    <p><code>电源容量(KW)</code> - 电源容量（浮点数）</p>
+                    <p><code>电源配置</code> - 电源配置描述（文本）</p>
+                    <p><code>网络接入</code> - 网络接入描述（文本）</p>
+                    <p><code>制冷系统</code> - 制冷方式（文本）</p>
+                    <p><code>标签</code> - 标签，多个用逗号分隔（文本）</p>
+                    <p><code>描述</code> - 机柜描述（文本）</p>
+                    <p><code>备注</code> - 备注信息（文本）</p>
+                </div></div>
+            </div>
+        </div>
+        
+        <!-- 示例表格 -->
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-table me-2"></i>示例数据</h6></div>
+            <div class="card-body">
+                <div class="table-responsive example-table">
+                    <table class="table table-sm table-bordered">
+                        <thead><tr><th>机柜名称</th><th>位置ID</th><th>机柜型号</th><th>制造厂商</th><th>U位高度</th><th>宽度(mm)</th><th>深度(mm)</th><th>标签</th></tr></thead>
+                        <tbody>
+                            <tr><td>机房A-01</td><td>1</td><td>NetShelter SX</td><td>APC</td><td>42</td><td>600</td><td>1000</td><td>核心,生产</td></tr>
+                            <tr><td>机房A-02</td><td>1</td><td>智能机柜</td><td>华为</td><td>42</td><td>800</td><td>1200</td><td>网络</td></tr>
+                            <tr><td>机房B-01</td><td>2</td><td></td><td></td><td>36</td><td>600</td><td>1000</td><td>存储</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入完成模态框 -->
+<div class="modal fade" id="importCompleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-check-circle text-success me-2"></i>导入完成</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="text-center mb-3"><i class="fas fa-check-circle fa-4x text-success mb-3"></i><h4 id="completeMessage">导入成功！</h4></div>
+                <div id="completeStats" class="mt-4"></div>
+                <div id="completeErrors" class="mt-3" style="display:none;"><h6><i class="fas fa-exclamation-triangle me-2 text-warning"></i>部分记录导入失败：</h6><div id="completeErrorItems" class="small"></div></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">继续导入</button>
+                <a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-primary"><i class="fas fa-list me-2"></i>查看机柜列表</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let selectedFile = null;
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('file');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileName = document.getElementById('fileName');
+    const fileNameText = document.getElementById('fileNameText');
+    const form = document.getElementById('importForm');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            selectedFile = this.files[0];
+            fileNameText.textContent = `${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+            fileName.classList.add('show');
+            uploadArea.classList.add('dragover');
+            if (!validateFileType(selectedFile) || !validateFileSize(selectedFile)) {
+                showFileError('文件类型或大小不符合要求（最大10MB，支持.xlsx/.xls）');
+                submitBtn.disabled = true;
+            } else {
+                hideFileError();
+                submitBtn.disabled = false;
+            }
+        }
+    });
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', e => { uploadArea.classList.remove('dragover'); });
+    uploadArea.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files.length) fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+    });
+    uploadArea.addEventListener('click', () => fileInput.click());
+    form.addEventListener('submit', function(e) {
+        if (!selectedFile) { e.preventDefault(); showFileError('请选择要导入的文件'); return; }
+        document.getElementById('progressContainer').classList.add('show');
+        document.getElementById('importStats').classList.remove('show');
+        updateProgress(0, '开始导入文件...');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>导入中...';
+    });
+});
+
+function formatFileSize(bytes) { if (bytes===0) return '0 Bytes'; const k=1024, sizes=['Bytes','KB','MB','GB'], i=Math.floor(Math.log(bytes)/Math.log(k)); return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i]; }
+function validateFileType(file) { return ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel'].includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls'); }
+function validateFileSize(file) { return file.size <= 10*1024*1024; }
+function showFileError(msg) { const el=document.getElementById('fileError'); el.textContent=msg; el.style.display='block'; }
+function hideFileError() { document.getElementById('fileError').style.display='none'; }
+function clearFile() { document.getElementById('file').value=''; document.getElementById('fileName').classList.remove('show'); document.getElementById('uploadArea').classList.remove('dragover'); selectedFile=null; document.getElementById('submitBtn').disabled=true; hideFileError(); }
+function updateProgress(pct, msg) { const bar=document.getElementById('progressBar'), pctSpan=document.getElementById('progressPercentage'), msgDiv=document.getElementById('progressMessage'); bar.style.width=pct+'%'; bar.setAttribute('aria-valuenow',pct); pctSpan.textContent=pct+'%'; msgDiv.textContent=msg; if(pct>=100) { bar.classList.remove('progress-bar-animated','bg-info'); bar.classList.add('bg-success'); } }
+function showImportStats(stats) {
+    const container=document.getElementById('statItems'), errorContainer=document.getElementById('errorItems'), errorList=document.getElementById('errorList');
+    container.innerHTML='';
+    errorContainer.innerHTML='';
+    const items=[{label:'总记录数',value:stats.total||0,class:''},{label:'成功导入',value:stats.success||0,class:'success'},{label:'跳过重复',value:stats.skipped||0,class:'warning'},{label:'导入失败',value:stats.failed||0,class:'danger'}];
+    items.forEach(s=>{ const div=document.createElement('div'); div.className='stat-item'; div.innerHTML=`<span>${s.label}:</span><span class="stat-value ${s.class}">${s.value}</span>`; container.appendChild(div); });
+    if(stats.errors && stats.errors.length) { stats.errors.slice(0,10).forEach((err,i)=>{ const div=document.createElement('div'); div.className='error-item'; div.textContent=`${i+1}. ${err}`; errorContainer.appendChild(div); }); errorList.classList.add('show'); } else errorList.classList.remove('show');
+    document.getElementById('importStats').classList.add('show');
+}
+function showImportCompleteModal(stats) {
+    const completeStats=document.getElementById('completeStats'), errorItems=document.getElementById('completeErrorItems'), errorDiv=document.getElementById('completeErrors'), msg=document.getElementById('completeMessage');
+    completeStats.innerHTML='';
+    errorItems.innerHTML='';
+    completeStats.innerHTML=`<div class="row text-center"><div class="col-6"><div class="display-6 text-success">${stats.success||0}</div><div class="text-muted">成功导入</div></div><div class="col-6"><div class="display-6 ${stats.failed>0?'text-warning':'text-muted'}">${stats.failed||0}</div><div class="text-muted">导入失败</div></div></div>`;
+    if(stats.errors && stats.errors.length) { stats.errors.slice(0,5).forEach(err=>{ const div=document.createElement('div'); div.className='mb-1'; div.innerHTML=`<i class="fas fa-times-circle text-danger me-1"></i>${err}`; errorItems.appendChild(div); }); errorDiv.style.display='block'; } else errorDiv.style.display='none';
+    msg.textContent = stats.failed>0 ? `导入完成（${stats.success}成功，${stats.failed}失败）` : '导入成功！';
+    new bootstrap.Modal(document.getElementById('importCompleteModal')).show();
+}
+function downloadTemplate() {
+    const data = [
+        ['机柜名称','位置ID','机柜型号','制造厂商','U位高度','宽度(mm)','深度(mm)','承重(kg)','电源容量(KW)','电源配置','网络接入','制冷系统','标签','描述','备注'],
+        ['机房A-01','1','NetShelter SX','APC','42','600','1000','1000','5.0','双路UPS供电','双万兆上联','精密空调','核心,生产','核心机柜',''],
+        ['机房A-02','1','智能机柜','华为','42','800','1200','1200','7.5','双路供电','千兆交换机','行级制冷','网络','网络机柜',''],
+        ['机房B-01','2','','','36','600','1000','800','3.0','单路','百兆交换机','自然通风','存储','存储机柜',''],
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{wch:15},{wch:10},{wch:18},{wch:12},{wch:10},{wch:12},{wch:12},{wch:10},{wch:15},{wch:25},{wch:25},{wch:15},{wch:20},{wch:30},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, ws, "机柜导入模板");
+    // 添加说明页
+    const instructions = [
+        ['列名','说明','是否必填','示例'],
+        ['机柜名称','机柜唯一标识名称','是','机房A-01'],
+        ['位置ID','系统内位置ID（整数）','是','1'],
+        ['机柜型号','机柜型号','否','NetShelter SX'],
+        ['制造厂商','制造商名称','否','APC'],
+        ['U位高度','机柜U位高度，默认42','否','42'],
+        ['宽度(mm)','机柜宽度，单位mm','否','600'],
+        ['深度(mm)','机柜深度，单位mm','否','1000'],
+        ['承重(kg)','最大承重','否','1000'],
+        ['电源容量(KW)','电源容量，单位千瓦','否','5.0'],
+        ['电源配置','电源配置描述','否','双路UPS供电'],
+        ['网络接入','网络接入描述','否','双万兆上联'],
+        ['制冷系统','制冷方式','否','精密空调'],
+        ['标签','多个标签用逗号分隔','否','核心,生产'],
+        ['描述','机柜描述','否','核心机柜'],
+        ['备注','备注信息','否','']
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(instructions);
+    ws2['!cols'] = [{wch:15},{wch:35},{wch:10},{wch:25}];
+    XLSX.utils.book_append_sheet(wb, ws2, "填写说明");
+    XLSX.writeFile(wb, '机柜导入模板.xlsx');
+}
+</script>
+{% endblock %}

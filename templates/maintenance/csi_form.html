@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{% if ci %}编辑改进项{% else %}登记改进项{% endif %}{% endblock %}
+{% block page_title %}{% if ci %}编辑改进项 #{{ ci.code }}{% else %}登记持续改进项{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-md-8">
+  <div class="card">
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('itsm_adv.csi_register') if not ci else url_for('itsm_adv.csi_edit', ci_id=ci.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label">标题 <span class="text-danger">*</span></label>
+          <input type="text" name="title" class="form-control" required value="{{ ci.title if ci else prefill.title }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">说明</label>
+          <textarea name="description" class="form-control" rows="3">{{ ci.description if ci else '' }}</textarea>
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">来源类型</label>
+            <select name="source_type" class="form-select">
+              {% for t in ['audit','problem','change','incident','survey'] %}
+              <option value="{{ t }}" {% if (ci and ci.source_type==t) or (not ci and prefill.source_type==t) %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label">来源ID</label>
+            <input type="number" name="source_id" class="form-control" value="{{ ci.source_id if ci else prefill.source_id or '' }}">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">优先级</label>
+            <select name="priority" class="form-select">
+              {% for p in ['low','medium','high','critical'] %}
+              <option value="{{ p }}" {% if ci and ci.priority==p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label">负责人</label>
+            <select name="owner_id" class="form-select">
+              <option value="">未分配</option>
+              {% for u in users %}
+              <option value="{{ u.id }}" {% if ci and ci.owner_id==u.id %}selected{% endif %}>{{ u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label">目标指标</label>
+            <input type="text" name="target_metric" class="form-control" placeholder="MTTR / 可用率 / 满意度" value="{{ ci.target_metric if ci else '' }}">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col"><label class="form-label">基线值</label><input type="number" step="any" name="baseline_value" class="form-control" value="{{ ci.baseline_value if ci else '' }}"></div>
+          <div class="col"><label class="form-label">目标值</label><input type="number" step="any" name="target_value" class="form-control" value="{{ ci.target_value if ci else '' }}"></div>
+          <div class="col"><label class="form-label">实际达成</label><input type="number" step="any" name="actual_value" class="form-control" value="{{ ci.actual_value if ci else '' }}"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">预期收益</label>
+          <textarea name="expected_benefit" class="form-control" rows="2">{{ ci.expected_benefit if ci else '' }}</textarea>
+        </div>
+        {% if ci %}
+        <div class="mb-3">
+          <label class="form-label">复盘记录</label>
+          <textarea name="review_notes" class="form-control" rows="2">{{ ci.review_notes or '' }}</textarea>
+        </div>
+        {% endif %}
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+          <a href="{{ url_for('itsm_adv.csi_dashboard') }}" class="btn btn-secondary">取消</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}

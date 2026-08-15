@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑' if contract else '添加' }}合同{% endblock %}
+{% block page_title %}{{ '编辑' if contract else '添加' }}合同{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="POST" class="row g-3">
+            {{ form.csrf_token if form else '' }}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="col-md-6">
+                <label class="form-label">合同编号 <span class="text-danger">*</span></label>
+                <input type="text" name="contract_no" class="form-control" required
+                       value="{{ contract.contract_no if contract else '' }}"
+                       placeholder="自动生成或手动输入">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">合同名称 <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control" required
+                       value="{{ contract.name if contract else '' }}" placeholder="合同名称">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">合同类型</label>
+                <select name="contract_type" class="form-select">
+                    <option value="purchase" {% if contract and contract.contract_type == 'purchase' %}selected{% endif %}>采购合同</option>
+                    <option value="maintenance" {% if contract and contract.contract_type == 'maintenance' %}selected{% endif %}>维护合同</option>
+                    <option value="lease" {% if contract and contract.contract_type == 'lease' %}selected{% endif %}>租赁合同</option>
+                    <option value="sla" {% if contract and contract.contract_type == 'sla' %}selected{% endif %}>SLA协议</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">供应商</label>
+                <select name="supplier_id" class="form-select">
+                    <option value="">-- 选择供应商 --</option>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}" {% if contract and contract.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">合同金额 (¥)</label>
+                <input type="number" step="0.01" name="total_value" class="form-control"
+                       value="{{ contract.total_value if contract else 0 }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">开始日期 <span class="text-danger">*</span></label>
+                <input type="date" name="start_date" class="form-control" required
+                       value="{{ contract.start_date.isoformat() if contract and contract.start_date else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">结束日期 <span class="text-danger">*</span></label>
+                <input type="date" name="end_date" class="form-control" required
+                       value="{{ contract.end_date.isoformat() if contract and contract.end_date else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">续约日期</label>
+                <input type="date" name="renewal_date" class="form-control"
+                       value="{{ contract.renewal_date.isoformat() if contract and contract.renewal_date else '' }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">付款条款</label>
+                <input type="text" name="payment_terms" class="form-control"
+                       value="{{ contract.payment_terms if contract else '' }}" placeholder="如: 30%预付,70%验收">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">付款状态</label>
+                <select name="payment_status" class="form-select">
+                    <option value="pending" {% if contract and contract.payment_status == 'pending' %}selected{% endif %}>待付款</option>
+                    <option value="partial" {% if contract and contract.payment_status == 'partial' %}selected{% endif %}>部分付款</option>
+                    <option value="paid" {% if contract and contract.payment_status == 'paid' %}selected{% endif %}>已付款</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">到期提醒 (提前天数)</label>
+                <input type="number" name="notification_days" class="form-control" value="{{ contract.notification_days if contract else 30 }}">
+            </div>
+
+            {% if contract %}
+            <div class="col-md-4">
+                <label class="form-label">合同状态</label>
+                <select name="status" class="form-select">
+                    <option value="active" {% if contract.status == 'active' %}selected{% endif %}>生效中</option>
+                    <option value="expired" {% if contract.status == 'expired' %}selected{% endif %}>已过期</option>
+                    <option value="terminated" {% if contract.status == 'terminated' %}selected{% endif %}>已终止</option>
+                    <option value="renewed" {% if contract.status == 'renewed' %}selected{% endif %}>已续约</option>
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="col-12">
+                <label class="form-label">关联资产</label>
+                <select name="asset_ids" class="form-select" multiple style="height:150px">
+                    {% for a in assets %}
+                    <option value="{{ a.id }}"
+                    {% if contract and contract.assets %}
+                        {% for ca in contract.assets %}
+                            {% if ca.id == a.id %}selected{% endif %}
+                        {% endfor %}
+                    {% endif %}
+                    >[{{ a.asset_number or '' }}] {{ a.asset_name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">按住Ctrl多选</small>
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">备注</label>
+                <textarea name="description" class="form-control" rows="3">{{ contract.description if contract else '' }}</textarea>
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> {{ '保存修改' if contract else '添加合同' }}
+                </button>
+                <a href="{{ url_for('asset_extra.contract_list') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

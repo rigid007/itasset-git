@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block title %}设备发现 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}设备发现{% endblock %}
+{% block page_subtitle %}通过SNMP扫描和IP检测发现网络中的设备，自动添加到设备清单{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group me-2">
+    <button class="btn btn-outline-secondary" id="refreshTasksBtn">
+        <i class="bi bi-arrow-repeat"></i> 刷新
+    </button>
+</div>
+<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal">
+    <i class="bi bi-plus-circle"></i> 创建发现任务
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">任务总数</h6>
+                        <h2 class="mb-0" id="statTotal">0</h2>
+                    </div>
+                    <i class="bi bi-list-task fs-1"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">运行中</h6>
+                        <h2 class="mb-0" id="statRunning">0</h2>
+                    </div>
+                    <i class="bi bi-play-circle fs-1"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">已完成</h6>
+                        <h2 class="mb-0" id="statCompleted">0</h2>
+                    </div>
+                    <i class="bi bi-check-circle fs-1"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title">发现设备</h6>
+                        <h2 class="mb-0" id="statDiscovered">0</h2>
+                    </div>
+                    <i class="bi bi-hdd-stack fs-1"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">发现任务列表</h5>
+            <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-sm" id="toggleCompletedBtn">
+                    隐藏已完成
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>任务名称</th>
+                            <th>发现模式</th>
+                            <th>目标</th>
+                            <th>调度</th>
+                            <th>状态</th>
+                            <th>进度</th>
+                            <th>发现设备</th>
+                            <th>上次执行</th>
+                            <th>下次执行</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody">
+                        <tr id="noTasksRow">
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                暂无发现任务，点击"创建发现任务"开始
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最近发现结果 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">最近发现的设备</h5>
+            <small class="text-muted">最近20条</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>设备名称</th>
+                            <th>IP地址</th>
+                            <th>设备类型</th>
+                            <th>MAC地址</th>
+                            <th>发现方式</th>
+                            <th>发现时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentDevicesBody">
+                        <tr id="noDevicesRow">
+                            <td colspan="6" class="text-center text-muted py-4">
+                                暂无发现记录
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== 创建/编辑任务 Modal ==================== -->
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTaskModalLabel">创建设备发现任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTaskForm">
+                    <input type="hidden" id="taskId" value="">
+
+                    <!-- 基本信息 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="taskName" class="form-label">任务名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="taskName" required placeholder="如: 核心网段SNMP扫描">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="taskDescription" class="form-label">描述</label>
+                            <input type="text" class="form-control" id="taskDescription" placeholder="可选描述">
+                        </div>
+                    </div>
+
+                    <!-- 发现模式 -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="scanMode" class="form-label">发现模式</label>
+                            <select class="form-select" id="scanMode">
+                                <option value="snmp_scan">IP段SNMP扫描</option>
+                                <option value="ip_import">IP段批量导入</option>
+                            </select>
+                            <div class="form-text" id="scanModeHelp">SNMP扫描主动探测设备信息；批量导入通过Ping+ARP确认在线后添加</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="ipRange" class="form-label">IP段 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="ipRange" required
+                                   placeholder="192.168.1.1-255 或 192.168.1.0/24">
+                            <div class="form-text">起始IP-结束IP 或 CIDR格式</div>
+                        </div>
+                    </div>
+
+                    <!-- SNMP配置（SNMP扫描模式） -->
+                    <div id="snmpConfigSection">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="snmpCommunity" class="form-label">SNMP社区名</label>
+                                <input type="text" class="form-control" id="snmpCommunity" value="public">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="snmpVersion" class="form-label">SNMP版本</label>
+                                <select class="form-select" id="snmpVersion">
+                                    <option value="2c" selected>SNMPv2c</option>
+                                    <option value="1">SNMPv1</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="snmpTimeout" class="form-label">超时(秒)</label>
+                                <input type="number" class="form-control" id="snmpTimeout" value="2" min="1" max="10">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="autoAdd" checked>
+                                    <label class="form-check-label" for="autoAdd">自动添加新设备</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="skipExisting" checked>
+                                    <label class="form-check-label" for="skipExisting">跳过已存在设备</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="snmpRetries" class="form-label">重试次数</label>
+                                <input type="number" class="form-control" id="snmpRetries" value="2" min="0" max="5">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 批量导入配置（导入模式） -->
+                    <div id="importConfigSection" style="display:none;">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="deviceType" class="form-label">默认设备类型</label>
+                                <select class="form-select" id="deviceType">
+                                    <option value="unknown">未知设备</option>
+                                    <option value="router">路由器</option>
+                                    <option value="switch">交换机</option>
+                                    <option value="firewall">防火墙</option>
+                                    <option value="server">服务器</option>
+                                    <option value="pc">计算机</option>
+                                    <option value="ap">无线AP</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="manufacturer" class="form-label">厂商（可选）</label>
+                                <input type="text" class="form-control" id="manufacturer" placeholder="如: Cisco, Huawei">
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="usePing" checked>
+                                    <label class="form-check-label" for="usePing">严格检测在线状态</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="concurrent" class="form-label">并发数</label>
+                                <input type="number" class="form-control" id="concurrent" value="20" min="1" max="50">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="pingTimeout" class="form-label">Ping超时(秒)</label>
+                                <input type="number" class="form-control" id="pingTimeout" value="2" min="1" max="5">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 调度配置 -->
+                    <div class="row mb-3 mt-3 border-top pt-3">
+                        <div class="col-md-4">
+                            <label for="scheduleType" class="form-label">调度类型</label>
+                            <select class="form-select" id="scheduleType">
+                                <option value="manual">手动</option>
+                                <option value="interval">间隔执行</option>
+                                <option value="cron">Cron表达式</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="intervalSection" style="display:none;">
+                            <label for="intervalSeconds" class="form-label">间隔(秒)</label>
+                            <input type="number" class="form-control" id="intervalSeconds" value="3600" min="60">
+                        </div>
+                        <div class="col-md-4" id="cronSection" style="display:none;">
+                            <label for="cronExpression" class="form-label">Cron表达式</label>
+                            <input type="text" class="form-control" id="cronExpression" placeholder="0 2 * * *">
+                            <div class="form-text">格式: 分 时 日 月 周</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveTaskBtn">
+                    <i class="bi bi-check-circle"></i> 保存任务
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function() {
+    let showCompleted = true;
+
+    // ========== 发现模式切换 ==========
+    $('#scanMode').change(function() {
+        const mode = $(this).val();
+        if (mode === 'snmp_scan') {
+            $('#snmpConfigSection').show();
+            $('#importConfigSection').hide();
+            $('#scanModeHelp').text('SNMP扫描主动探测设备信息，获取设备名称、类型、接口等详细信息');
+        } else {
+            $('#snmpConfigSection').hide();
+            $('#importConfigSection').show();
+            $('#scanModeHelp').text('批量导入通过Ping+TCP端口+ARP缓存确认在线状态后添加设备（至少2种方式确认）');
+        }
+    });
+
+    // ========== 调度类型切换 ==========
+    $('#scheduleType').change(function() {
+        const val = $(this).val();
+        $('#intervalSection, #cronSection').hide();
+        if (val === 'interval') $('#intervalSection').show();
+        else if (val === 'cron') $('#cronSection').show();
+    });
+
+    // ========== 加载任务列表（含自适应轮询） ==========
+    let runningTaskCount = 0;
+    let pollTimer = null;
+
+    function startAdaptivePoll() {
+        if (pollTimer) clearInterval(pollTimer);
+        const interval = runningTaskCount > 0 ? 3000 : 30000;
+        pollTimer = setInterval(function() {
+            loadTasks();
+            loadRecentDevices();
+        }, interval);
+    }
+
+    function loadTasks() {
+        $.ajax({
+            url: '/devices/discovery/tasks',
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                if (!res.success) return;
+                const tasks = res.tasks || [];
+                const newRunningCount = tasks.filter(t => t.status === 'running').length;
+
+                // 检测任务完成：上次有运行中的，这次没有了
+                if (runningTaskCount > 0 && newRunningCount === 0) {
+                    console.log('[设备发现] 所有任务执行完毕，刷新已发现设备列表');
+                    loadRecentDevices();
+                    setTimeout(loadRecentDevices, 2000);
+                }
+
+                if (newRunningCount !== runningTaskCount) {
+                    runningTaskCount = newRunningCount;
+                    startAdaptivePoll();
+                }
+
+                updateStats(tasks);
+                renderTaskTable(tasks);
+            },
+            error: function() { console.error('加载任务列表失败'); }
+        });
+    }
+
+    function updateStats(tasks) {
+        let total = tasks.length, running = 0, completed = 0, discovered = 0;
+        tasks.forEach(t => {
+            if (t.status === 'running') running++;
+            if (t.status === 'completed') completed++;
+            discovered += (t.discovered_count || 0);
+        });
+        $('#statTotal').text(total);
+        $('#statRunning').text(running);
+        $('#statCompleted').text(completed);
+        $('#statDiscovered').text(discovered);
+    }
+
+    function renderTaskTable(tasks) {
+        const $tbody = $('#taskTableBody');
+        if (tasks.length === 0) {
+            $tbody.html(`<tr id="noTasksRow"><td colspan="11" class="text-center text-muted py-4">
+                <i class="bi bi-inbox fs-3 d-block mb-2"></i>暂无发现任务</td></tr>`);
+            return;
+        }
+
+        let html = '';
+        tasks.forEach(task => {
+            if (task.status === 'completed' && !showCompleted) return;
+
+            let statusBadge = '';
+            switch (task.status) {
+                case 'running': statusBadge = '<span class="badge bg-success">运行中</span>'; break;
+                case 'completed': statusBadge = '<span class="badge bg-info">已完成</span>'; break;
+                case 'failed': statusBadge = '<span class="badge bg-danger">失败</span>'; break;
+                case 'paused': statusBadge = '<span class="badge bg-warning">已暂停</span>'; break;
+                default: statusBadge = '<span class="badge bg-secondary">' + (task.status || '空闲') + '</span>';
+            }
+
+            const modeLabel = task.discovery_type === 'ip_import' ? 'IP段批量导入' : 'IP段SNMP扫描';
+            const targetVal = task.target_value || {};
+            const ipTarget = targetVal.ip_range || '-';
+
+            let scheduleInfo = '手动';
+            if (task.schedule_status === 'scheduled') {
+                scheduleInfo = task.schedule_type === 'interval' ?
+                    `每${task.interval_seconds}秒` : `Cron: ${task.cron_expression}`;
+            }
+
+            html += `
+            <tr>
+                <td>${task.id}</td>
+                <td><strong>${escapeHtml(task.name)}</strong></td>
+                <td><span class="badge bg-light text-dark">${modeLabel}</span></td>
+                <td><code>${escapeHtml(ipTarget)}</code></td>
+                <td><small>${scheduleInfo}</small></td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div class="progress" style="height:6px;width:60px;">
+                        <div class="progress-bar" style="width:${task.progress || 0}%"></div>
+                    </div>
+                    <small>${task.progress || 0}%</small>
+                </td>
+                <td>${task.discovered_count || 0}</td>
+                <td><small>${task.last_run ? new Date(task.last_run).toLocaleString() : '-'}</small></td>
+                <td><small class="text-muted">${task.next_run_time || '-'}</small></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        ${task.status === 'running' ?
+                            `<button class="btn btn-outline-warning stop-task-btn" data-task-id="${task.id}"><i class="bi bi-stop-fill"></i></button>` :
+                            `<button class="btn btn-outline-success run-task-btn" data-task-id="${task.id}"><i class="bi bi-play-fill"></i></button>`
+                        }
+                        <button class="btn btn-outline-primary edit-task-btn" data-task-id="${task.id}"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-outline-danger delete-task-btn" data-task-id="${task.id}"><i class="bi bi-trash"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+
+        if (!html) html = `<tr><td colspan="11" class="text-center text-muted py-3">没有符合条件的任务</td></tr>`;
+        $tbody.html(html);
+    }
+
+    // ========== 加载最近发现的设备 ==========
+    function loadRecentDevices() {
+        $.ajax({
+            url: '/devices/discovery/recent',
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                if (!res.success) return;
+                const devices = res.devices || [];
+                const $tbody = $('#recentDevicesBody');
+                if (devices.length === 0) {
+                    $tbody.html(`<tr id="noDevicesRow"><td colspan="6" class="text-center text-muted py-4">暂无发现记录</td></tr>`);
+                    return;
+                }
+                let html = '';
+                devices.forEach(d => {
+                    const typeMap = {router:'路由器',switch:'交换机',firewall:'防火墙',server:'服务器',pc:'计算机',ap:'无线AP'};
+                    html += `<tr>
+                        <td><a href="/devices/${d.id}">${escapeHtml(d.name || 'unknown')}</a></td>
+                        <td><code>${escapeHtml(d.ip_address || d.management_ip || '-')}</code></td>
+                        <td>${typeMap[d.device_type] || d.device_type || '未知'}</td>
+                        <td><small>${d.mac_address || '-'}</small></td>
+                        <td><span class="badge bg-light text-dark">${d.discovered_by || '-'}</span></td>
+                        <td><small>${d.created_at ? new Date(d.created_at).toLocaleString() : '-'}</small></td>
+                    </tr>`;
+                });
+                $tbody.html(html);
+            }
+        });
+    }
+
+    // ========== 保存任务（创建/更新） ==========
+    $('#saveTaskBtn').click(function() {
+        const taskId = $('#taskId').val();
+        const formData = {
+            task_name: $('#taskName').val(),
+            description: $('#taskDescription').val(),
+            device_scan_mode: $('#scanMode').val(),
+            schedule_type: $('#scheduleType').val(),
+            interval_seconds: parseInt($('#intervalSeconds').val()) || 3600,
+            cron_expression: $('#cronExpression').val(),
+            target_value: {
+                ip_range: $('#ipRange').val().trim(),
+                device_type: $('#deviceType').val(),
+                manufacturer: $('#manufacturer').val(),
+                snmp_community: $('#snmpCommunity').val(),
+                snmp_version: $('#snmpVersion').val(),
+                snmp_timeout: parseInt($('#snmpTimeout').val()) || 2,
+                snmp_retries: parseInt($('#snmpRetries').val()) || 2,
+                auto_add: $('#autoAdd').is(':checked'),
+                skip_existing: $('#skipExisting').is(':checked'),
+                use_ping: $('#usePing').is(':checked'),
+                concurrent: parseInt($('#concurrent').val()) || 20,
+                ping_timeout: parseInt($('#pingTimeout').val()) || 2
+            }
+        };
+
+        if (!formData.task_name) { showToast('请输入任务名称', 'warning'); return; }
+        if (!formData.target_value.ip_range) { showToast('请输入IP段', 'warning'); return; }
+
+        const url = taskId ? `/devices/discovery/tasks/${taskId}` : '/devices/discovery/create';
+        const method = taskId ? 'PUT' : 'POST';
+
+        $.ajax({
+            url: url, method: method,
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            data: JSON.stringify(formData),
+            success: function(res) {
+                if (res.success) {
+                    $('#createTaskModal').modal('hide');
+                    resetForm();
+                    showToast(taskId ? '任务更新成功' : '任务创建成功', 'success');
+                    loadTasks();
+                } else {
+                    showToast(res.message || '操作失败', 'danger');
+                }
+            },
+            error: function(xhr) {
+                let msg = '操作失败';
+                if (xhr.responseJSON?.message) msg = xhr.responseJSON.message;
+                showToast(msg, 'danger');
+            }
+        });
+    });
+
+    function resetForm() {
+        $('#taskId').val('');
+        $('#createTaskModalLabel').text('创建设备发现任务');
+        $('#taskName').val('');
+        $('#taskDescription').val('');
+        $('#scanMode').val('snmp_scan').trigger('change');
+        $('#ipRange').val('');
+        $('#snmpCommunity').val('public');
+        $('#snmpVersion').val('2c');
+        $('#snmpTimeout').val('2');
+        $('#snmpRetries').val('2');
+        $('#autoAdd').prop('checked', true);
+        $('#skipExisting').prop('checked', true);
+        $('#deviceType').val('unknown');
+        $('#manufacturer').val('');
+        $('#usePing').prop('checked', true);
+        $('#concurrent').val('20');
+        $('#pingTimeout').val('2');
+        $('#scheduleType').val('manual').trigger('change');
+        $('#intervalSeconds').val('3600');
+        $('#cronExpression').val('');
+    }
+
+    // ========== 编辑任务 ==========
+    $(document).on('click', '.edit-task-btn', function() {
+        const taskId = $(this).data('task-id');
+        $.ajax({
+            url: `/devices/discovery/tasks/${taskId}`,
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                if (res.success) fillEditForm(res.task);
+            }
+        });
+    });
+
+    function fillEditForm(task) {
+        $('#taskId').val(task.id);
+        $('#createTaskModalLabel').text('编辑设备发现任务');
+        $('#taskName').val(task.name);
+        $('#taskDescription').val(task.description || '');
+        $('#scanMode').val(task.discovery_type || 'snmp_scan').trigger('change');
+        $('#scheduleType').val(task.schedule_type).trigger('change');
+        $('#intervalSeconds').val(task.interval_seconds);
+        $('#cronExpression').val(task.cron_expression || '');
+
+        const tv = task.target_value || {};
+        $('#ipRange').val(tv.ip_range || '');
+        $('#snmpCommunity').val(tv.snmp_community || 'public');
+        $('#snmpVersion').val(tv.snmp_version || '2c');
+        $('#snmpTimeout').val(tv.snmp_timeout || 2);
+        $('#snmpRetries').val(tv.snmp_retries || 2);
+        $('#autoAdd').prop('checked', tv.auto_add !== false);
+        $('#skipExisting').prop('checked', tv.skip_existing !== false);
+        $('#deviceType').val(tv.device_type || 'unknown');
+        $('#manufacturer').val(tv.manufacturer || '');
+        $('#usePing').prop('checked', tv.use_ping !== false);
+        $('#concurrent').val(tv.concurrent || 20);
+        $('#pingTimeout').val(tv.ping_timeout || 2);
+
+        $('#createTaskModal').modal('show');
+    }
+
+    // ========== 运行/停止/删除任务 ==========
+    $(document).on('click', '.run-task-btn', function() {
+        const taskId = $(this).data('task-id');
+        if (!confirm('确认执行此发现任务吗？')) return;
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+
+        // 立即切换到快轮询模式
+        runningTaskCount = 1;
+        startAdaptivePoll();
+
+        $.ajax({
+            url: `/devices/discovery/tasks/${taskId}/run`,
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                showToast(res.success ? '任务已启动' : (res.message || '启动失败'), res.success ? 'success' : 'warning');
+                // 立即刷新任务列表（后端已重置 progress=0, status=running）
+                loadTasks();
+            },
+            error: function() {
+                showToast('启动失败', 'danger');
+                loadTasks();
+            }
+        });
+    });
+
+    $(document).on('click', '.stop-task-btn', function() {
+        const taskId = $(this).data('task-id');
+        if (!confirm('确认停止此任务吗？')) return;
+        $.ajax({
+            url: `/devices/discovery/tasks/${taskId}/stop`,
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                showToast(res.success ? '任务已停止' : (res.message || '停止失败'), res.success ? 'success' : 'warning');
+                loadTasks();
+            }
+        });
+    });
+
+    $(document).on('click', '.delete-task-btn', function() {
+        const taskId = $(this).data('task-id');
+        if (!confirm('确认删除此发现任务吗？此操作不可恢复！')) return;
+        $.ajax({
+            url: `/devices/discovery/tasks/${taskId}`,
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                showToast(res.success ? '任务已删除' : (res.message || '删除失败'), res.success ? 'success' : 'danger');
+                loadTasks();
+            }
+        });
+    });
+
+    // ========== 切换显示已完成 ==========
+    $('#toggleCompletedBtn').click(function() {
+        showCompleted = !showCompleted;
+        $(this).text(showCompleted ? '隐藏已完成' : '显示已完成');
+        loadTasks();
+    });
+
+    // ========== 刷新 ==========
+    $('#refreshTasksBtn').click(function() {
+        loadTasks();
+        loadRecentDevices();
+    });
+
+    // ========== 初始加载 ==========
+    loadTasks();
+    loadRecentDevices();
+
+    startAdaptivePoll();
+});
+
+// ========== 工具函数 ==========
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+}
+
+function showToast(msg, type) {
+    // 使用现有的toast或alert
+    if (typeof window.showToast === 'function') {
+        window.showToast(type || 'info', msg);
+    } else {
+        alert(msg);
+    }
+}
+</script>
+{% endblock %}

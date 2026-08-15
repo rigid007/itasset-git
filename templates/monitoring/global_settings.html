@@ -1,0 +1,278 @@
+{# templates/monitoring/global_settings.html #}
+{% extends "base.html" %}
+
+{% block title %}全局设置管理 - 监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-gear-wide-connected me-2"></i>全局设置管理
+                    </h5>
+                    <!-- 触发新建模态框的按钮 -->
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addSettingModal">
+                        <i class="bi bi-plus-lg"></i> 新建设置
+                    </button>
+                </div>
+                
+                <div class="card-body">
+                    <!-- 分类导航选项卡 -->
+                    <ul class="nav nav-tabs card-header-tabs mb-4">
+                        {% for cat in categories %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if cat == current_category %}active{% endif %}" 
+                               href="{{ url_for('monitoring.global_settings', category=cat) }}">
+                                {{ cat | capitalize }} 设置
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <!-- 设置列表表格（与之前相同） -->
+                    {% if settings %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>键名</th>
+                                    <th>值</th>
+                                    <th>类型</th>
+                                    <th>描述</th>
+                                    <th>状态</th>
+                                    <th>系统默认</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for setting in settings %}
+                                <tr>
+                                    <td><code>{{ setting.setting_key }}</code></td>
+                                    <td>
+                                        {% if setting.setting_type == 'boolean' %}
+                                            {% if setting.get_value() %}
+                                                <span class="badge bg-success">是</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">否</span>
+                                            {% endif %}
+                                        {% elif setting.setting_type in ['json', 'array'] %}
+                                            <button class="btn btn-sm btn-outline-info" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#json-{{ setting.id }}">
+                                                查看详情
+                                            </button>
+                                            <div class="collapse mt-2" id="json-{{ setting.id }}">
+                                                <pre class="bg-light p-2 rounded"><code>{{ setting.setting_value }}</code></pre>
+                                            </div>
+                                        {% else %}
+                                            {{ setting.setting_value | truncate(50) }}
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ setting.setting_type }}</span></td>
+                                    <td>{{ setting.description or '-' }}</td>
+                                    <td>
+                                        {% if setting.enabled %}
+                                            <span class="badge bg-success">启用</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">禁用</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if setting.is_default %}
+                                            <i class="bi bi-check-circle-fill text-success" title="系统默认"></i>
+                                        {% else %}
+                                            <i class="bi bi-dash-circle text-muted" title="自定义"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary edit-setting" 
+                                                data-id="{{ setting.id }}"
+                                                data-key="{{ setting.setting_key }}"
+                                                data-value="{{ setting.setting_value }}"
+                                                data-type="{{ setting.setting_type }}"
+                                                data-description="{{ setting.description }}"
+                                                data-enabled="{{ setting.enabled }}"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editSettingModal">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        {% if not setting.is_default %}
+                                        <button class="btn btn-sm btn-outline-danger delete-setting" 
+                                                data-id="{{ setting.id }}"
+                                                data-key="{{ setting.setting_key }}"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteSettingModal">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-sliders2 fs-1 text-muted"></i>
+                        <p class="mt-3 text-muted">当前分类下没有设置项，请新建或切换分类。</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建设置模态框 -->
+<div class="modal fade" id="addSettingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <!-- 注意：表单 action 指向当前页面，通过隐藏字段区分操作 -->
+            <form method="POST" action="{{ request.path }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="form_action" value="add">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建全局设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">键名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="setting_key" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">值</label>
+                        <textarea class="form-control" name="setting_value" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">类型</label>
+                        <select class="form-select" name="setting_type">
+                            <option value="string">string</option>
+                            <option value="number">number</option>
+                            <option value="boolean">boolean</option>
+                            <option value="json">json</option>
+                            <option value="array">array</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">分类</label>
+                        <input type="text" class="form-control" name="category" value="{{ current_category }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" name="description" rows="2"></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="enabled" checked>
+                        <label class="form-check-label">启用</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑设置模态框 -->
+<div class="modal fade" id="editSettingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ request.path }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="form_action" value="edit">
+                <input type="hidden" name="setting_id" id="edit-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">键名</label>
+                        <input type="text" class="form-control" id="edit-key" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">值</label>
+                        <textarea class="form-control" name="setting_value" id="edit-value" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">类型</label>
+                        <select class="form-select" name="setting_type" id="edit-type">
+                            <option value="string">string</option>
+                            <option value="number">number</option>
+                            <option value="boolean">boolean</option>
+                            <option value="json">json</option>
+                            <option value="array">array</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" name="description" id="edit-description" rows="2"></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="enabled" id="edit-enabled">
+                        <label class="form-check-label">启用</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">更新</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteSettingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ request.path }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="form_action" value="delete">
+                <input type="hidden" name="setting_id" id="delete-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认删除</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除设置 <strong id="delete-key"></strong> 吗？此操作不可撤销。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-danger">删除</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 填充编辑模态框数据
+document.querySelectorAll('.edit-setting').forEach(button => {
+    button.addEventListener('click', function() {
+        document.getElementById('edit-id').value = this.dataset.id;
+        document.getElementById('edit-key').value = this.dataset.key;
+        document.getElementById('edit-value').value = this.dataset.value;
+        document.getElementById('edit-type').value = this.dataset.type;
+        document.getElementById('edit-description').value = this.dataset.description;
+        document.getElementById('edit-enabled').checked = this.dataset.enabled === 'True';
+    });
+});
+
+// 填充删除模态框数据
+document.querySelectorAll('.delete-setting').forEach(button => {
+    button.addEventListener('click', function() {
+        document.getElementById('delete-id').value = this.dataset.id;
+        document.getElementById('delete-key').textContent = this.dataset.key;
+    });
+});
+</script>
+{% endblock %}

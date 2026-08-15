@@ -1,0 +1,44 @@
+{# templates/monitoring/device_config_view.html #}
+{% extends "base.html" %}
+
+{% block title %}监控配置详情 - {{ config.device.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">监控配置详情：{{ config.device.name }}</h5>
+                    <div>
+                        <a href="{{ url_for('monitoring.device_config_edit', config_id=config.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                        <a href="{{ url_for('monitoring.device_config_list') }}" class="btn btn-sm btn-secondary">返回列表</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 展示所有配置字段，参考模板内容即可 -->
+                    <dl class="row">
+                        <dt class="col-sm-3">设备</dt>
+                        <dd class="col-sm-9">{{ config.device.name }} ({{ config.device.management_ip or config.device.ip_address }})</dd>
+
+                        <dt class="col-sm-3">监控状态</dt>
+                        <dd class="col-sm-9">{% if config.enabled %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}</dd>
+
+                        <dt class="col-sm-3">Ping</dt>
+                        <dd class="col-sm-9">{% if config.enable_ping %}启用 (间隔 {{ config.ping_interval }}s, 超时 {{ config.ping_timeout }}s){% else %}禁用{% endif %}</dd>
+
+                        <dt class="col-sm-3">SNMP</dt>
+                        <dd class="col-sm-9">{% if config.enable_snmp %}启用 v{{ config.snmp_version }} (间隔 {{ config.snmp_interval }}s, 超时 {{ config.snmp_timeout }}s){% else %}禁用{% endif %}</dd>
+
+                        <dt class="col-sm-3">SSH</dt>
+                        <dd class="col-sm-9">{% if config.enable_ssh != 'no' %}{{ config.enable_ssh|upper }} (端口 {{ config.ssh_port }}, 间隔 {{ config.ssh_interval }}s){% else %}禁用{% endif %}</dd>
+
+                        <dt class="col-sm-3">API</dt>
+                        <dd class="col-sm-9">{% if config.enable_api %}启用 ({{ config.api_method }}, 间隔 {{ config.api_interval }}s){% else %}禁用{% endif %}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}配置版本历史 - {{ device.name }}{% endblock %}
+{% block page_title %}配置版本历史{% endblock %}
+{% block page_subtitle %}设备: {{ device.name }} ({{ device.ip_address or '-' }}){% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('config_compliance.config_diff', device_id=device.id) }}" class="btn btn-info"><i class="fas fa-code-branch"></i> 差异对比</a>
+<button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#saveVersionModal"><i class="fas fa-save"></i> 保存版本</button>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr><th>版本号</th><th>配置类型</th><th>变更摘要</th><th>变更人</th><th>校验和</th><th>保存时间</th></tr>
+            </thead>
+            <tbody>
+                {% for v in versions %}
+                <tr>
+                    <td><span class="badge bg-primary">v{{ v.version_number }}</span></td>
+                    <td><span class="badge bg-info">{{ v.config_type }}</span></td>
+                    <td>{{ v.change_summary or '-' }}</td>
+                    <td>{{ v.changed_by or '-' }}</td>
+                    <td><code style="font-size:10px">{{ (v.checksum or '')[:16] }}...</code></td>
+                    <td>{{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无版本记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 保存版本模态框 -->
+<div class="modal fade" id="saveVersionModal" tabindex="-1">
+<div class="modal-dialog modal-lg"><div class="modal-content">
+<form method="POST" action="{{ url_for('config_compliance.config_version_save') }}">
+    <div class="modal-header"><h5 class="modal-title">保存配置版本</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="device_id" value="{{ device.id }}">
+        <div class="mb-3">
+            <label class="form-label">配置类型</label>
+            <select name="config_type" class="form-select">
+                <option value="running">运行配置</option>
+                <option value="startup">启动配置</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">变更摘要</label>
+            <input type="text" name="change_summary" class="form-control" placeholder="简要描述本次变更">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">配置内容</label>
+            <textarea name="content" class="form-control" rows="15" style="font-family:monospace;font-size:12px"></textarea>
+        </div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存版本</button></div>
+</form>
+</div></div></div>
+{% endblock %}

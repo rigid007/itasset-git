@@ -1,0 +1,1123 @@
+{% extends "base.html" %}
+
+{% block title %}性能图表 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+/* 性能图表页面专用样式 */
+.metric-cards {
+    margin-bottom: 1.5rem;
+}
+
+.metric-card {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    height: 100%;
+    transition: all 0.3s ease;
+    border: 1px solid #dee2e6;
+    background-color: white;
+}
+
+.metric-card:hover {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.metric-card.cpu {
+    border-top: 4px solid #ff6384;
+}
+
+.metric-card.memory {
+    border-top: 4px solid #36a2eb;
+}
+
+.metric-card.disk {
+    border-top: 4px solid #ffce56;
+}
+
+.metric-card.ping {
+    border-top: 4px solid #4bc0c0;
+}
+
+.metric-card.network {
+    border-top: 4px solid #9966ff;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.metric-trend {
+    font-size: 0.75rem;
+    display: inline-block;
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+}
+
+.trend-up {
+    color: #28a745;
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.trend-down {
+    color: #dc3545;
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.trend-stable {
+    color: #6c757d;
+    background-color: rgba(108, 117, 125, 0.1);
+}
+
+.chart-card {
+    margin-bottom: 1.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.chart-header {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chart-body {
+    padding: 1rem;
+    height: 300px;
+}
+
+.chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.chart-title i {
+    margin-right: 0.5rem;
+    color: #6c757d;
+}
+
+.chart-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.time-range-buttons {
+    display: flex;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.time-range-btn {
+    background: white;
+    border: none;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.time-range-btn:hover {
+    background-color: #f8f9fa;
+}
+
+.time-range-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+.time-range-btn:not(:last-child) {
+    border-right: 1px solid #dee2e6;
+}
+
+/* 排名表格样式 */
+.performance-table {
+    font-size: 0.875rem;
+}
+
+.performance-table .rank-badge {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+}
+
+.rank-1 {
+    background-color: #ffc107;
+}
+
+.rank-2 {
+    background-color: #6c757d;
+}
+
+.rank-3 {
+    background-color: #dc3545;
+}
+
+.rank-other {
+    background-color: #007bff;
+}
+
+.cpu-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.cpu-low {
+    background-color: #28a745;
+}
+
+.cpu-medium {
+    background-color: #ffc107;
+}
+
+.cpu-high {
+    background-color: #dc3545;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 8px;
+}
+
+.no-data-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6c757d;
+}
+
+.no-data-message i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #adb5bd;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    
+    .chart-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .metric-value {
+        font-size: 1.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block page_title %}
+<i class="fas fa-chart-line me-2"></i>设备性能图表
+{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">监控和分析设备性能指标，包括CPU、内存、磁盘使用率和网络延迟</p>
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex flex-wrap align-items-center gap-2">
+    <div class="input-group" style="width: 250px;">
+        <select class="form-select form-select-sm" id="deviceSelect">
+            <option value="">选择设备...</option>
+            {% for device in devices %}
+            <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                {{ device.name }} ({{ device.management_ip or device.ip_address or 'N/A' }})
+            </option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-outline-primary btn-sm" type="button" onclick="applyDeviceFilter()">
+            <i class="fas fa-search"></i>
+        </button>
+    </div>
+    
+    <div class="time-range-buttons">
+        <button class="time-range-btn {% if time_range == '1h' %}active{% endif %}" data-range="1h" onclick="changeTimeRange('1h')">1小时</button>
+        <button class="time-range-btn {% if time_range == '6h' %}active{% endif %}" data-range="6h" onclick="changeTimeRange('6h')">6小时</button>
+        <button class="time-range-btn {% if time_range == '24h' %}active{% endif %}" data-range="24h" onclick="changeTimeRange('24h')">24小时</button>
+        <button class="time-range-btn {% if time_range == '7d' %}active{% endif %}" data-range="7d" onclick="changeTimeRange('7d')">7天</button>
+        <button class="time-range-btn {% if time_range == '30d' %}active{% endif %}" data-range="30d" onclick="changeTimeRange('30d')">30天</button>
+    </div>
+    
+    <button class="btn btn-primary btn-sm" onclick="refreshCharts()">
+        <i class="fas fa-sync-alt"></i> 刷新
+    </button>
+    
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
+        <i class="fas fa-download"></i> 导出
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 左侧：图表区域 -->
+    <div class="col-lg-8">
+        <!-- 关键指标卡片 -->
+        <div class="row metric-cards">
+            <div class="col-md-2 col-6">
+                <div class="metric-card cpu">
+                    <div class="metric-label">CPU使用率</div>
+                    <div class="metric-value" id="current-cpu">
+                        {% if chart_data and chart_data.cpu|length > 0 %}
+                        {{ chart_data.cpu[-1]|round(1) }}%
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </div>
+                    <div class="metric-trend" id="cpu-trend">
+                        <i class="fas fa-arrow-up trend-up" style="display: none;"></i>
+                        <i class="fas fa-arrow-down trend-down" style="display: none;"></i>
+                        <i class="fas fa-minus trend-stable" style="display: none;"></i>
+                        <span id="cpu-change">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="metric-card memory">
+                    <div class="metric-label">内存使用率</div>
+                    <div class="metric-value" id="current-memory">
+                        {% if chart_data and chart_data.memory|length > 0 %}
+                        {{ chart_data.memory[-1]|round(1) }}%
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </div>
+                    <div class="metric-trend" id="memory-trend">
+                        <i class="fas fa-arrow-up trend-up" style="display: none;"></i>
+                        <i class="fas fa-arrow-down trend-down" style="display: none;"></i>
+                        <i class="fas fa-minus trend-stable" style="display: none;"></i>
+                        <span id="memory-change">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="metric-card disk">
+                    <div class="metric-label">磁盘使用率</div>
+                    <div class="metric-value" id="current-disk">
+                        {% if chart_data and chart_data.disk|length > 0 %}
+                        {{ chart_data.disk[-1]|round(1) }}%
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </div>
+                    <div class="metric-trend" id="disk-trend">
+                        <i class="fas fa-arrow-up trend-up" style="display: none;"></i>
+                        <i class="fas fa-arrow-down trend-down" style="display: none;"></i>
+                        <i class="fas fa-minus trend-stable" style="display: none;"></i>
+                        <span id="disk-change">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="metric-card ping">
+                    <div class="metric-label">网络延迟</div>
+                    <div class="metric-value" id="current-ping">
+                        {% if chart_data and chart_data.ping|length > 0 %}
+                        {{ chart_data.ping[-1]|round(1) }}ms
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </div>
+                    <div class="metric-trend" id="ping-trend">
+                        <i class="fas fa-arrow-up trend-up" style="display: none;"></i>
+                        <i class="fas fa-arrow-down trend-down" style="display: none;"></i>
+                        <i class="fas fa-minus trend-stable" style="display: none;"></i>
+                        <span id="ping-change">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="metric-card network">
+                    <div class="metric-label">设备信息</div>
+                    {% if chart_data and chart_data.device %}
+                    <div class="text-start">
+                        <div class="mb-1">
+                            <strong>{{ chart_data.device.name }}</strong>
+                        </div>
+                        <div class="mb-1 small">
+                            <i class="fas fa-microchip"></i> {{ chart_data.device.device_type or '服务器' }}
+                            <span class="ms-2"><i class="fas fa-industry"></i> {{ chart_data.device.brand or 'N/A' }}</span>
+                        </div>
+                        <div class="small">
+                            <i class="fas fa-map-marker-alt"></i> 
+                            {% if chart_data.device.location %}
+                            {{ chart_data.device.location.name or '位置未知' }}
+                            {% else %}
+                            位置未知
+                            {% endif %}
+                        </div>
+                        <div class="small mt-1">
+                            <span class="badge bg-{{ 'success' if chart_data.device.status == 'online' else 'danger' }}">
+                                {{ chart_data.device.status or 'unknown' }}
+                            </span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-muted small">请选择设备查看详情</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- CPU使用率图表 -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="fas fa-microchip"></i> CPU使用率</h5>
+                <div class="chart-actions">
+                    <div class="time-range-buttons">
+                        <button class="time-range-btn active" onclick="changeChartRange('cpu', '1h')">1h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('cpu', '6h')">6h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('cpu', '24h')">24h</button>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-body" id="cpu-chart-container">
+                {% if chart_data and chart_data.cpu|length > 0 %}
+                <canvas id="cpuChart"></canvas>
+                {% else %}
+                <div class="no-data-message">
+                    <i class="fas fa-chart-line"></i>
+                    <p>暂无CPU监控数据</p>
+                    <p class="small text-muted">请选择设备并确保设备已配置监控</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 内存使用率图表 -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="fas fa-memory"></i> 内存使用率</h5>
+                <div class="chart-actions">
+                    <div class="time-range-buttons">
+                        <button class="time-range-btn active" onclick="changeChartRange('memory', '1h')">1h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('memory', '6h')">6h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('memory', '24h')">24h</button>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-body" id="memory-chart-container">
+                {% if chart_data and chart_data.memory|length > 0 %}
+                <canvas id="memoryChart"></canvas>
+                {% else %}
+                <div class="no-data-message">
+                    <i class="fas fa-chart-line"></i>
+                    <p>暂无内存监控数据</p>
+                    <p class="small text-muted">请选择设备并确保设备已配置监控</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 磁盘使用率图表 -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="fas fa-hdd"></i> 磁盘使用率</h5>
+                <div class="chart-actions">
+                    <div class="time-range-buttons">
+                        <button class="time-range-btn active" onclick="changeChartRange('disk', '1h')">1h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('disk', '6h')">6h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('disk', '24h')">24h</button>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-body" id="disk-chart-container">
+                {% if chart_data and chart_data.disk|length > 0 %}
+                <canvas id="diskChart"></canvas>
+                {% else %}
+                <div class="no-data-message">
+                    <i class="fas fa-chart-line"></i>
+                    <p>暂无磁盘监控数据</p>
+                    <p class="small text-muted">请选择设备并确保设备已配置监控</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Ping延迟图表 -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="fas fa-network-wired"></i> 网络延迟(Ping)</h5>
+                <div class="chart-actions">
+                    <div class="time-range-buttons">
+                        <button class="time-range-btn active" onclick="changeChartRange('ping', '1h')">1h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('ping', '6h')">6h</button>
+                        <button class="time-range-btn" onclick="changeChartRange('ping', '24h')">24h</button>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-body" id="ping-chart-container">
+                {% if chart_data and chart_data.ping|length > 0 %}
+                <canvas id="pingChart"></canvas>
+                {% else %}
+                <div class="no-data-message">
+                    <i class="fas fa-chart-line"></i>
+                    <p>暂无网络延迟监控数据</p>
+                    <p class="small text-muted">请选择设备并确保设备已配置监控</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：性能排名和统计 -->
+    <div class="col-lg-4">
+        <!-- 设备性能排名 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-trophy"></i> 设备性能排名</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">基于最近一小时的平均CPU使用率排名</p>
+                
+                {% if performance_rank %}
+                <div class="table-responsive">
+                    <table class="table table-hover performance-table">
+                        <thead>
+                            <tr>
+                                <th width="50">排名</th>
+                                <th>设备名称</th>
+                                <th class="text-end">CPU</th>
+                                <th class="text-end">内存</th>
+                                <th class="text-end">延迟</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rank, device in performance_rank %}
+                            <tr class="{% if device_id == device.id %}table-primary{% endif %}">
+                                <td>
+                                    <span class="rank-badge rank-{{ loop.index if loop.index <= 3 else 'other' }}">
+                                        {{ loop.index }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('monitoring.performance_charts') }}?device_id={{ device.id }}&time_range={{ time_range }}" 
+                                       class="text-decoration-none">
+                                        {{ device.name }}
+                                    </a>
+                                </td>
+                                <td class="text-end">
+                                    <span class="cpu-indicator cpu-{{ 'high' if device.avg_cpu and device.avg_cpu > 80 else 'medium' if device.avg_cpu and device.avg_cpu > 60 else 'low' }}"></span>
+                                    {{ device.avg_cpu|round(1) if device.avg_cpu else 'N/A' }}%
+                                </td>
+                                <td class="text-end">{{ device.avg_memory|round(1) if device.avg_memory else 'N/A' }}%</td>
+                                <td class="text-end">{{ device.avg_ping|round(1) if device.avg_ping else 'N/A' }}ms</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-chart-bar fa-2x text-muted mb-3"></i>
+                    <p class="text-muted">暂无性能排名数据</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 监控统计 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-pie"></i> 监控统计</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 mb-3">
+                        <div class="metric-value text-primary" id="total-devices">{{ devices|length }}</div>
+                        <div class="metric-label">总设备数</div>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <div class="metric-value text-success" id="monitored-devices">
+                            {% if chart_data and chart_data.device %}1{% else %}0{% endif %}
+                        </div>
+                        <div class="metric-label">已监控设备</div>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <div class="metric-value text-info" id="data-points">
+                            {% if chart_data and chart_data.cpu|length > 0 %}
+                            {{ chart_data.cpu|length }}
+                            {% else %}
+                            0
+                            {% endif %}
+                        </div>
+                        <div class="metric-label">数据点数</div>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <div class="metric-value text-warning" id="time-range">{{ time_range }}</div>
+                        <div class="metric-label">时间范围</div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('monitoring.device_status') }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-heartbeat"></i> 查看设备状态
+                    </a>
+                    <a href="{{ url_for('monitoring.history_data') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-history"></i> 查看历史数据
+                    </a>
+                    {% if chart_data and chart_data.device %}
+                    <a href="{{ url_for('device.device_detail', device_id=device_id) }}" class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-info-circle"></i> 查看设备详情
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导出数据模态框 -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">导出性能数据</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    {% if chart_data and chart_data.device %}
+                    <div class="mb-3">
+                        <label class="form-label">设备</label>
+                        <input type="text" class="form-control" value="{{ chart_data.device.name }}" readonly>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">时间范围</label>
+                        <select class="form-select" id="exportTimeRange">
+                            <option value="1h">最近1小时</option>
+                            <option value="6h">最近6小时</option>
+                            <option value="24h" selected>最近24小时</option>
+                            <option value="7d">最近7天</option>
+                            <option value="30d">最近30天</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">数据指标</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="exportCpu" checked>
+                            <label class="form-check-label" for="exportCpu">
+                                CPU使用率
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="exportMemory" checked>
+                            <label class="form-check-label" for="exportMemory">
+                                内存使用率
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="exportDisk" checked>
+                            <label class="form-check-label" for="exportDisk">
+                                磁盘使用率
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="exportPing" checked>
+                            <label class="form-check-label" for="exportPing">
+                                网络延迟
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">导出格式</label>
+                        <select class="form-select" id="exportFormat">
+                            <option value="csv">CSV格式</option>
+                            <option value="json">JSON格式</option>
+                            <option value="excel">Excel格式</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="exportData()">导出数据</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// 全局变量
+let charts = {};
+let currentDeviceId = {{ device_id or 'null' }};
+let currentTimeRange = '{{ time_range }}';
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化图表
+    initCharts();
+    
+    // 更新趋势指示器
+    updateTrendIndicators();
+    
+    // 设置自动刷新
+    setInterval(refreshCharts, 60000); // 每分钟刷新一次
+    
+    // 初始化WebSocket连接（如果需要实时更新）
+    initPerformanceWebSocket();
+});
+
+// 初始化图表
+function initCharts() {
+    {% if chart_data and chart_data.timestamps and chart_data.cpu %}
+    // CPU图表
+    const cpuCtx = document.getElementById('cpuChart')?.getContext('2d');
+    if (cpuCtx) {
+        charts.cpu = new Chart(cpuCtx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.timestamps|safe }},
+                datasets: [{
+                    label: 'CPU使用率 (%)',
+                    data: {{ chart_data.cpu|safe }},
+                    borderColor: '#ff6384',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }]
+            },
+            options: getChartOptions('CPU使用率 (%)')
+        });
+    }
+    
+    // 内存图表
+    const memoryCtx = document.getElementById('memoryChart')?.getContext('2d');
+    if (memoryCtx) {
+        charts.memory = new Chart(memoryCtx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.timestamps|safe }},
+                datasets: [{
+                    label: '内存使用率 (%)',
+                    data: {{ chart_data.memory|safe }},
+                    borderColor: '#36a2eb',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }]
+            },
+            options: getChartOptions('内存使用率 (%)')
+        });
+    }
+    
+    // 磁盘图表
+    const diskCtx = document.getElementById('diskChart')?.getContext('2d');
+    if (diskCtx) {
+        charts.disk = new Chart(diskCtx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.timestamps|safe }},
+                datasets: [{
+                    label: '磁盘使用率 (%)',
+                    data: {{ chart_data.disk|safe }},
+                    borderColor: '#ffce56',
+                    backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }]
+            },
+            options: getChartOptions('磁盘使用率 (%)')
+        });
+    }
+    
+    // Ping图表
+    const pingCtx = document.getElementById('pingChart')?.getContext('2d');
+    if (pingCtx) {
+        charts.ping = new Chart(pingCtx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.timestamps|safe }},
+                datasets: [{
+                    label: '网络延迟 (ms)',
+                    data: {{ chart_data.ping|safe }},
+                    borderColor: '#4bc0c0',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }]
+            },
+            options: getChartOptions('网络延迟 (ms)')
+        });
+    }
+    {% endif %}
+}
+
+// 获取图表选项
+function getChartOptions(title) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                    label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        label += context.parsed.y;
+                        return label;
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: true,
+                    color: 'rgba(0,0,0,0.05)'
+                },
+                ticks: {
+                    maxRotation: 45,
+                    minRotation: 45
+                }
+            },
+            y: {
+                beginAtZero: true,
+                grid: {
+                    display: true,
+                    color: 'rgba(0,0,0,0.05)'
+                }
+            }
+        }
+    };
+}
+
+// 更新趋势指示器
+function updateTrendIndicators() {
+    {% if chart_data and chart_data.cpu|length > 1 %}
+    // 计算CPU趋势
+    const cpuValues = {{ chart_data.cpu|safe }};
+    if (cpuValues.length >= 2) {
+        const cpuChange = cpuValues[cpuValues.length - 1] - cpuValues[cpuValues.length - 2];
+        updateTrendElement('cpu', cpuChange);
+    }
+    
+    // 计算内存趋势
+    const memoryValues = {{ chart_data.memory|safe }};
+    if (memoryValues.length >= 2) {
+        const memoryChange = memoryValues[memoryValues.length - 1] - memoryValues[memoryValues.length - 2];
+        updateTrendElement('memory', memoryChange);
+    }
+    
+    // 计算磁盘趋势
+    const diskValues = {{ chart_data.disk|safe }};
+    if (diskValues.length >= 2) {
+        const diskChange = diskValues[diskValues.length - 1] - diskValues[diskValues.length - 2];
+        updateTrendElement('disk', diskChange);
+    }
+    
+    // 计算Ping趋势
+    const pingValues = {{ chart_data.ping|safe }};
+    if (pingValues.length >= 2) {
+        const pingChange = pingValues[pingValues.length - 1] - pingValues[pingValues.length - 2];
+        updateTrendElement('ping', pingChange);
+    }
+    {% endif %}
+}
+
+// 更新趋势元素
+function updateTrendElement(type, change) {
+    const element = document.getElementById(`${type}-trend`);
+    const changeElement = document.getElementById(`${type}-change`);
+    const upIcon = element.querySelector('.trend-up');
+    const downIcon = element.querySelector('.trend-down');
+    const stableIcon = element.querySelector('.trend-stable');
+    
+    // 隐藏所有图标
+    upIcon.style.display = 'none';
+    downIcon.style.display = 'none';
+    stableIcon.style.display = 'none';
+    
+    if (Math.abs(change) < 0.1) {
+        // 稳定
+        stableIcon.style.display = 'inline';
+        changeElement.textContent = '稳定';
+        element.className = 'metric-trend trend-stable';
+    } else if (change > 0) {
+        // 上升
+        upIcon.style.display = 'inline';
+        changeElement.textContent = `+${change.toFixed(1)}`;
+        element.className = 'metric-trend trend-up';
+    } else {
+        // 下降
+        downIcon.style.display = 'inline';
+        changeElement.textContent = `${change.toFixed(1)}`;
+        element.className = 'metric-trend trend-down';
+    }
+}
+
+// 应用设备筛选
+function applyDeviceFilter() {
+    const deviceSelect = document.getElementById('deviceSelect');
+    const deviceId = deviceSelect.value;
+    
+    if (deviceId) {
+        // 获取当前时间范围
+        const activeRangeBtn = document.querySelector('.time-range-btn.active');
+        const timeRange = activeRangeBtn ? activeRangeBtn.dataset.range : '24h';
+        
+        // 跳转到设备性能图表页面
+        window.location.href = `{{ url_for('monitoring.performance_charts') }}?device_id=${deviceId}&time_range=${timeRange}`;
+    } else {
+        alert('请选择设备');
+    }
+}
+
+// 更改时间范围
+function changeTimeRange(range) {
+    // 更新按钮状态
+    document.querySelectorAll('.time-range-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.range === range) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 如果有设备，重新加载数据
+    if (currentDeviceId) {
+        window.location.href = `{{ url_for('monitoring.performance_charts') }}?device_id=${currentDeviceId}&time_range=${range}`;
+    } else {
+        // 如果没有选择设备，只更新URL参数
+        const url = new URL(window.location.href);
+        url.searchParams.set('time_range', range);
+        window.location.href = url.toString();
+    }
+}
+
+// 更改图表范围（用于单个图表的按钮）
+function changeChartRange(chartType, range) {
+    // 注意：这里需要根据实际情况实现，可能需要调用API获取不同时间范围的数据
+    alert(`切换${chartType}图表到${range}范围的功能正在开发中`);
+}
+
+// 刷新图表
+function refreshCharts() {
+    if (currentDeviceId) {
+        // 显示加载指示器
+        showLoadingIndicator();
+        
+        // 获取最新的监控数据
+        fetch(`/api/monitoring/device/${currentDeviceId}/metrics?hours=${getHoursFromRange(currentTimeRange)}&metric=cpu`)
+            .then(response => response.json())
+            .then(data => {
+                // 更新图表数据
+                updateChartsData(data);
+                // 隐藏加载指示器
+                hideLoadingIndicator();
+            })
+            .catch(error => {
+                console.error('刷新图表失败:', error);
+                hideLoadingIndicator();
+            });
+    }
+}
+
+// 根据时间范围获取小时数
+function getHoursFromRange(range) {
+    switch(range) {
+        case '1h': return 1;
+        case '6h': return 6;
+        case '24h': return 24;
+        case '7d': return 168; // 7 * 24
+        case '30d': return 720; // 30 * 24
+        default: return 24;
+    }
+}
+
+// 显示加载指示器
+function showLoadingIndicator() {
+    // 为每个图表容器添加加载指示器
+    ['cpu', 'memory', 'disk', 'ping'].forEach(type => {
+        const container = document.getElementById(`${type}-chart-container`);
+        if (container) {
+            const overlay = document.createElement('div');
+            overlay.className = 'loading-overlay';
+            overlay.id = `${type}-loading`;
+            overlay.innerHTML = `
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                </div>
+            `;
+            container.appendChild(overlay);
+        }
+    });
+}
+
+// 隐藏加载指示器
+function hideLoadingIndicator() {
+    ['cpu', 'memory', 'disk', 'ping'].forEach(type => {
+        const loadingElement = document.getElementById(`${type}-loading`);
+        if (loadingElement) {
+            loadingElement.remove();
+        }
+    });
+}
+
+// 更新图表数据
+function updateChartsData(data) {
+    // 这里需要根据API返回的数据结构更新图表
+    // 假设API返回的数据格式与chart_data类似
+    console.log('更新图表数据:', data);
+}
+
+// 导出数据
+function exportData() {
+    if (!currentDeviceId) {
+        alert('请先选择设备');
+        return;
+    }
+    
+    // 获取导出参数
+    const timeRange = document.getElementById('exportTimeRange').value;
+    const format = document.getElementById('exportFormat').value;
+    
+    // 构建导出URL
+    const exportUrl = `/api/monitoring/device/${currentDeviceId}/export?time_range=${timeRange}&format=${format}`;
+    
+    // 触发下载
+    window.open(exportUrl, '_blank');
+    
+    // 关闭模态框
+    const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+    exportModal.hide();
+}
+
+// 初始化WebSocket连接
+function initPerformanceWebSocket() {
+    // 如果有设备ID，连接到该设备的实时监控
+    if (currentDeviceId) {
+        const socket = io('/monitoring');
+        
+        socket.on('connect', () => {
+            console.log('性能监控WebSocket连接成功');
+            socket.emit('subscribe_device', { device_id: currentDeviceId });
+        });
+        
+        socket.on('device_metrics_update', (data) => {
+            // 实时更新图表数据
+            if (data.device_id == currentDeviceId) {
+                updateRealTimeMetrics(data);
+            }
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('性能监控WebSocket连接断开');
+        });
+    }
+}
+
+// 更新实时指标
+function updateRealTimeMetrics(data) {
+    // 更新指标卡片
+    if (data.cpu !== undefined) {
+        document.getElementById('current-cpu').textContent = `${data.cpu.toFixed(1)}%`;
+    }
+    if (data.memory !== undefined) {
+        document.getElementById('current-memory').textContent = `${data.memory.toFixed(1)}%`;
+    }
+    if (data.disk !== undefined) {
+        document.getElementById('current-disk').textContent = `${data.disk.toFixed(1)}%`;
+    }
+    if (data.ping !== undefined) {
+        document.getElementById('current-ping').textContent = `${data.ping.toFixed(1)}ms`;
+    }
+    
+    // 更新图表（添加新数据点）
+    updateChartsWithRealTimeData(data);
+}
+
+// 更新图表实时数据
+function updateChartsWithRealTimeData(data) {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    
+    // 更新CPU图表
+    if (charts.cpu && data.cpu !== undefined) {
+        const cpuChart = charts.cpu;
+        if (cpuChart.data.labels.length > 20) {
+            cpuChart.data.labels.shift();
+            cpuChart.data.datasets[0].data.shift();
+        }
+        cpuChart.data.labels.push(timestamp);
+        cpuChart.data.datasets[0].data.push(data.cpu);
+        cpuChart.update('none');
+    }
+    
+    // 类似地更新其他图表...
+}
+</script>
+{% endblock %}

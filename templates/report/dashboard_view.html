@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ dashboard.name }} - 仪表板{% endblock %}
+{% block page_title %}{{ dashboard.name }}{% endblock %}
+{% block page_subtitle %}{{ dashboard.description }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <span class="badge bg-info">{{ dashboard.dashboard_type }}</span>
+        {% if dashboard.is_default %}<span class="badge bg-warning">默认</span>{% endif %}
+        {% if dashboard.is_shared %}<span class="badge bg-success">共享</span>{% endif %}
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('report_extra.executive_dashboard') }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-tachometer-alt"></i> 驾驶舱</a>
+        <a href="{{ url_for('report_extra.dashboard_list') }}" class="btn btn-sm btn-secondary"><i class="fas fa-list"></i> 仪表板列表</a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 左侧组件区 -->
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-server"></i> 设备状态概览</h6></div>
+            <div class="card-body text-center py-5">
+                <i class="fas fa-chart-pie fa-4x text-muted mb-3"></i>
+                <p class="text-muted">组件配置区域 - 可通过widgets配置扩展</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-bell"></i> 最近告警</h6></div>
+            <div class="card-body text-center py-5">
+                <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+                <p class="text-muted">组件配置区域 - 可通过widgets配置扩展</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if dashboard.layout_config and dashboard.layout_config != '{}' %}
+<div class="alert alert-info">
+    <i class="fas fa-info-circle"></i> 仪表板已配置布局
+</div>
+{% endif %}
+{% endblock %}

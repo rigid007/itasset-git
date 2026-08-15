@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}资产详情 - {{ asset.asset_name }}{% endblock %}
+
+{% block page_title %}{{ asset.asset_name }}{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">
+    资产编号：<strong>{{ asset.asset_number }}</strong>
+    <span class="mx-2">|</span>
+    状态：
+    <span class="badge bg-{{ asset.get_status_badge_class() }} fs-6">
+        {% if asset.status == 'active' %}使用中
+        {% elif asset.status == 'inactive' %}闲置
+        {% elif asset.status == 'maintenance' %}维护中
+        {% elif asset.status == 'retired' %}已报废
+        {% elif asset.status == 'lost' %}丢失
+        {% else %}{{ asset.status }}
+        {% endif %}
+    </span>
+    <span class="mx-2">|</span>
+    当前价值：<strong>¥ {{ "{:,.2f}".format(asset.current_value) if asset.current_value else '0.00' }}</strong>
+</p>
+{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group" role="group">
+    <a href="{{ url_for('asset.asset_edit', id=asset.id) }}" class="btn btn-primary">
+        <i class="fas fa-edit"></i> 编辑
+    </a>
+    <button type="button" class="btn btn-danger" id="deleteAssetBtn" data-url="{{ url_for('asset.asset_delete', id=asset.id) }}" data-name="{{ asset.asset_name }}">
+        <i class="fas fa-trash-alt"></i> 删除
+    </button>
+    <a href="{{ url_for('asset.asset_inventory') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> 返回列表
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- 基本信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-info-circle me-1"></i>
+                基本信息
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 40%;">资产编号</th>
+                                <td>{{ asset.asset_number }}</td>
+                            </tr>
+                            <tr>
+                                <th>资产名称</th>
+                                <td>{{ asset.asset_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>资产类型</th>
+                                <td>{{ asset.asset_type }}</td>
+                            </tr>
+                            <tr>
+                                <th>子类型</th>
+                                <td>{{ asset.asset_subtype or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>品牌</th>
+                                <td>{{ asset.brand or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>型号</th>
+                                <td>{{ asset.model or '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 40%;">序列号</th>
+                                <td>{{ asset.serial_number or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>规格描述</th>
+                                <td>{{ asset.specification or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>状况</th>
+                                <td>
+                                    {% if asset.condition %}
+                                    <span class="badge bg-{{ asset.get_condition_badge_class() }}">
+                                        {% if asset.condition == 'excellent' %}优秀
+                                        {% elif asset.condition == 'good' %}良好
+                                        {% elif asset.condition == 'fair' %}一般
+                                        {% elif asset.condition == 'poor' %}较差
+                                        {% else %}{{ asset.condition }}
+                                        {% endif %}
+                                    </span>
+                                    {% else %}--
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>是否在使用</th>
+                                <td>
+                                    {% if asset.in_use %}
+                                    <span class="badge bg-success">是</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">否</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>创建时间</th>
+                                <td>{{ asset.created_at.strftime('%Y-%m-%d %H:%M') if asset.created_at else '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>更新时间</th>
+                                <td>{{ asset.updated_at.strftime('%Y-%m-%d %H:%M') if asset.updated_at else '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 财务信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-chart-line me-1"></i>
+                财务信息
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 40%;">购买日期</th>
+                                <td>{{ asset.purchase_date.strftime('%Y-%m-%d') if asset.purchase_date else '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>购买价格</th>
+                                <td>¥ {{ "{:,.2f}".format(asset.purchase_price) if asset.purchase_price else '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>当前价值</th>
+                                <td><strong>¥ {{ "{:,.2f}".format(asset.current_value) if asset.current_value else '--' }}</strong></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 40%;">保修到期日</th>
+                                <td>
+                                    {{ asset.warranty_expiry.strftime('%Y-%m-%d') if asset.warranty_expiry else '--' }}
+                                    {% if asset.is_under_warranty() %}
+                                    <span class="badge bg-success ms-2">保修中</span>
+                                    {% elif asset.warranty_expiry %}
+                                    <span class="badge bg-warning ms-2">已过保</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>年折旧率</th>
+                                <td>{{ asset.depreciation_rate or '10' }}%</td>
+                            </tr>
+                            <tr>
+                                <th>资产年龄</th>
+                                <td>{{ asset.get_age() or 0 }} 年</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 责任人/供应商卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-user me-1"></i>
+                责任人 & 供应商
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">责任人信息</h6>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 30%;">所属部门</th>
+                                <td>{{ asset.owner_department or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>责任人</th>
+                                <td>{{ asset.owner_person or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>联系方式</th>
+                                <td>{{ asset.owner_contact or '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">供应商信息</h6>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 30%;">供应商名称</th>
+                                <td>{{ asset.supplier_name or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>联系方式</th>
+                                <td>{{ asset.supplier_contact or '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 维护信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-tools me-1"></i>
+                维护信息
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th>维护周期</th>
+                                <td>{{ asset.maintenance_schedule or '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-4">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th>上次维护</th>
+                                <td>{{ asset.last_maintenance.strftime('%Y-%m-%d') if asset.last_maintenance else '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-4">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th>下次维护</th>
+                                <td>{{ asset.next_maintenance.strftime('%Y-%m-%d') if asset.next_maintenance else '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 其他信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-ellipsis-h me-1"></i>
+                其他信息
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 30%;">标签</th>
+                                <td>
+                                    {% if asset.tags %}
+                                        {% for tag in asset.tags.split(',') %}
+                                            <span class="badge bg-info text-dark me-1">{{ tag.strip() }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        --
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th>是否有效</th>
+                                <td>
+                                    {% if asset.is_active %}
+                                    <span class="badge bg-success">是</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">否</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 15%;">使用说明</th>
+                                <td>{{ asset.usage_description or '--' }}</td>
+                            </tr>
+                            <tr>
+                                <th>备注</th>
+                                <td>{{ asset.notes or '--' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧边栏：位置和设备关联信息 -->
+    <div class="col-lg-4">
+        <!-- 位置信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-map-marker-alt me-1"></i>
+                位置信息
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width: 40%;">所在位置</th>
+                        <td>
+                            {% if asset.location %}
+                                {{ asset.location.name }}
+                            {% else %}
+                                --
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>所在机柜</th>
+                        <td>
+                            {% if asset.cabinet %}
+                                {{ asset.cabinet.name }}
+                            {% else %}
+                                --
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>具体位置</th>
+                        <td>{{ asset.position or '--' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- 关联设备信息卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-server me-1"></i>
+                关联设备
+            </div>
+            <div class="card-body">
+                {% if asset.device %}
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width: 40%;">设备ID</th>
+                        <td>{{ asset.device.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>设备名称</th>
+                        <td>{{ asset.device.device_name }}</td>
+                    </tr>
+                    <tr>
+                        <th>设备类型</th>
+                        <td>{{ asset.device.device_type }}</td>
+                    </tr>
+                    <tr>
+                        <th>IP地址</th>
+                        <td>{{ asset.device.ip_address or '--' }}</td>
+                    </tr>
+                </table>
+                <a href="{{ url_for('device.device_detail', id=asset.device.id) }}" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="fas fa-external-link-alt"></i> 查看设备详情
+                </a>
+                {% else %}
+                <p class="text-muted text-center mb-0">未关联任何设备</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 最近操作/审计信息（可选，如果系统有记录） -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-history me-1"></i>
+                最近操作
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li><small>创建: {{ asset.created_at.strftime('%Y-%m-%d %H:%M') if asset.created_at else '--' }}</small></li>
+                    <li><small>最后更新: {{ asset.updated_at.strftime('%Y-%m-%d %H:%M') if asset.updated_at else '--' }}</small></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    (function() {
+        // 删除按钮确认
+        const deleteBtn = document.getElementById('deleteAssetBtn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const url = this.dataset.url;
+                const assetName = this.dataset.name || '此资产';
+
+                if (typeof confirmAction === 'function') {
+                    confirmAction(`确定要删除资产 “${assetName}” 吗？此操作不可撤销。`, function() {
+                        if (typeof makeAjaxRequest === 'function') {
+                            // 显示加载状态
+                            deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                            deleteBtn.disabled = true;
+
+                            makeAjaxRequest(url, 'DELETE')
+                                .then(response => {
+                                    if (typeof showToast === 'function') {
+                                        showToast('success', '资产删除成功');
+                                    }
+                                    // 跳转回列表页
+                                    window.location.href = "{{ url_for('asset.asset_inventory') }}";
+                                })
+                                .catch(error => {
+                                    console.error('删除失败:', error);
+                                    if (typeof showErrorAlert === 'function') {
+                                        showErrorAlert('删除失败：' + (error.message || '未知错误'));
+                                    }
+                                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> 删除';
+                                    deleteBtn.disabled = false;
+                                });
+                        } else {
+                            // 降级：直接跳转到删除URL（需确保后端支持GET删除？不推荐）
+                            window.location.href = url;
+                        }
+                    });
+                } else {
+                    // 降级：使用原生confirm
+                    if (confirm(`确定要删除资产 “${assetName}” 吗？`)) {
+                        window.location.href = url;
+                    }
+                }
+            });
+        }
+    })();
+</script>
+{% endblock %}

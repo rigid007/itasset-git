@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}性能图表 - 数据中心{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chart-card {
+        height: 400px;
+        margin-bottom: 20px;
+    }
+    .chart-container {
+        width: 100%;
+        height: 350px;
+    }
+    .rank-table th, .rank-table td {
+        vertical-align: middle;
+    }
+    .rank-badge {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: white;
+    }
+    .rank-1 { background-color: #ffc107; }  /* 金牌 */
+    .rank-2 { background-color: #6c757d; }  /* 银牌 */
+    .rank-3 { background-color: #cd7f32; }  /* 铜牌 */
+    .rank-other { background-color: #e9ecef; color: #495057; }
+    .time-range-btn.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+    .device-selector {
+        min-width: 250px;
+    }
+    .no-data-placeholder {
+        height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-chart-line me-2"></i>性能图表</h2>
+        <span class="badge bg-secondary" id="clock"></span>
+    </div>
+
+    <!-- 控制面板 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('monitoring.performance_charts') }}" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="deviceSelect" class="form-label fw-bold"><i class="fas fa-server me-1"></i>选择设备</label>
+                    <select class="form-select device-selector" id="deviceSelect" name="device_id">
+                        <option value="">-- 请选择设备 --</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}" {% if device.id == device_id %}selected{% endif %}>
+                            {{ device.name }} ({{ device.management_ip or device.ip_address or '无IP' }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold"><i class="fas fa-clock me-1"></i>时间范围</label>
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('monitoring.performance_charts', device_id=device_id, time_range='1h') }}" 
+                           class="btn btn-outline-primary time-range-btn {% if time_range == '1h' %}active{% endif %}">1小时</a>
+                        <a href="{{ url_for('monitoring.performance_charts', device_id=device_id, time_range='6h') }}" 
+                           class="btn btn-outline-primary time-range-btn {% if time_range == '6h' %}active{% endif %}">6小时</a>
+                        <a href="{{ url_for('monitoring.performance_charts', device_id=device_id, time_range='24h') }}" 
+                           class="btn btn-outline-primary time-range-btn {% if time_range == '24h' %}active{% endif %}">24小时</a>
+                        <a href="{{ url_for('monitoring.performance_charts', device_id=device_id, time_range='7d') }}" 
+                           class="btn btn-outline-primary time-range-btn {% if time_range == '7d' %}active{% endif %}">7天</a>
+                        <a href="{{ url_for('monitoring.performance_charts', device_id=device_id, time_range='30d') }}" 
+                           class="btn btn-outline-primary time-range-btn {% if time_range == '30d' %}active{% endif %}">30天</a>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i>查询
+                    </button>
+                </div>
+                <div class="col-md-2 text-end">
+                    <span class="text-muted small">数据间隔: 
+                        {% if time_range == '1h' %}1分钟
+                        {% elif time_range == '6h' %}5分钟
+                        {% elif time_range == '24h' %}30分钟
+                        {% elif time_range == '7d' %}6小时
+                        {% elif time_range == '30d' %}1天
+                        {% else %}30分钟
+                        {% endif %}
+                    </span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    {% if chart_data and chart_data.timestamps and chart_data.timestamps|length > 0 %}
+    <div class="row">
+        <!-- CPU/内存/磁盘图表 -->
+        <div class="col-lg-8">
+            <div class="card chart-card">
+                <div class="card-header">
+                    <i class="fas fa-microchip me-1"></i> CPU / 内存 / 磁盘使用率 (%)
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="usageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Ping 延迟图表 -->
+        <div class="col-lg-4">
+            <div class="card chart-card">
+                <div class="card-header">
+                    <i class="fas fa-network-wired me-1"></i> Ping 延迟 (ms)
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="pingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="no-data-placeholder mb-4">
+        <div class="text-center">
+            <i class="fas fa-chart-line fa-3x mb-3 text-muted"></i>
+            <h5>暂无数据</h5>
+            <p class="text-muted">请选择一个设备并点击查询以查看性能图表</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 性能排名列表 -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <i class="fas fa-trophy me-1"></i> 设备性能排名 (最近一小时平均)
+        </div>
+        <div class="card-body">
+            {% if performance_rank %}
+            <div class="table-responsive">
+                <table class="table table-hover rank-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>设备名称</th>
+                            <th>平均 CPU 使用率</th>
+                            <th>平均内存使用率</th>
+                            <th>平均 Ping 延迟</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rank in performance_rank %}
+                        <tr>
+                            <td>
+                                <span class="rank-badge 
+                                    {% if loop.index == 1 %}rank-1
+                                    {% elif loop.index == 2 %}rank-2
+                                    {% elif loop.index == 3 %}rank-3
+                                    {% else %}rank-other{% endif %}">
+                                    {{ loop.index }}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('monitoring.performance_charts', device_id=rank.id, time_range=time_range) }}">
+                                    {{ rank.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if rank.avg_cpu is not none %}
+                                    {{ '%.1f'|format(rank.avg_cpu) }}%
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rank.avg_memory is not none %}
+                                    {{ '%.1f'|format(rank.avg_memory) }}%
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rank.avg_ping is not none %}
+                                    {{ '%.2f'|format(rank.avg_ping) }} ms
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center mb-0">暂无性能排名数据</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    $(document).ready(function() {
+        // 更新时间显示
+        function updateClock() {
+            const now = new Date();
+            $('#clock').text(now.toLocaleString('zh-CN', { hour12: false }));
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 如果有图表数据，则绘制图表
+        {% if chart_data and chart_data.timestamps|length > 0 %}
+        const timestamps = {{ chart_data.timestamps | tojson }};
+        const cpuData = {{ chart_data.cpu | tojson }};
+        const memoryData = {{ chart_data.memory | tojson }};
+        const diskData = {{ chart_data.disk | tojson }};
+        const pingData = {{ chart_data.ping | tojson }};
+
+        // 使用率图表 (CPU, 内存, 磁盘)
+        const ctxUsage = document.getElementById('usageChart').getContext('2d');
+        new Chart(ctxUsage, {
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [
+                    {
+                        label: 'CPU 使用率',
+                        data: cpuData,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.3,
+                        fill: false
+                    },
+                    {
+                        label: '内存使用率',
+                        data: memoryData,
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.3,
+                        fill: false
+                    },
+                    {
+                        label: '磁盘使用率',
+                        data: diskData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.3,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: '百分比 (%)' }
+                    }
+                }
+            }
+        });
+
+        // Ping 延迟图表
+        const ctxPing = document.getElementById('pingChart').getContext('2d');
+        new Chart(ctxPing, {
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [
+                    {
+                        label: 'Ping 延迟',
+                        data: pingData,
+                        borderColor: 'rgb(153, 102, 255)',
+                        backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                        tension: 0.3,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '毫秒 (ms)' }
+                    }
+                }
+            }
+        });
+        {% endif %}
+
+        // 设备选择变化时自动提交表单（可选，增强用户体验）
+        $('#deviceSelect').change(function() {
+            if ($(this).val()) {
+                $(this).closest('form').submit();
+            }
+        });
+
+        // 时间范围按钮点击时保持设备ID参数（链接已经包含，无需额外处理）
+    });
+</script>
+{% endblock %}

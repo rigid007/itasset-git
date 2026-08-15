@@ -1,0 +1,9 @@
+﻿id,source_device_id,source_port,target_device_id,target_port,link_status,discovered_by,discovery_protocol,link_role,discovery_time
+1016,34,GigabitEthernet1/0/25,90,GigabitEthernet1/8/0/31,down,lldp,lldp,normal,2026-08-03 11:05:35
+1185,34,GigabitEthernet1/0/47,82,GigabitEthernet3/0/19,down,lldp,lldp,normal,2026-08-03 11:05:41
+1204,33,GigabitEthernet1/0/48,34,jisuanzhongxin-7F-office,down,lldp,lldp,normal,2026-08-03 11:05:41
+1435,34,GigabitEthernet1/0/49,2281,GigabitEthernet1/0/1,down,lldp,lldp,normal,2026-08-03 11:05:52
+1436,34,GigabitEthernet1/0/13,115,GigabitEthernet1/0/1,down,lldp,lldp,normal,2026-08-03 11:05:52
+1476,34,GigabitEthernet1/0/1,2277,GigabitEthernet1/0/17,down,lldp,lldp,normal,2026-08-03 11:05:54
+1503,34,GigabitEthernet1/0/26,2282,GigabitEthernet1/0/1,down,lldp,lldp,normal,2026-08-03 11:05:55
+1723,34,GigabitEthernet1/0/20,101,Ethernet1/0/12,down,lldp,lldp,normal,2026-08-03 11:06:10

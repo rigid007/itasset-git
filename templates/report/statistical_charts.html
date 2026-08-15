@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}统计图表 - 设备监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h2 class="mb-4">统计图表</h2>
+
+    <div class="row">
+        <!-- 设备状态饼图 -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">设备状态分布</h5>
+                </div>
+                <div class="card-body">
+                    <div id="chartDeviceStatus" style="width: 100%; height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 告警趋势折线图 -->
+        <div class="col-md-6 col-lg-8 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">近30天告警趋势</h5>
+                </div>
+                <div class="card-body">
+                    <div id="chartAlertTrend" style="width: 100%; height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- CPU使用率热力图 -->
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">设备CPU使用率热力图（近30天平均，按小时）</h5>
+                </div>
+                <div class="card-body">
+                    <div id="chartHeatmap" style="width: 100%; height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 引入 ECharts -->
+<script src="{{ url_for('static', filename='js/echarts.min.js') }}"></script>
+
+<script>
+(function() {
+    // 从 Flask 传递的变量（已是 JSON 格式，直接作为 JavaScript 字面量使用）
+    var deviceStatusLabels = {{ device_status_labels|tojson }};
+    var deviceStatusValues = {{ device_status_values|tojson }};
+    var alertDates = {{ alert_dates|tojson }};
+    var alertCounts = {{ alert_counts|tojson }};
+    var devices = {{ devices|tojson }};
+    var hours = {{ hours|tojson }};
+    var heatmapDataRaw = {{ heatmap_data|tojson }};  // 二维数组 [设备][小时] = 平均CPU
+
+    // 初始化图表函数
+    function initCharts() {
+        // 1. 设备状态饼图
+        var chartStatus = echarts.init(document.getElementById('chartDeviceStatus'));
+        var statusOption = {
+            tooltip: { trigger: 'item' },
+            legend: { orient: 'vertical', left: 'left' },
+            series: [{
+                name: '设备状态',
+                type: 'pie',
+                radius: '50%',
+                data: deviceStatusLabels.map(function(label, index) {
+                    return { name: label, value: deviceStatusValues[index] };
+                }),
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                    }
+                }
+            }]
+        };
+        chartStatus.setOption(statusOption);
+
+        // 2. 告警趋势折线图
+        var chartAlert = echarts.init(document.getElementById('chartAlertTrend'));
+        var alertOption = {
+            tooltip: { trigger: 'axis' },
+            xAxis: {
+                type: 'category',
+                data: alertDates,
+                axisLabel: { rotate: 30 }
+            },
+            yAxis: { type: 'value' },
+            series: [{
+                data: alertCounts,
+                type: 'line',
+                smooth: true,
+                lineStyle: { width: 3, color: '#f39c12' },
+                areaStyle: { color: 'rgba(243, 156, 18, 0.1)' }
+            }]
+        };
+        chartAlert.setOption(alertOption);
+
+        // 3. CPU热力图
+        var chartHeat = echarts.init(document.getElementById('chartHeatmap'));
+
+        // 转换数据格式：ECharts 热力图需要 [x, y, value] 列表
+        var heatData = [];
+        for (var i = 0; i < devices.length; i++) {
+            for (var j = 0; j < hours.length; j++) {
+                var value = heatmapDataRaw[i][j];
+                // 如果值为 null 或 undefined，设为 0（或忽略）
+                if (value === null || value === undefined) value = 0;
+                heatData.push([j, i, value]);
+            }
+        }
+
+        var heatOption = {
+            tooltip: {
+                position: 'top',
+                formatter: function(params) {
+                    return devices[params.data[1]] + ' - 小时: ' + hours[params.data[0]] + '<br>CPU: ' + params.data[2].toFixed(2) + '%';
+                }
+            },
+            xAxis: {
+                type: 'category',
+                data: hours.map(function(h) { return h + ':00'; }),
+                splitArea: { show: true }
+            },
+            yAxis: {
+                type: 'category',
+                data: devices,
+                splitArea: { show: true }
+            },
+            visualMap: {
+                min: 0,
+                max: 100,
+                calculable: true,
+                orient: 'horizontal',
+                left: 'center',
+                bottom: '10%',
+                inRange: {
+                    color: ['#2c3e50', '#3498db', '#2ecc71', '#f1c40f', '#e67e22', '#e74c3c']
+                }
+            },
+            series: [{
+                name: 'CPU使用率 (%)',
+                type: 'heatmap',
+                data: heatData,
+                label: { show: false },
+                emphasis: {
+                    itemStyle: { shadowBlur: 10 }
+                }
+            }]
+        };
+        chartHeat.setOption(heatOption);
+
+        // 窗口大小变化时自适应
+        window.addEventListener('resize', function() {
+            chartStatus.resize();
+            chartAlert.resize();
+            chartHeat.resize();
+        });
+    }
+
+    // 如果数据为空，给出提示（可选）
+    if (deviceStatusLabels.length === 0) {
+        document.getElementById('chartDeviceStatus').innerHTML = '<div class="text-muted text-center py-5">暂无设备状态数据</div>';
+    }
+    if (alertDates.length === 0) {
+        document.getElementById('chartAlertTrend').innerHTML = '<div class="text-muted text-center py-5">暂无告警数据</div>';
+    }
+    if (devices.length === 0 || heatData.length === 0) {
+        document.getElementById('chartHeatmap').innerHTML = '<div class="text-muted text-center py-5">暂无性能数据</div>';
+    }
+
+    // 页面加载完成后初始化图表
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCharts);
+    } else {
+        initCharts();
+    }
+})();
+</script>
+
+<style>
+/* 为卡片内图表容器添加轻微阴影和圆角，提升视觉体验 */
+.card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    font-weight: 500;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,159 @@
+{# templates/monitoring/schedule_create.html #}
+{% extends "base.html" %}
+
+{% block title %}新建监控调度 - 监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>新建监控调度</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('monitoring.schedule_create') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <!-- 基本信息 -->
+                        <div class="mb-3">
+                            <label for="name" class="form-label">调度名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                        </div>
+                        
+                        <!-- 监控类型 -->
+                        <div class="mb-3">
+                            <label for="monitor_type" class="form-label">监控类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="monitor_type" name="monitor_type" required>
+                                <option value="">请选择</option>
+                                <option value="ping">Ping</option>
+                                <option value="snmp">SNMP</option>
+                                <option value="ssh">SSH</option>
+                                <option value="api">API</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 目标类型 -->
+                        <div class="mb-3">
+                            <label for="target_type" class="form-label">目标类型 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="target_type" name="target_type" required>
+                                <option value="all">所有设备</option>
+                                <option value="group">设备组</option>
+                                <option value="device">单个设备</option>
+                                <option value="subnet">子网</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 目标值（JSON格式） -->
+                        <div class="mb-3">
+                            <label for="target_value" class="form-label">目标值 (JSON)</label>
+                            <textarea class="form-control" id="target_value" name="target_value" rows="3" 
+                                      placeholder='如：["192.168.1.1", "192.168.1.2"] 或 {"group_id": 1}'></textarea>
+                            <div class="form-text">根据目标类型填写 JSON 格式的目标标识。</div>
+                        </div>
+                        
+                        <!-- 调度类型 -->
+                        <div class="mb-3">
+                            <label for="schedule_type" class="form-label">调度方式 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="schedule_type" name="schedule_type" required onchange="toggleScheduleFields()">
+                                <option value="interval">间隔执行</option>
+                                <option value="cron">Cron表达式</option>
+                                <option value="manual">手动</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 间隔秒数（动态显示） -->
+                        <div class="mb-3" id="interval_field">
+                            <label for="interval_seconds" class="form-label">间隔秒数</label>
+                            <input type="number" class="form-control" id="interval_seconds" name="interval_seconds" value="60" min="1">
+                        </div>
+                        
+                        <!-- Cron表达式（动态显示） -->
+                        <div class="mb-3 d-none" id="cron_field">
+                            <label for="cron_expression" class="form-label">Cron表达式</label>
+                            <input type="text" class="form-control" id="cron_expression" name="cron_expression" placeholder="如：0 */5 * * *">
+                            <div class="form-text">标准 Cron 表达式（分 时 日 月 周）</div>
+                        </div>
+                        
+                        <!-- 时间窗口 -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="start_time" class="form-label">开始时间</label>
+                                <input type="time" class="form-control" id="start_time" name="start_time">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="end_time" class="form-label">结束时间</label>
+                                <input type="time" class="form-control" id="end_time" name="end_time">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="weekdays" class="form-label">执行星期</label>
+                                <input type="text" class="form-control" id="weekdays" name="weekdays" placeholder="如：1,2,3,4,5">
+                                <div class="form-text">1=周一，7=周日，留空表示每天</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 额外配置（JSON） -->
+                        <div class="mb-3">
+                            <label for="config" class="form-label">额外配置 (JSON)</label>
+                            <textarea class="form-control" id="config" name="config" rows="3" 
+                                      placeholder='{"timeout": 5, "retries": 3}'></textarea>
+                            <div class="form-text">根据监控类型填写额外参数。</div>
+                        </div>
+                        
+                        <!-- 启用状态 -->
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" checked>
+                            <label class="form-check-label" for="enabled">
+                                立即启用
+                            </label>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('monitoring.schedule_list') }}" class="btn btn-secondary">取消</a>
+                            <button type="submit" class="btn btn-primary">保存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 根据调度类型显示/隐藏对应字段
+    function toggleScheduleFields() {
+        const scheduleType = document.getElementById('schedule_type').value;
+        const intervalField = document.getElementById('interval_field');
+        const cronField = document.getElementById('cron_field');
+        
+        if (scheduleType === 'interval') {
+            intervalField.classList.remove('d-none');
+            cronField.classList.add('d-none');
+            document.getElementById('cron_expression').required = false;
+            document.getElementById('interval_seconds').required = true;
+        } else if (scheduleType === 'cron') {
+            intervalField.classList.add('d-none');
+            cronField.classList.remove('d-none');
+            document.getElementById('interval_seconds').required = false;
+            document.getElementById('cron_expression').required = true;
+        } else {
+            intervalField.classList.add('d-none');
+            cronField.classList.add('d-none');
+            document.getElementById('interval_seconds').required = false;
+            document.getElementById('cron_expression').required = false;
+        }
+    }
+    
+    // 页面加载时执行一次，确保初始状态正确
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleScheduleFields();
+    });
+</script>
+{% endblock %}

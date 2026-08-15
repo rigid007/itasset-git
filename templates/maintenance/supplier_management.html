@@ -1,0 +1,1066 @@
+{% extends "base.html" %}
+
+{% block title %}供应商管理 - 设备维护管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">供应商管理</h1>
+        <button class="btn btn-primary" data-toggle="modal" data-target="#addSupplierModal">
+            <i class="fas fa-plus"></i> 添加供应商
+        </button>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                活跃供应商
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="activeSuppliersCount">
+                                {{ suppliers|length if suppliers else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-building fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                平均评分
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="avgRating">
+                                {% if suppliers %}
+                                    {% set total_rating = 0 %}
+                                    {% set rated_suppliers = 0 %}
+                                    {% for supplier in suppliers %}
+                                        {% if supplier.rating %}
+                                            {% set total_rating = total_rating + supplier.rating %}
+                                            {% set rated_suppliers = rated_suppliers + 1 %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% if rated_suppliers > 0 %}
+                                        {{ "%.1f"|format(total_rating / rated_suppliers) }}
+                                    {% else %}
+                                        0.0
+                                    {% endif %}
+                                {% else %}
+                                    0.0
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-star fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                平均交货周期
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="avgLeadTime">
+                                {% if suppliers %}
+                                    {% set total_lead_time = 0 %}
+                                    {% set suppliers_with_lead_time = 0 %}
+                                    {% for supplier in suppliers %}
+                                        {% if supplier.lead_time %}
+                                            {% set total_lead_time = total_lead_time + supplier.lead_time %}
+                                            {% set suppliers_with_lead_time = suppliers_with_lead_time + 1 %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% if suppliers_with_lead_time > 0 %}
+                                        {{ "%.0f"|format(total_lead_time / suppliers_with_lead_time) }}天
+                                    {% else %}
+                                        未设置
+                                    {% endif %}
+                                {% else %}
+                                    未设置
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-truck fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                最近更新
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="recentUpdate">
+                                {% if suppliers %}
+                                    {% set latest_update = suppliers|sort(attribute='updated_at', reverse=true)|first %}
+                                    {% if latest_update.updated_at %}
+                                        {{ latest_update.updated_at.strftime('%m-%d') }}
+                                    {% else %}
+                                        无记录
+                                    {% endif %}
+                                {% else %}
+                                    无记录
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-history fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 供应商列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">供应商列表</h6>
+            <div class="d-flex">
+                <div class="input-group input-group-sm mr-2" style="width: 200px;">
+                    <input type="text" id="searchInput" class="form-control" placeholder="搜索供应商...">
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" type="button" id="searchBtn">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filterDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <i class="fas fa-filter"></i> 筛选
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="filterDropdown">
+                        <a class="dropdown-item filter-item" href="#" data-filter="all">全部供应商</a>
+                        <div class="dropdown-divider"></div>
+                        <h6 class="dropdown-header">按评分筛选</h6>
+                        <a class="dropdown-item filter-item" href="#" data-filter="rating-5">5星</a>
+                        <a class="dropdown-item filter-item" href="#" data-filter="rating-4">4星及以上</a>
+                        <a class="dropdown-item filter-item" href="#" data-filter="rating-3">3星及以上</a>
+                        <div class="dropdown-divider"></div>
+                        <h6 class="dropdown-header">按交货周期筛选</h6>
+                        <a class="dropdown-item filter-item" href="#" data-filter="leadtime-7">7天以内</a>
+                        <a class="dropdown-item filter-item" href="#" data-filter="leadtime-14">14天以内</a>
+                        <a class="dropdown-item filter-item" href="#" data-filter="leadtime-30">30天以内</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>供应商名称</th>
+                            <th>联系人</th>
+                            <th>联系方式</th>
+                            <th>评分</th>
+                            <th>交货周期</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplierTableBody">
+                        {% if suppliers %}
+                            {% for supplier in suppliers %}
+                            <tr data-supplier-id="{{ supplier.id }}">
+                                <td>{{ loop.index }}</td>
+                                <td>
+                                    <strong>{{ supplier.name }}</strong>
+                                    {% if supplier.website %}
+                                    <br>
+                                    <small class="text-muted">
+                                        <a href="{{ supplier.website }}" target="_blank" class="text-info">
+                                            <i class="fas fa-external-link-alt"></i> 网站
+                                        </a>
+                                    </small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ supplier.contact_person or '未设置' }}</td>
+                                <td>
+                                    {% if supplier.email %}
+                                        <div><i class="fas fa-envelope text-primary"></i> {{ supplier.email }}</div>
+                                    {% endif %}
+                                    {% if supplier.phone %}
+                                        <div><i class="fas fa-phone text-success"></i> {{ supplier.phone }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="supplier-rating" data-rating="{{ supplier.rating or 0 }}">
+                                        {% for i in range(1, 6) %}
+                                            {% if i <= (supplier.rating or 0) %}
+                                                <i class="fas fa-star text-warning"></i>
+                                            {% else %}
+                                                <i class="far fa-star text-secondary"></i>
+                                            {% endif %}
+                                        {% endfor %}
+                                        <br>
+                                        <small class="text-muted">{{ supplier.rating or '未评分' }}/5</small>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if supplier.lead_time %}
+                                        <span class="badge {% if supplier.lead_time <= 7 %}badge-success
+                                                          {% elif supplier.lead_time <= 14 %}badge-warning
+                                                          {% else %}badge-secondary{% endif %}">
+                                            {{ supplier.lead_time }}天
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-light">未设置</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if supplier.is_active %}
+                                        <span class="badge badge-success">活跃</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">停用</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-info btn-view" data-toggle="modal" data-target="#viewSupplierModal" data-supplier-id="{{ supplier.id }}">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-primary btn-edit" data-toggle="modal" data-target="#editSupplierModal" data-supplier-id="{{ supplier.id }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-delete" data-supplier-id="{{ supplier.id }}" data-supplier-name="{{ supplier.name }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center">暂无供应商数据</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加供应商模态框 -->
+<div class="modal fade" id="addSupplierModal" tabindex="-1" role="dialog" aria-labelledby="addSupplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addSupplierModalLabel">添加新供应商</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="addSupplierForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addName">供应商名称 *</label>
+                                <input type="text" class="form-control" id="addName" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addContactPerson">联系人</label>
+                                <input type="text" class="form-control" id="addContactPerson" name="contact_person">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addEmail">邮箱</label>
+                                <input type="email" class="form-control" id="addEmail" name="email">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addPhone">电话</label>
+                                <input type="text" class="form-control" id="addPhone" name="phone">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="addAddress">地址</label>
+                        <textarea class="form-control" id="addAddress" name="address" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addWebsite">网站</label>
+                                <input type="url" class="form-control" id="addWebsite" name="website" placeholder="https://example.com">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="addRating">评分 (1-5)</label>
+                                <select class="form-control" id="addRating" name="rating">
+                                    <option value="">未评分</option>
+                                    <option value="1">1星</option>
+                                    <option value="2">2星</option>
+                                    <option value="3">3星</option>
+                                    <option value="4">4星</option>
+                                    <option value="5">5星</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="addLeadTime">交货周期 (天)</label>
+                                <input type="number" class="form-control" id="addLeadTime" name="lead_time" min="1" max="365">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addPaymentTerms">付款条款</label>
+                                <input type="text" class="form-control" id="addPaymentTerms" name="payment_terms" placeholder="例如: 货到付款，30天账期">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="addStatus">状态</label>
+                                <select class="form-control" id="addStatus" name="is_active">
+                                    <option value="true" selected>活跃</option>
+                                    <option value="false">停用</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="addNotes">备注</label>
+                        <textarea class="form-control" id="addNotes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="addSupplierSubmitBtn">
+                        保存供应商
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 查看供应商模态框 -->
+<div class="modal fade" id="viewSupplierModal" tabindex="-1" role="dialog" aria-labelledby="viewSupplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewSupplierModalLabel">供应商详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="supplierDetailsContent">
+                    <!-- 供应商详情将在这里动态加载 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑供应商模态框 -->
+<div class="modal fade" id="editSupplierModal" tabindex="-1" role="dialog" aria-labelledby="editSupplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editSupplierModalLabel">编辑供应商</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="editSupplierForm">
+                <input type="hidden" id="editId" name="id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editName">供应商名称 *</label>
+                                <input type="text" class="form-control" id="editName" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editContactPerson">联系人</label>
+                                <input type="text" class="form-control" id="editContactPerson" name="contact_person">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editEmail">邮箱</label>
+                                <input type="email" class="form-control" id="editEmail" name="email">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editPhone">电话</label>
+                                <input type="text" class="form-control" id="editPhone" name="phone">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editAddress">地址</label>
+                        <textarea class="form-control" id="editAddress" name="address" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editWebsite">网站</label>
+                                <input type="url" class="form-control" id="editWebsite" name="website" placeholder="https://example.com">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="editRating">评分 (1-5)</label>
+                                <select class="form-control" id="editRating" name="rating">
+                                    <option value="">未评分</option>
+                                    <option value="1">1星</option>
+                                    <option value="2">2星</option>
+                                    <option value="3">3星</option>
+                                    <option value="4">4星</option>
+                                    <option value="5">5星</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="editLeadTime">交货周期 (天)</label>
+                                <input type="number" class="form-control" id="editLeadTime" name="lead_time" min="1" max="365">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editPaymentTerms">付款条款</label>
+                                <input type="text" class="form-control" id="editPaymentTerms" name="payment_terms" placeholder="例如: 货到付款，30天账期">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="editStatus">状态</label>
+                                <select class="form-control" id="editStatus" name="is_active">
+                                    <option value="true">活跃</option>
+                                    <option value="false">停用</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editNotes">备注</label>
+                        <textarea class="form-control" id="editNotes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="editSupplierSubmitBtn">
+                        更新供应商
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">确认删除</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除供应商 <strong id="deleteSupplierName"></strong> 吗？</p>
+                <p class="text-danger">注意：删除后供应商将标记为停用状态，但相关记录将保留。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 添加CSRF令牌处理函数
+    function getCSRFToken() {
+        // 从meta标签获取CSRF令牌
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (csrfTokenMeta) {
+            return csrfTokenMeta.getAttribute('content');
+        }
+        return null;
+    }
+
+    // 获取API URL
+    function getApiUrl(endpoint, id = null) {
+        const baseUrl = window.location.origin;
+        const routes = {
+            'add': '{{ url_for("maintenance.add_supplier") }}',
+            'edit': '{{ url_for("maintenance.edit_supplier") }}',
+            'delete': '{{ url_for("maintenance.delete_supplier", supplier_id=0) }}',
+            'get': '{{ url_for("maintenance.get_supplier", supplier_id=0) }}'
+        };
+        
+        let url = routes[endpoint];
+        if (id !== null) {
+            url = url.replace('0', id);
+        }
+        return url;
+    }
+
+    // 显示提示消息
+    function showAlert(message, type = 'success') {
+        // 移除已有的提示
+        const existingAlert = document.querySelector('.alert[style*="position: fixed"]');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        
+        // 创建新提示
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert" 
+                 style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} mr-2"></i>
+                ${message}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', alertHtml);
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+            const alert = document.querySelector('.alert[style*="position: fixed"]');
+            if (alert) {
+                alert.remove();
+            }
+        }, 3000);
+    }
+
+    // 生成评分星星
+    function getRatingStars(rating) {
+        let stars = '';
+        for (let i = 1; i <= 5; i++) {
+            if (i <= rating) {
+                stars += '<i class="fas fa-star text-warning"></i>';
+            } else {
+                stars += '<i class="far fa-star text-secondary"></i>';
+            }
+        }
+        return stars;
+    }
+
+    // 格式化日期
+    function formatDate(dateString) {
+        if (!dateString) return '未记录';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+    }
+
+    // 显示加载状态
+    function showLoading(selector, text = '加载中...') {
+        const element = document.querySelector(selector);
+        if (element) {
+            element.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">加载中...</span>
+                    </div>
+                    <p class="mt-2">${text}</p>
+                </div>
+            `;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        let currentSupplierId = null;
+        
+        // 搜索功能
+        document.getElementById('searchBtn').addEventListener('click', performSearch);
+        document.getElementById('searchInput').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        });
+        
+        function performSearch() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#supplierTableBody tr');
+            
+            rows.forEach(row => {
+                const supplierName = row.cells[1].textContent.toLowerCase();
+                const contactPerson = row.cells[2].textContent.toLowerCase();
+                const contactInfo = row.cells[3].textContent.toLowerCase();
+                
+                if (supplierName.includes(searchTerm) || 
+                    contactPerson.includes(searchTerm) || 
+                    contactInfo.includes(searchTerm) || 
+                    searchTerm === '') {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // 筛选功能
+        document.querySelectorAll('.filter-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const filterType = this.getAttribute('data-filter');
+                applyFilter(filterType);
+            });
+        });
+        
+        function applyFilter(filterType) {
+            const rows = document.querySelectorAll('#supplierTableBody tr');
+            
+            rows.forEach(row => {
+                const rating = parseInt(row.querySelector('.supplier-rating').getAttribute('data-rating')) || 0;
+                const leadTimeText = row.cells[5].textContent;
+                const leadTime = parseInt(leadTimeText) || 0;
+                
+                let showRow = true;
+                
+                if (filterType === 'all') {
+                    showRow = true;
+                } else if (filterType.startsWith('rating-')) {
+                    const minRating = parseInt(filterType.split('-')[1]);
+                    showRow = rating >= minRating;
+                } else if (filterType.startsWith('leadtime-')) {
+                    const maxLeadTime = parseInt(filterType.split('-')[1]);
+                    showRow = leadTime > 0 && leadTime <= maxLeadTime;
+                }
+                
+                row.style.display = showRow ? '' : 'none';
+            });
+            
+            // 更新筛选按钮文本
+            const filterText = document.querySelector('.filter-item[data-filter="' + filterType + '"]').textContent;
+            document.getElementById('filterDropdown').innerHTML = `<i class="fas fa-filter"></i> ${filterText}`;
+        }
+        
+        // 查看供应商详情
+        document.querySelectorAll('.btn-view').forEach(button => {
+            button.addEventListener('click', function() {
+                const supplierId = this.getAttribute('data-supplier-id');
+                currentSupplierId = supplierId;
+                
+                // 显示加载状态
+                showLoading('#supplierDetailsContent', '正在加载供应商信息...');
+                
+                // 获取供应商详情
+                fetch(getApiUrl('get', supplierId))
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const supplier = data.supplier;
+                            displaySupplierDetails(supplier);
+                        } else {
+                            document.getElementById('supplierDetailsContent').innerHTML = `
+                                <div class="alert alert-danger" role="alert">
+                                    <i class="fas fa-exclamation-triangle"></i> ${data.message}
+                                </div>
+                            `;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取供应商详情错误:', error);
+                        document.getElementById('supplierDetailsContent').innerHTML = `
+                            <div class="alert alert-danger" role="alert">
+                                <i class="fas fa-exclamation-triangle"></i> 加载供应商详情失败，请稍后重试
+                            </div>
+                        `;
+                    });
+            });
+        });
+        
+        function displaySupplierDetails(supplier) {
+            let detailsHtml = `
+                <div class="row">
+                    <div class="col-md-8">
+                        <h4>${supplier.name}</h4>
+                        ${supplier.website ? `<p><a href="${supplier.website}" target="_blank">${supplier.website}</a></p>` : ''}
+                    </div>
+                    <div class="col-md-4 text-right">
+                        <span class="badge ${supplier.is_active ? 'badge-success' : 'badge-danger'}">
+                            ${supplier.is_active ? '活跃' : '停用'}
+                        </span>
+                    </div>
+                </div>
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-user mr-2"></i>联系人信息</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>联系人:</strong> ${supplier.contact_person || '未设置'}</li>
+                            <li><strong>邮箱:</strong> ${supplier.email || '未设置'}</li>
+                            <li><strong>电话:</strong> ${supplier.phone || '未设置'}</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-chart-line mr-2"></i>供应商评级</h6>
+                        <div class="mb-2">
+                            ${getRatingStars(supplier.rating || 0)}
+                            <span class="ml-2">${supplier.rating || '未评分'}/5</span>
+                        </div>
+                        <ul class="list-unstyled">
+                            <li><strong>交货周期:</strong> ${supplier.lead_time ? supplier.lead_time + '天' : '未设置'}</li>
+                            <li><strong>付款条款:</strong> ${supplier.payment_terms || '未设置'}</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <h6><i class="fas fa-map-marker-alt mr-2"></i>地址</h6>
+                        <p>${supplier.address || '未设置地址'}</p>
+                    </div>
+                </div>
+                
+                ${supplier.notes ? `
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <h6><i class="fas fa-sticky-note mr-2"></i>备注</h6>
+                        <p>${supplier.notes}</p>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <small class="text-muted"><i class="fas fa-calendar-plus mr-1"></i>创建时间: ${formatDate(supplier.created_at)}</small>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <small class="text-muted"><i class="fas fa-calendar-check mr-1"></i>最后更新: ${formatDate(supplier.updated_at)}</small>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('supplierDetailsContent').innerHTML = detailsHtml;
+            document.getElementById('viewSupplierModalLabel').textContent = `供应商详情 - ${supplier.name}`;
+        }
+        
+        // 编辑供应商
+        document.querySelectorAll('.btn-edit').forEach(button => {
+            button.addEventListener('click', function() {
+                const supplierId = this.getAttribute('data-supplier-id');
+                currentSupplierId = supplierId;
+                
+                // 获取供应商信息并填充表单
+                fetch(getApiUrl('get', supplierId))
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const supplier = data.supplier;
+                            populateEditForm(supplier);
+                        } else {
+                            showAlert(data.message, 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取供应商信息错误:', error);
+                        showAlert('获取供应商信息失败，请稍后重试', 'danger');
+                    });
+            });
+        });
+        
+        function populateEditForm(supplier) {
+            document.getElementById('editId').value = supplier.id;
+            document.getElementById('editName').value = supplier.name;
+            document.getElementById('editContactPerson').value = supplier.contact_person || '';
+            document.getElementById('editEmail').value = supplier.email || '';
+            document.getElementById('editPhone').value = supplier.phone || '';
+            document.getElementById('editAddress').value = supplier.address || '';
+            document.getElementById('editWebsite').value = supplier.website || '';
+            document.getElementById('editRating').value = supplier.rating || '';
+            document.getElementById('editLeadTime').value = supplier.lead_time || '';
+            document.getElementById('editPaymentTerms').value = supplier.payment_terms || '';
+            document.getElementById('editStatus').value = supplier.is_active ? 'true' : 'false';
+            document.getElementById('editNotes').value = supplier.notes || '';
+            
+            document.getElementById('editSupplierModalLabel').textContent = `编辑供应商 - ${supplier.name}`;
+        }
+        
+        // 删除供应商
+        document.querySelectorAll('.btn-delete').forEach(button => {
+            button.addEventListener('click', function() {
+                currentSupplierId = this.getAttribute('data-supplier-id');
+                const supplierName = this.getAttribute('data-supplier-name');
+                
+                document.getElementById('deleteSupplierName').textContent = supplierName;
+                $('#deleteConfirmModal').modal('show');
+            });
+        });
+        
+        // 确认删除
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            if (currentSupplierId) {
+                const deleteBtn = this;
+                
+                // 禁用删除按钮
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 删除中...';
+                
+                // 发送删除请求
+                fetch(getApiUrl('delete', currentSupplierId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': getCSRFToken()
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert(data.message, 'success');
+                        $('#deleteConfirmModal').modal('hide');
+                        
+                        // 刷新页面
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showAlert(data.message, 'danger');
+                        deleteBtn.disabled = false;
+                        deleteBtn.innerHTML = '确认删除';
+                    }
+                })
+                .catch(error => {
+                    console.error('删除供应商错误:', error);
+                    showAlert('删除供应商失败，请稍后重试', 'danger');
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = '确认删除';
+                });
+            }
+        });
+        
+        // 添加供应商表单提交
+        document.getElementById('addSupplierForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('addSupplierSubmitBtn');
+            const formData = new FormData(this);
+            
+            // 禁用提交按钮
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...';
+            
+            // 发送添加请求
+            fetch(getApiUrl('add'), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    $('#addSupplierModal').modal('hide');
+                    this.reset();
+                    
+                    // 刷新页面
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showAlert(data.message, 'danger');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '保存供应商';
+                }
+            })
+            .catch(error => {
+                console.error('添加供应商错误:', error);
+                showAlert('添加供应商失败，请稍后重试', 'danger');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '保存供应商';
+            });
+        });
+        
+        // 编辑供应商表单提交
+        document.getElementById('editSupplierForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('editSupplierSubmitBtn');
+            const formData = new FormData(this);
+            
+            // 禁用提交按钮
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 更新中...';
+            
+            // 发送更新请求
+            fetch(getApiUrl('edit'), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    $('#editSupplierModal').modal('hide');
+                    
+                    // 刷新页面
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showAlert(data.message, 'danger');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '更新供应商';
+                }
+            })
+            .catch(error => {
+                console.error('更新供应商错误:', error);
+                showAlert('更新供应商失败，请稍后重试', 'danger');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '更新供应商';
+            });
+        });
+        
+        // 模态框隐藏时重置表单
+        $('#addSupplierModal').on('hidden.bs.modal', function() {
+            document.getElementById('addSupplierForm').reset();
+            const submitBtn = document.getElementById('addSupplierSubmitBtn');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '保存供应商';
+        });
+        
+        $('#editSupplierModal').on('hidden.bs.modal', function() {
+            const submitBtn = document.getElementById('editSupplierSubmitBtn');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '更新供应商';
+        });
+        
+        $('#deleteConfirmModal').on('hidden.bs.modal', function() {
+            const deleteBtn = document.getElementById('confirmDeleteBtn');
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '确认删除';
+        });
+    });
+</script>
+
+<style>
+    .table th {
+        font-weight: 600;
+        background-color: #f8f9fc;
+    }
+    
+    .btn-group-sm > .btn {
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .supplier-rating {
+        font-size: 0.9rem;
+    }
+    
+    .supplier-rating i {
+        margin-right: 2px;
+    }
+    
+    .modal-content {
+        border-radius: 0.5rem;
+    }
+    
+    .modal-header {
+        background-color: #f8f9fc;
+        border-bottom: 1px solid #e3e6f0;
+    }
+    
+    .form-control:focus {
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+    }
+    
+    .input-group-sm {
+        max-width: 250px;
+    }
+    
+    .dropdown-menu {
+        min-width: 200px;
+    }
+    
+    .dropdown-header {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+    }
+    
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        border-width: 0.2em;
+    }
+</style>
+{% endblock %}

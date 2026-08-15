@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}资产管理驾驶舱{% endblock %}
+{% block page_title %}资产管理驾驶舱{% endblock %}
+{% block page_subtitle %}资产全生命周期关键指标总览{% endblock %}
+
+{% block content %}
+<!-- KPI 卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-primary">{{ total_assets }}</div>
+                <small class="text-muted">资产总数</small>
+                <div class="mt-2"><small>总价值: ¥{{ "%.2f"|format(total_value) }}</small></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-success">{{ total_purchase|round|int }}</div>
+                <small class="text-muted">采购总成本 (万)</small>
+                <div class="mt-2"><small>TCO: ¥{{ "%.2f"|format(total_purchase + total_maint) }}</small></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning">{{ expiring_contracts|length }}</div>
+                <small class="text-muted">即将到期合同</small>
+                <div class="mt-2"><small>非合规许可: {{ non_compliant }}</small></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-info">{{ expiring_licenses|length }}</div>
+                <small class="text-muted">即将过期许可</small>
+                {% if recent_audits %}
+                <div class="mt-2"><small>最近盘点: {{ recent_audits[0].name }}</small></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 资产类型分布 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-chart-pie"></i> 资产类型分布</h5></div>
+            <div class="card-body">
+                {% if type_stats %}
+                <table class="table table-sm">
+                    <thead><tr><th>类型</th><th>数量</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for type_name, count in type_stats.items() %}
+                        <tr>
+                            <td>{{ type_name or '未分类' }}</td>
+                            <td>{{ count }}</td>
+                            <td>
+                                <div class="progress" style="height:15px">
+                                    <div class="progress-bar" style="width:{{ (count / total_assets * 100)|round }}%">
+                                        {{ (count / total_assets * 100)|round }}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted text-center">暂无数据</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 资产状态分布 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-chart-bar"></i> 资产状态分布</h5></div>
+            <div class="card-body">
+                {% if status_stats %}
+                <table class="table table-sm">
+                    <thead><tr><th>状态</th><th>数量</th></tr></thead>
+                    <tbody>
+                        {% for st, cnt in status_stats.items() %}
+                        <tr>
+                            <td>
+                                {% if st == 'active' %}<span class="badge bg-success">使用中</span>
+                                {% elif st == 'inactive' %}<span class="badge bg-secondary">闲置</span>
+                                {% elif st == 'retired' %}<span class="badge bg-danger">已报废</span>
+                                {% elif st == 'maintenance' %}<span class="badge bg-warning">维护中</span>
+                                {% else %}{{ st }}{% endif %}
+                            </td>
+                            <td>{{ cnt }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted text-center">暂无数据</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 即将到期合同 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-file-contract"></i> 即将到期合同</h5>
+                <a href="{{ url_for('asset_extra.contract_list') }}" class="btn btn-sm btn-outline-primary">全部合同</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>合同名称</th><th>供应商</th><th>到期日</th><th>剩余</th></tr></thead>
+                    <tbody>
+                        {% for c in expiring_contracts %}
+                        <tr>
+                            <td><a href="{{ url_for('asset_extra.contract_detail', id=c.id) }}">{{ c.name }}</a></td>
+                            <td>{{ c.supplier.name if c.supplier else '-' }}</td>
+                            <td>{{ c.end_date }}</td>
+                            <td><span class="badge bg-warning">{{ c.days_remaining() }}天</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">无即将到期合同</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 即将过期许可 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-key"></i> 即将过期许可</h5>
+                <a href="{{ url_for('asset_extra.license_list') }}" class="btn btn-sm btn-outline-primary">全部许可</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>软件名称</th><th>版本</th><th>到期日</th><th>合规</th></tr></thead>
+                    <tbody>
+                        {% for l in expiring_licenses %}
+                        <tr>
+                            <td><a href="{{ url_for('asset_extra.license_detail', id=l.id) }}">{{ l.software_name }}</a></td>
+                            <td>{{ l.version or '-' }}</td>
+                            <td>{{ l.expiry_date }}</td>
+                            <td>
+                                {% if l.compliance_status == 'compliant' %}<span class="badge bg-success">合规</span>
+                                {% else %}<span class="badge bg-danger">不合规</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">无即将过期许可</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 最近盘点 -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-clipboard-check"></i> 最近盘点</h5>
+        <a href="{{ url_for('asset_extra.audit_list') }}" class="btn btn-sm btn-outline-primary">全部盘点</a>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+            <thead class="table-light"><tr><th>盘点编号</th><th>盘点名称</th><th>状态</th><th>进度</th><th>差异</th></tr></thead>
+            <tbody>
+                {% for a in recent_audits %}
+                <tr>
+                    <td><code>{{ a.audit_no }}</code></td>
+                    <td><a href="{{ url_for('asset_extra.audit_detail', id=a.id) }}">{{ a.name }}</a></td>
+                    <td>
+                        {% if a.status == 'draft' %}<span class="badge bg-secondary">待开始</span>
+                        {% elif a.status == 'in_progress' %}<span class="badge bg-warning">进行中</span>
+                        {% else %}<span class="badge bg-success">已完成</span>{% endif %}
+                    </td>
+                    <td>{{ a.scanned_assets }}/{{ a.total_assets }}</td>
+                    <td><span class="text-warning">{{ a.discrepancy_count }}</span>/<span class="text-danger">{{ a.missing_count }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted py-3">暂无盘点记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

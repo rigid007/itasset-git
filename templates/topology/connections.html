@@ -1,0 +1,2267 @@
+{% extends "base.html" %}
+
+{% block title %}连接关系管理 - 网络拓扑系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/echarts.min.js') }}"></script>
+<style>
+    :root {
+        --primary-color: #2c3e50;
+        --secondary-color: #3498db;
+        --success-color: #27ae60;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --light-bg: #f8f9fa;
+    }
+    
+    .main-header {
+        background: linear-gradient(135deg, var(--primary-color), #1a2530);
+        color: white;
+        padding: 1.5rem 0;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        border-radius: 10px;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        height: 100%;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+    
+    .badge-status {
+        padding: 5px 10px;
+        font-weight: 600;
+        border-radius: 20px;
+    }
+    
+    .badge-active {
+        background-color: rgba(39, 174, 96, 0.1);
+        color: var(--success-color);
+        border: 1px solid rgba(39, 174, 96, 0.3);
+    }
+    
+    .badge-down {
+        background-color: rgba(231, 76, 60, 0.1);
+        color: var(--danger-color);
+        border: 1px solid rgba(231, 76, 60, 0.3);
+    }
+    
+    .badge-degraded {
+        background-color: rgba(243, 156, 18, 0.1);
+        color: var(--warning-color);
+        border: 1px solid rgba(243, 156, 18, 0.3);
+    }
+    
+    .badge-type {
+        padding: 5px 10px;
+        font-weight: 600;
+        border-radius: 5px;
+    }
+    
+    .badge-physical {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .badge-virtual {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+    
+    .badge-trunk {
+        background-color: #e8f5e8;
+        color: #2e7d32;
+    }
+    
+    .badge-access {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+    
+    .filter-card {
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1.5rem;
+    }
+    
+    .connection-row {
+        transition: all 0.2s ease;
+    }
+    
+    .connection-row:hover {
+        background-color: rgba(52, 152, 219, 0.05) !important;
+    }
+    
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .sortable:hover {
+        color: var(--secondary-color);
+    }
+    
+    .table-header {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    
+    .action-btn {
+        margin: 0 2px;
+        padding: 5px 10px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .pagination-info {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .connection-details {
+        background-color: #f8f9fa;
+        border-left: 4px solid var(--secondary-color);
+        padding: 10px;
+        border-radius: 0 5px 5px 0;
+        margin-top: 5px;
+    }
+    
+    .connection-details dt {
+        font-weight: 600;
+        color: #555;
+    }
+    
+    .connection-details dd {
+        margin-bottom: 5px;
+    }
+    
+    .bandwidth-display {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+    }
+    
+    .media-badge {
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+    
+    .media-copper {
+        background-color: #8b4513;
+        color: white;
+    }
+    
+    .media-fiber {
+        background-color: #9c27b0;
+        color: white;
+    }
+    
+    .media-wireless {
+        background-color: #2196f3;
+        color: white;
+    }
+    
+    .confidence-indicator {
+        display: inline-block;
+        width: 60px;
+        height: 10px;
+        background-color: #e0e0e0;
+        border-radius: 5px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .confidence-fill {
+        height: 100%;
+        background-color: #4caf50;
+        border-radius: 5px;
+    }
+    
+    /* 手动输入模式切换样式 */
+    .mode-switch {
+        cursor: pointer;
+        color: var(--secondary-color);
+        font-size: 0.9rem;
+    }
+    .mode-switch:hover {
+        text-decoration: underline;
+    }
+    
+    @media (max-width: 768px) {
+        .stat-card {
+            margin-bottom: 1rem;
+        }
+        
+        .table-responsive {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 主标题区域 -->
+<div class="main-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1><i class="fas fa-link me-2"></i>连接关系管理</h1>
+                <p class="lead mb-0">查看和管理网络设备之间的连接关系，包括物理连接、虚拟连接和聚合链路。</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-light me-2" onclick="window.location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i>刷新
+                </button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addConnectionModal">
+                    <i class="fas fa-plus me-1"></i>新建连接
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="container mb-4">
+    <div class="row">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-start border-primary border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">总连接数</h6>
+                            <h3 class="mb-0">{{ stats.total }}</h3>
+                        </div>
+                        <div class="stat-icon text-primary">
+                            <i class="fas fa-link"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-start border-success border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">活动连接</h6>
+                            <h3 class="mb-0">{{ stats.active }}</h3>
+                        </div>
+                        <div class="stat-icon text-success">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-start border-danger border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">断开连接</h6>
+                            <h3 class="mb-0">{{ stats.down }}</h3>
+                        </div>
+                        <div class="stat-icon text-danger">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-start border-warning border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">降级连接</h6>
+                            <h3 class="mb-0">{{ stats.degraded }}</h3>
+                        </div>
+                        <div class="stat-icon text-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-2">
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card stat-card border-start border-info border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">物理连接</h6>
+                            <h3 class="mb-0">{{ stats.physical }}</h3>
+                        </div>
+                        <div class="stat-icon text-info">
+                            <i class="fas fa-ethernet"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card stat-card border-start border-purple border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">虚拟连接</h6>
+                            <h3 class="mb-0">{{ stats.virtual }}</h3>
+                        </div>
+                        <div class="stat-icon text-purple">
+                            <i class="fas fa-cloud"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card stat-card border-start border-success border-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">聚合链路</h6>
+                            <h3 class="mb-0">{{ stats.trunk }}</h3>
+                        </div>
+                        <div class="stat-icon text-success">
+                            <i class="fas fa-layer-group"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 视图切换 -->
+<div class="container mb-3">
+    <div class="btn-group" role="group">
+        <button type="button" class="btn btn-outline-primary active" id="btnGraphView" onclick="switchView('graph')">
+            <i class="fas fa-project-diagram me-1"></i>图谱视图
+        </button>
+        <button type="button" class="btn btn-outline-primary" id="btnListView" onclick="switchView('list')">
+            <i class="fas fa-list me-1"></i>列表视图
+        </button>
+    </div>
+</div>
+
+<!-- 图谱视图面板 -->
+<div class="container mb-4" id="graphViewPanel">
+    <div class="row g-3">
+        <div class="col-lg-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center" style="background:var(--primary-color);color:#fff;">
+                    <span><i class="fas fa-network-wired me-2"></i>连接关系图谱</span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-sm btn-light" onclick="graphChart&&graphChart.resize()"><i class="fas fa-expand"></i></button>
+                        <button class="btn btn-sm btn-light" onclick="resetGraphLayout()"><i class="fas fa-redo"></i> 重置布局</button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="connectionGraph" style="width:100%;height:560px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <div class="card mb-3">
+                <div class="card-header text-center" style="background:var(--primary-color);color:#fff;">
+                    <i class="fas fa-chart-pie me-1"></i>状态分布
+                </div>
+                <div class="card-body p-0">
+                    <div id="statusChart" style="width:100%;height:240px;"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header text-center" style="background:var(--primary-color);color:#fff;">
+                    <i class="fas fa-chart-bar me-1"></i>类型分布
+                </div>
+                <div class="card-body p-0">
+                    <div id="typeChart" style="width:100%;height:240px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="mt-2">
+        <small class="text-muted">
+            <i class="fas fa-info-circle"></i> 节点颜色按设备类型区分，大小按连接数区分；连线颜色按状态区分（绿=活动/红=断开/橙=降级）。可拖拽节点、滚轮缩放。
+        </small>
+    </div>
+</div>
+
+<!-- 筛选和操作区域 -->
+<div id="listViewPanel" style="display:none;">
+<div class="container">
+    <div class="filter-card p-4">
+        <form method="get" action="{{ url_for('topology.connection_relations') }}">
+            <div class="row g-3">
+                <div class="col-lg-3 col-md-6">
+                    <label for="deviceFilter" class="form-label">设备筛选</label>
+                    <input type="text" class="form-control mb-2" id="deviceFilterKeyword" placeholder="输入名称/IP关键字过滤…" autocomplete="off">
+                    <select class="form-select" id="deviceFilter" name="device_id">
+                        <option value="">所有设备</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                            {{ device.name }} (ID: {{ device.id }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <label for="typeFilter" class="form-label">连接类型</label>
+                    <select class="form-select" id="typeFilter" name="type">
+                        <option value="all" {% if connection_type == 'all' %}selected{% endif %}>所有类型</option>
+                        <option value="physical" {% if connection_type == 'physical' %}selected{% endif %}>物理连接</option>
+                        <option value="virtual" {% if connection_type == 'virtual' %}selected{% endif %}>虚拟连接</option>
+                        <option value="trunk" {% if connection_type == 'trunk' %}selected{% endif %}>聚合链路</option>
+                        <option value="access" {% if connection_type == 'access' %}selected{% endif %}>接入链路</option>
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <label for="statusFilter" class="form-label">连接状态</label>
+                    <select class="form-select" id="statusFilter" name="status">
+                        <option value="all" {% if status == 'all' %}selected{% endif %}>所有状态</option>
+                        <option value="active" {% if status == 'active' %}selected{% endif %}>活动</option>
+                        <option value="down" {% if status == 'down' %}selected{% endif %}>断开</option>
+                        <option value="degraded" {% if status == 'degraded' %}selected{% endif %}>降级</option>
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 d-flex align-items-end">
+                    <div class="d-grid gap-2 d-md-flex w-100">
+                        <button type="submit" class="btn btn-primary flex-fill">
+                            <i class="fas fa-filter me-1"></i>筛选
+                        </button>
+                        <a href="{{ url_for('topology.connection_relations') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-redo me-1"></i>重置
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <script>
+        (function(){
+            var kw = document.getElementById('deviceFilterKeyword');
+            var sel = document.getElementById('deviceFilter');
+            if (kw && sel) {
+                kw.addEventListener('input', function(){
+                    var v = this.value.toLowerCase().trim();
+                    Array.prototype.forEach.call(sel.options, function(opt){
+                        if (opt.value === '') { opt.style.display = ''; return; }
+                        opt.style.display = opt.text.toLowerCase().indexOf(v) >= 0 ? '' : 'none';
+                    });
+                });
+            }
+        })();
+        </script>
+    </div>
+</div>
+
+<!-- 连接列表 -->
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header table-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>连接关系列表
+                    <span class="badge bg-light text-dark ms-2">{{ connections|length }}</span>
+                </h5>
+                <div class="btn-group ms-3">
+                    <button class="btn btn-sm btn-danger" id="batchDeleteBtn" disabled>
+                        <i class="fas fa-trash-alt me-1"></i>批量删除
+                    </button>
+                        <div class="vr" style="height: 28px;"></div>
+                    <button class="btn btn-sm btn-success" id="exportBtn">
+                        <i class="fas fa-download me-1"></i>导出链路表
+                    </button>
+                        <div class="vr" style="height: 28px;"></div>
+                    <button class="btn btn-sm btn-info" id="exportWiringBtn">
+                        <i class="fas fa-table me-1"></i>导出布线表
+                    </button>
+                </div>
+            </div>
+            <div class="pagination-info">
+                {{ connections|length }} 条记录
+            </div>
+        </div>
+        
+        <div class="card-body p-0">
+            {% if connections %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="40"><input type="checkbox" id="selectAllCheckbox"></th>
+                            <th class="sortable" data-sort="id">ID</th>
+                            <th class="sortable" data-sort="source_device">源设备</th>
+                            <th class="sortable" data-sort="target_device">目标设备</th>
+                            <th>源接口/端口</th>
+                            <th>目标接口/端口</th>
+                            <th class="sortable" data-sort="type">连接类型</th>
+                            <th class="sortable" data-sort="status">连接状态</th>
+                            <th>带宽</th>
+                            <th>传输介质</th>
+                            <th class="sortable" data-sort="created_at">创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for connection in connections %}
+                        <tr class="connection-row">
+                            <td><input type="checkbox" class="connection-checkbox" value="{{ connection.id }}"></td>
+                            <td><strong>#{{ connection.id }}</strong></td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-server text-secondary me-2"></i>
+                                    <div>
+                                        <div class="fw-bold">{{ connection.source_device.name if connection.source_device else 'N/A' }}</div>
+                                        <small class="text-muted">ID: {{ connection.source_device_id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-server text-secondary me-2"></i>
+                                    <div>
+                                        <div class="fw-bold">{{ connection.target_device.name if connection.target_device else 'N/A' }}</div>
+                                        <small class="text-muted">ID: {{ connection.target_device_id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if connection.source_interface %}
+                                <div>{{ connection.source_interface.name }}</div>
+                                <small class="text-muted">{{ connection.source_port }}</small>
+                                {% else %}
+                                {{ connection.source_port or 'N/A' }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if connection.target_interface %}
+                                <div>{{ connection.target_interface.name }}</div>
+                                <small class="text-muted">{{ connection.target_port }}</small>
+                                {% else %}
+                                {{ connection.target_port or 'N/A' }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if connection.connection_type == 'physical' %}
+                                <span class="badge badge-type badge-physical">
+                                    <i class="fas fa-ethernet me-1"></i>物理连接
+                                </span>
+                                {% elif connection.connection_type == 'virtual' %}
+                                <span class="badge badge-type badge-virtual">
+                                    <i class="fas fa-cloud me-1"></i>虚拟连接
+                                </span>
+                                {% elif connection.connection_type == 'trunk' %}
+                                <span class="badge badge-type badge-trunk">
+                                    <i class="fas fa-layer-group me-1"></i>聚合链路
+                                </span>
+                                {% elif connection.connection_type == 'access' %}
+                                <span class="badge badge-type badge-access">
+                                    <i class="fas fa-plug me-1"></i>接入链路
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ connection.connection_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if connection.link_status == 'active' %}
+                                <span class="badge-status badge-active">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.6rem;"></i>活动
+                                </span>
+                                {% elif connection.link_status == 'down' %}
+                                <span class="badge-status badge-down">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.6rem;"></i>断开
+                                </span>
+                                {% elif connection.link_status == 'degraded' %}
+                                <span class="badge-status badge-degraded">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.6rem;"></i>降级
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ connection.link_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if connection.bandwidth %}
+                                <span class="bandwidth-display">{{ connection.bandwidth|format_bandwidth }}</span>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if connection.media_type == 'copper' %}
+                                <span class="media-badge media-copper">
+                                    <i class="fas fa-bolt me-1"></i>铜缆
+                                </span>
+                                {% elif connection.media_type == 'fiber' %}
+                                <span class="media-badge media-fiber">
+                                    <i class="fas fa-satellite-dish me-1"></i>光纤
+                                </span>
+                                {% elif connection.media_type == 'wireless' %}
+                                <span class="media-badge media-wireless">
+                                    <i class="fas fa-wifi me-1"></i>无线
+                                </span>
+                                {% elif connection.media_type %}
+                                <span class="badge bg-secondary">{{ connection.media_type }}</span>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>{{ connection.created_at.strftime('%Y-%m-%d') if connection.created_at else '' }}</div>
+                                <small class="text-muted">{{ connection.created_at.strftime('%H:%M') if connection.created_at else '' }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary action-btn" 
+                                            data-bs-toggle="tooltip" title="查看详情" 
+                                            onclick="showConnectionDetails({{ connection.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning action-btn" 
+                                            data-bs-toggle="tooltip" title="编辑连接"
+                                            onclick="editConnection({{ connection.id }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger action-btn" 
+                                            data-bs-toggle="tooltip" title="删除连接"
+                                            onclick="deleteConnection({{ connection.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- 详情行（默认隐藏） -->
+                        <tr id="details-{{ connection.id }}" style="display: none;">
+                            <td colspan="13">
+                                <div class="connection-details">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-5">连接ID:</dt>
+                                                <dd class="col-sm-7">{{ connection.id }}</dd>
+                                                
+                                                <dt class="col-sm-5">VLAN ID:</dt>
+                                                <dd class="col-sm-7">
+                                                    {% if connection.vlan_id %}
+                                                    {{ connection.vlan_id }}
+                                                    {% else %}
+                                                    <span class="text-muted">N/A</span>
+                                                    {% endif %}
+                                                </dd>
+                                                
+                                                <dt class="col-sm-5">发现方式:</dt>
+                                                <dd class="col-sm-7">
+                                                    {% if connection.discovered_by %}
+                                                    <span class="badge bg-info">{{ connection.discovered_by|upper }}</span>
+                                                    {% else %}
+                                                    <span class="text-muted">手动</span>
+                                                    {% endif %}
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-5">发现时间:</dt>
+                                                <dd class="col-sm-7">
+                                                    {% if connection.discovery_time %}
+                                                    {{ connection.discovery_time.strftime('%Y-%m-%d %H:%M') }}
+                                                    {% else %}
+                                                    <span class="text-muted">N/A</span>
+                                                    {% endif %}
+                                                </dd>
+                                                
+                                                <dt class="col-sm-5">置信度:</dt>
+                                                <dd class="col-sm-7">
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="confidence-indicator me-2">
+                                                            <div class="confidence-fill" style="width: {{ connection.confidence }}%;"></div>
+                                                        </div>
+                                                        <span>{{ connection.confidence }}%</span>
+                                                    </div>
+                                                </dd>
+                                                
+                                                <dt class="col-sm-5">更新时间:</dt>
+                                                <dd class="col-sm-7">
+                                                    {% if connection.updated_at %}
+                                                    {{ connection.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                                    {% else %}
+                                                    <span class="text-muted">N/A</span>
+                                                    {% endif %}
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-6">发送字节:</dt>
+                                                <dd class="col-sm-6">{{ connection.tx_bytes|format_bytes }}</dd>
+                                                
+                                                <dt class="col-sm-6">接收字节:</dt>
+                                                <dd class="col-sm-6">{{ connection.rx_bytes|format_bytes }}</dd>
+                                                
+                                                <dt class="col-sm-6">发送错误:</dt>
+                                                <dd class="col-sm-6">{{ connection.tx_errors }}</dd>
+                                                
+                                                <dt class="col-sm-6">接收错误:</dt>
+                                                <dd class="col-sm-6">{{ connection.rx_errors }}</dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 text-end">
+                                        <button class="btn btn-sm btn-outline-secondary" 
+                                                onclick="hideConnectionDetails({{ connection.id }})">
+                                            <i class="fas fa-times me-1"></i>关闭详情
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-unlink"></i>
+                <h4>未找到连接关系</h4>
+                <p>当前筛选条件下没有找到任何连接记录</p>
+                <a href="{{ url_for('topology.connection_relations') }}" class="btn btn-primary">
+                    <i class="fas fa-redo me-1"></i>重置筛选条件
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if connections %}
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <div class="pagination-info">
+                显示 {{ connections|length }} 条连接记录
+            </div>
+            <div>
+                <small class="text-muted">
+                    排序: 
+                    {% if sort_by == 'created_at' %}创建时间{% endif %}
+                    {% if sort_by == 'source_device' %}源设备{% endif %}
+                    {% if sort_by == 'target_device' %}目标设备{% endif %}
+                    ({{ '降序' if order == 'desc' else '升序' }})
+                </small>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div><!-- /listViewPanel -->
+
+<!-- ========== 添加连接模态框（支持手动输入） ========== -->
+<div class="modal fade" id="addConnectionModal" tabindex="-1" aria-labelledby="addConnectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addConnectionModalLabel">
+                    <i class="fas fa-plus-circle me-2"></i>新建连接
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addConnectionForm" method="POST" action="{{ url_for('topology.add_connection') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="addSourceDevice" class="form-label">源设备 *</label>
+                            <select class="form-select" id="addSourceDevice" name="source_device_id" required>
+                                <option value="">选择源设备</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }} (ID: {{ device.id }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="addTargetDevice" class="form-label">目标设备 *</label>
+                            <select class="form-select" id="addTargetDevice" name="target_device_id" required>
+                                <option value="">选择目标设备</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }} (ID: {{ device.id }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- 源端口区域：模式切换 -->
+                        <div class="col-md-6">
+                            <label class="form-label">源端口 *</label>
+                            <div class="mb-2">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="addSourcePortMode" id="addSourceModeSelect" value="select" checked>
+                                    <label class="form-check-label" for="addSourceModeSelect">选择现有接口</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="addSourcePortMode" id="addSourceModeManual" value="manual">
+                                    <label class="form-check-label" for="addSourceModeManual">手动输入端口</label>
+                                </div>
+                            </div>
+                            <!-- 下拉选择框（默认显示） -->
+                            <div id="addSourceSelectDiv">
+                                <select class="form-select" id="addSourcePortSelect" disabled>
+                                    <option value="">请先选择源设备</option>
+                                </select>
+                                <div id="addSourcePortOccupiedMsg" class="text-danger small mt-1" style="display: none;">
+                                    <i class="fas fa-exclamation-circle me-1"></i>该端口已被占用，请选择其他端口
+                                </div>
+                            </div>
+                            <!-- 手动输入框（默认隐藏） -->
+                            <div id="addSourceManualDiv" style="display: none;">
+                                <input type="text" class="form-control" id="addSourcePortManual" placeholder="例如: GigabitEthernet0/1">
+                            </div>
+                            <!-- 隐藏字段，用于提交 -->
+                            <input type="hidden" id="addSourcePort" name="source_port">
+                            <input type="hidden" id="addSourceInterfaceId" name="source_interface_id">
+                        </div>
+
+                        <!-- 目标端口区域 -->
+                        <div class="col-md-6">
+                            <label class="form-label">目标端口 *</label>
+                            <div class="mb-2">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="addTargetPortMode" id="addTargetModeSelect" value="select" checked>
+                                    <label class="form-check-label" for="addTargetModeSelect">选择现有接口</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="addTargetPortMode" id="addTargetModeManual" value="manual">
+                                    <label class="form-check-label" for="addTargetModeManual">手动输入端口</label>
+                                </div>
+                            </div>
+                            <div id="addTargetSelectDiv">
+                                <select class="form-select" id="addTargetPortSelect" disabled>
+                                    <option value="">请先选择目标设备</option>
+                                </select>
+                                <div id="addTargetPortOccupiedMsg" class="text-danger small mt-1" style="display: none;">
+                                    <i class="fas fa-exclamation-circle me-1"></i>该端口已被占用，请选择其他端口
+                                </div>
+                            </div>
+                            <div id="addTargetManualDiv" style="display: none;">
+                                <input type="text" class="form-control" id="addTargetPortManual" placeholder="例如: GigabitEthernet0/1">
+                            </div>
+                            <input type="hidden" id="addTargetPort" name="target_port">
+                            <input type="hidden" id="addTargetInterfaceId" name="target_interface_id">
+                        </div>
+
+                        <!-- 其余字段 -->
+                        <div class="col-md-6">
+                            <label for="addConnectionType" class="form-label">连接类型 *</label>
+                            <select class="form-select" id="addConnectionType" name="connection_type" required>
+                                <option value="physical">物理连接</option>
+                                <option value="virtual">虚拟连接</option>
+                                <option value="trunk">聚合链路</option>
+                                <option value="access">接入链路</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="addLinkStatus" class="form-label">连接状态 *</label>
+                            <select class="form-select" id="addLinkStatus" name="link_status" required>
+                                <option value="active">活动</option>
+                                <option value="down">断开</option>
+                                <option value="degraded">降级</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="addBandwidth" class="form-label">带宽 (bps)</label>
+                            <input type="number" class="form-control" id="addBandwidth" name="bandwidth" placeholder="例如: 1000000000 (1Gbps)">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="addMediaType" class="form-label">传输介质</label>
+                            <select class="form-select" id="addMediaType" name="media_type">
+                                <option value="">选择介质类型</option>
+                                <option value="copper">铜缆</option>
+                                <option value="fiber">光纤</option>
+                                <option value="wireless">无线</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="addVlanId" class="form-label">VLAN ID</label>
+                            <input type="text" class="form-control" id="addVlanId" name="vlan_id" placeholder="例如: 10,20,30">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="addDiscoveredBy" class="form-label">发现方式</label>
+                            <select class="form-select" id="addDiscoveredBy" name="discovered_by">
+                                <option value="">手动</option>
+                                <option value="lldp">LLDP</option>
+                                <option value="cdp">CDP</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-12">
+                            <label for="addDescription" class="form-label">备注</label>
+                            <textarea class="form-control" id="addDescription" name="description" rows="3" placeholder="请输入连接备注信息..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="addSubmitConnectionBtn">创建连接</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========== 编辑连接模态框（支持手动输入） ========== -->
+<div class="modal fade" id="editConnectionModal" tabindex="-1" aria-labelledby="editConnectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editConnectionModalLabel">
+                    <i class="fas fa-edit me-2"></i>编辑连接
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editConnectionForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <input type="hidden" id="editConnectionId" name="connection_id">
+
+                    <div class="row g-3">
+                        <!-- 源设备 -->
+                        <div class="col-md-6">
+                            <label for="editSourceDevice" class="form-label">源设备 *</label>
+                            <select class="form-select" id="editSourceDevice" name="source_device_id" required>
+                                <option value="">选择源设备</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }} (ID: {{ device.id }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- 目标设备 -->
+                        <div class="col-md-6">
+                            <label for="editTargetDevice" class="form-label">目标设备 *</label>
+                            <select class="form-select" id="editTargetDevice" name="target_device_id" required>
+                                <option value="">选择目标设备</option>
+                                {% for device in devices %}
+                                <option value="{{ device.id }}">{{ device.name }} (ID: {{ device.id }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- 源端口区域：模式切换 -->
+                        <div class="col-md-6">
+                            <label class="form-label">源端口 *</label>
+                            <div class="mb-2">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="editSourcePortMode" id="editSourceModeSelect" value="select" checked>
+                                    <label class="form-check-label" for="editSourceModeSelect">选择现有接口</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="editSourcePortMode" id="editSourceModeManual" value="manual">
+                                    <label class="form-check-label" for="editSourceModeManual">手动输入端口</label>
+                                </div>
+                            </div>
+                            <!-- 下拉选择框（默认显示） -->
+                            <div id="editSourceSelectDiv">
+                                <select class="form-select" id="editSourcePortSelect" disabled>
+                                    <option value="">请先选择源设备</option>
+                                </select>
+                                <div id="editSourcePortOccupiedMsg" class="text-danger small mt-1" style="display: none;">
+                                    <i class="fas fa-exclamation-circle me-1"></i>该端口已被占用，请选择其他端口
+                                </div>
+                            </div>
+                            <!-- 手动输入框（默认隐藏） -->
+                            <div id="editSourceManualDiv" style="display: none;">
+                                <input type="text" class="form-control" id="editSourcePortManual" placeholder="例如: GigabitEthernet0/1">
+                            </div>
+                            <!-- 隐藏字段，用于提交 -->
+                            <input type="hidden" id="editSourcePort" name="source_port">
+                            <input type="hidden" id="editSourceInterfaceId" name="source_interface_id">
+                        </div>
+
+                        <!-- 目标端口区域 -->
+                        <div class="col-md-6">
+                            <label class="form-label">目标端口 *</label>
+                            <div class="mb-2">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="editTargetPortMode" id="editTargetModeSelect" value="select" checked>
+                                    <label class="form-check-label" for="editTargetModeSelect">选择现有接口</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="editTargetPortMode" id="editTargetModeManual" value="manual">
+                                    <label class="form-check-label" for="editTargetModeManual">手动输入端口</label>
+                                </div>
+                            </div>
+                            <div id="editTargetSelectDiv">
+                                <select class="form-select" id="editTargetPortSelect" disabled>
+                                    <option value="">请先选择目标设备</option>
+                                </select>
+                                <div id="editTargetPortOccupiedMsg" class="text-danger small mt-1" style="display: none;">
+                                    <i class="fas fa-exclamation-circle me-1"></i>该端口已被占用，请选择其他端口
+                                </div>
+                            </div>
+                            <div id="editTargetManualDiv" style="display: none;">
+                                <input type="text" class="form-control" id="editTargetPortManual" placeholder="例如: GigabitEthernet0/1">
+                            </div>
+                            <input type="hidden" id="editTargetPort" name="target_port">
+                            <input type="hidden" id="editTargetInterfaceId" name="target_interface_id">
+                        </div>
+
+                        <!-- 其余字段 -->
+                        <div class="col-md-6">
+                            <label for="editConnectionType" class="form-label">连接类型 *</label>
+                            <select class="form-select" id="editConnectionType" name="connection_type" required>
+                                <option value="physical">物理连接</option>
+                                <option value="virtual">虚拟连接</option>
+                                <option value="trunk">聚合链路</option>
+                                <option value="access">接入链路</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editLinkStatus" class="form-label">连接状态 *</label>
+                            <select class="form-select" id="editLinkStatus" name="link_status" required>
+                                <option value="active">活动</option>
+                                <option value="down">断开</option>
+                                <option value="degraded">降级</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editBandwidth" class="form-label">带宽 (bps)</label>
+                            <input type="number" class="form-control" id="editBandwidth" name="bandwidth" placeholder="例如: 1000000000">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editMediaType" class="form-label">传输介质</label>
+                            <select class="form-select" id="editMediaType" name="media_type">
+                                <option value="">选择介质类型</option>
+                                <option value="copper">铜缆</option>
+                                <option value="fiber">光纤</option>
+                                <option value="wireless">无线</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editVlanId" class="form-label">VLAN ID</label>
+                            <input type="text" class="form-control" id="editVlanId" name="vlan_id" placeholder="例如: 10,20,30">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editDiscoveredBy" class="form-label">发现方式</label>
+                            <select class="form-select" id="editDiscoveredBy" name="discovered_by">
+                                <option value="">手动</option>
+                                <option value="lldp">LLDP</option>
+                                <option value="cdp">CDP</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="editDescription" class="form-label">备注</label>
+                            <textarea class="form-control" id="editDescription" name="description" rows="3" placeholder="请输入连接备注信息..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="editSubmitConnectionBtn">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    (function() {
+        // 获取 CSRF token 的函数
+        function getCsrfToken() {
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            return metaTag ? metaTag.getAttribute('content') : '';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // ---------- 通用初始化 ----------
+            // 工具提示
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+            // ---------- 图谱视图(ECharts) ----------
+            var graphChart = null, statusChart = null, typeChart = null;
+            var graphRaw = {{ graph_data|safe }};
+
+            var typeColors = {
+                server: '#5470c6', switch: '#91cc75', router: '#fac858',
+                firewall: '#ee6666', storage: '#73c0de', ap: '#3ba272',
+                unknown: '#bdc3c7'
+            };
+            var typeLabels = {
+                server: '服务器', switch: '交换机', router: '路由器',
+                firewall: '防火墙', storage: '存储', ap: 'AP', unknown: '未知'
+            };
+            var statusColors = {
+                active: '#27ae60', down: '#e74c3c', degraded: '#f39c12',
+                unknown: '#95a5a6'
+            };
+            var statusLabels = { active: '活动', down: '断开', degraded: '降级', unknown: '未知' };
+            var connTypeLabels = { physical: '物理', virtual: '虚拟', trunk: '聚合', access: '接入' };
+
+            function initGraphView() {
+                var dom = document.getElementById('connectionGraph');
+                if (!dom || typeof echarts === 'undefined') return;
+
+                var degree = {};
+                (graphRaw.edges || []).forEach(function(e) {
+                    degree[e.source] = (degree[e.source] || 0) + 1;
+                    degree[e.target] = (degree[e.target] || 0) + 1;
+                });
+
+                var nodes = (graphRaw.nodes || []).map(function(n) {
+                    var d = degree[n.id] || 1;
+                    return {
+                        id: String(n.id),
+                        name: n.name,
+                        symbolSize: Math.min(56, 18 + d * 6),
+                        category: typeLabels[n.device_type] || typeLabels.unknown,
+                        itemStyle: { color: typeColors[n.device_type] || typeColors.unknown },
+                        label: { show: true, position: 'bottom', fontSize: 11, color: '#555' },
+                        value: d
+                    };
+                });
+
+                var edges = (graphRaw.edges || []).map(function(e) {
+                    return {
+                        source: String(e.source),
+                        target: String(e.target),
+                        lineStyle: {
+                            color: statusColors[e.status] || statusColors.unknown,
+                            width: e.status === 'down' ? 3 : 2,
+                            curveness: 0.15
+                        },
+                        value: e.status,
+                        connType: connTypeLabels[e.type] || e.type,
+                        bandwidth: e.bandwidth,
+                        source_port: e.source_port,
+                        target_port: e.target_port
+                    };
+                });
+
+                var categories = Object.keys(typeLabels).map(function(k) {
+                    return { name: typeLabels[k] };
+                });
+
+                graphChart = echarts.init(dom);
+                graphChart.setOption({
+                    backgroundColor: '#fafbfc',
+                    tooltip: {
+                        formatter: function(p) {
+                            if (p.dataType === 'edge') {
+                                return '<b>' + p.data.connType + '连接</b><br/>'
+                                    + '状态: ' + (statusLabels[p.data.value] || p.data.value) + '<br/>'
+                                    + '端口: ' + (p.data.source_port || '?') + ' → ' + (p.data.target_port || '?') + '<br/>'
+                                    + '带宽: ' + (p.data.bandwidth ? (p.data.bandwidth/1e9).toFixed(1)+' Gbps' : 'N/A');
+                            } else if (p.dataType === 'node') {
+                                return '<b>' + p.data.name + '</b><br/>连接数: ' + (p.data.value || 0);
+                            }
+                        }
+                    },
+                    legend: [{
+                        data: categories.map(function(c) { return c.name; }),
+                        top: 8, left: 'center',
+                        textStyle: { fontSize: 11, color: '#666' },
+                        itemWidth: 12, itemHeight: 12
+                    }],
+                    series: [{
+                        type: 'graph',
+                        layout: 'force',
+                        data: nodes,
+                        links: edges,
+                        categories: categories,
+                        roam: true,
+                        draggable: true,
+                        label: { show: true },
+                        force: { repulsion: 220, edgeLength: [70, 180], gravity: 0.08 },
+                        emphasis: { focus: 'adjacency', lineStyle: { width: 4, opacity: 1 } },
+                        lineStyle: { opacity: 0.8 }
+                    }]
+                });
+
+                // 状态分布环形图
+                var sDom = document.getElementById('statusChart');
+                if (sDom) {
+                    statusChart = echarts.init(sDom);
+                    var sd = {};
+                    (graphRaw.edges || []).forEach(function(e) { sd[e.status] = (sd[e.status] || 0) + 1; });
+                    statusChart.setOption({
+                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                        series: [{
+                            type: 'pie', radius: ['38%', '68%'], center: ['50%', '52%'],
+                            label: { fontSize: 10, color: '#666' },
+                            data: Object.keys(sd).map(function(k) {
+                                return { name: statusLabels[k] || k, value: sd[k], itemStyle: { color: statusColors[k] || statusColors.unknown } };
+                            })
+                        }]
+                    });
+                }
+
+                // 类型分布柱状图
+                var tDom = document.getElementById('typeChart');
+                if (tDom) {
+                    typeChart = echarts.init(tDom);
+                    var td = {};
+                    (graphRaw.edges || []).forEach(function(e) { td[e.type] = (td[e.type] || 0) + 1; });
+                    var keys = Object.keys(td);
+                    typeChart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        grid: { left: '22%', right: '10%', top: '12%', bottom: '20%' },
+                        xAxis: { type: 'category', data: keys.map(function(k) { return connTypeLabels[k] || k; }), axisLabel: { fontSize: 10 } },
+                        yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+                        series: [{
+                            type: 'bar', data: keys.map(function(k) { return td[k]; }),
+                            itemStyle: { color: '#5470c6' }, barWidth: '45%',
+                            label: { show: true, position: 'top', fontSize: 10 }
+                        }]
+                    });
+                }
+            }
+
+            window.switchView = function(view) {
+                var gPanel = document.getElementById('graphViewPanel');
+                var lPanel = document.getElementById('listViewPanel');
+                var bG = document.getElementById('btnGraphView');
+                var bL = document.getElementById('btnListView');
+                if (view === 'graph') {
+                    gPanel.style.display = '';
+                    lPanel.style.display = 'none';
+                    bG.classList.add('active'); bL.classList.remove('active');
+                    if (!graphChart) initGraphView();
+                    else { graphChart.resize(); statusChart && statusChart.resize(); typeChart && typeChart.resize(); }
+                } else {
+                    gPanel.style.display = 'none';
+                    lPanel.style.display = '';
+                    bG.classList.remove('active'); bL.classList.add('active');
+                }
+            };
+
+            window.resetGraphLayout = function() {
+                if (graphChart) { graphChart.dispose(); graphChart = null; initGraphView(); }
+            };
+
+            // 默认初始化图谱(图谱视图为默认)
+            initGraphView();
+            window.addEventListener('resize', function() {
+                graphChart && graphChart.resize();
+                statusChart && statusChart.resize();
+                typeChart && typeChart.resize();
+            });
+
+            // 排序功能
+            const sortableHeaders = document.querySelectorAll('.sortable');
+            sortableHeaders.forEach(header => {
+                header.addEventListener('click', function() {
+                    const sortBy = this.getAttribute('data-sort');
+                    let order = '{{ order }}';
+                    
+                    if ('{{ sort_by }}' === sortBy) {
+                        order = order === 'desc' ? 'asc' : 'desc';
+                    } else {
+                        order = 'desc';
+                    }
+                    
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('sort_by', sortBy);
+                    url.searchParams.set('order', order);
+                    window.location.href = url.toString();
+                });
+            });
+
+            // 高亮当前排序字段
+            const currentSortBy = '{{ sort_by }}';
+            const currentOrder = '{{ order }}';
+            if (currentSortBy) {
+                const currentHeader = document.querySelector(`.sortable[data-sort="${currentSortBy}"]`);
+                if (currentHeader) {
+                    currentHeader.style.color = 'var(--secondary-color)';
+                    const icon = currentOrder === 'desc' ? 'fa-sort-down' : 'fa-sort-up';
+                    currentHeader.innerHTML += ` <i class="fas ${icon}"></i>`;
+                }
+            }
+
+            // 连接详情显示/隐藏
+            window.showConnectionDetails = function(connectionId) {
+                const detailsRow = document.getElementById(`details-${connectionId}`);
+                detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
+            };
+            window.hideConnectionDetails = function(connectionId) {
+                document.getElementById(`details-${connectionId}`).style.display = 'none';
+            };
+
+            // 删除单个连接
+            window.deleteConnection = function(connectionId) {
+                if (confirm(`确定要删除连接 ID: ${connectionId} 吗？`)) {
+                    fetch(`/topology/connections/${connectionId}/delete`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken()
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload();
+                        } else {
+                            alert('删除失败: ' + (data.message || '未知错误'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('删除连接时出错:', error);
+                        alert('删除连接时发生错误');
+                    });
+                }
+            };
+
+            // ========== 批量删除和导出功能 ==========
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const connectionCheckboxes = document.querySelectorAll('.connection-checkbox');
+            const batchDeleteBtn = document.getElementById('batchDeleteBtn');
+            const exportBtn = document.getElementById('exportBtn');
+
+            // 更新批量删除按钮状态
+            function updateBatchDeleteButton() {
+                const checked = document.querySelectorAll('.connection-checkbox:checked').length;
+                if (batchDeleteBtn) batchDeleteBtn.disabled = checked === 0;
+            }
+
+            // 全选/取消全选
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    connectionCheckboxes.forEach(cb => {
+                        cb.checked = selectAllCheckbox.checked;
+                    });
+                    updateBatchDeleteButton();
+                });
+            }
+
+            // 单个复选框变化时
+            connectionCheckboxes.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    updateBatchDeleteButton();
+                    if (selectAllCheckbox) {
+                        const allChecked = Array.from(connectionCheckboxes).every(c => c.checked);
+                        selectAllCheckbox.checked = allChecked;
+                    }
+                });
+            });
+
+            // 批量删除
+            if (batchDeleteBtn) {
+                batchDeleteBtn.addEventListener('click', function() {
+                    const selectedIds = Array.from(document.querySelectorAll('.connection-checkbox:checked'))
+                        .map(cb => parseInt(cb.value));
+                    if (selectedIds.length === 0) {
+                        alert('请至少选择一条连接');
+                        return;
+                    }
+                    if (confirm(`确定要删除选中的 ${selectedIds.length} 条连接吗？此操作不可恢复。`)) {
+                        fetch('/topology/connections/batch_delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken()
+                            },
+                            body: JSON.stringify({ ids: selectedIds })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert(data.message);
+                                window.location.reload();
+                            } else {
+                                alert('批量删除失败: ' + data.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('批量删除出错:', error);
+                            alert('批量删除时发生错误');
+                        });
+                    }
+                });
+            }
+
+
+                // 导出布线表（基于当前筛选条件）
+                const exportWiringBtn = document.getElementById('exportWiringBtn');
+                if (exportWiringBtn) {
+                    exportWiringBtn.addEventListener('click', function() {
+                        const currentUrl = new URL(window.location.href);
+                        const params = new URLSearchParams(currentUrl.search);
+                        const exportUrl = '/topology/connections/export_wiring_table?' + params.toString();
+                        window.location.href = exportUrl;
+                    });
+                }
+
+
+
+
+            // 导出功能（基于当前筛选条件）
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    const currentUrl = new URL(window.location.href);
+                    const params = new URLSearchParams(currentUrl.search);
+                    params.set('format', 'csv');
+                    const exportUrl = '/topology/connections/export?' + params.toString();
+                    window.location.href = exportUrl;
+                });
+            }
+
+            // ---------- 添加连接模态框逻辑（保持不变） ----------
+            (function setupAddModal() {
+                const sourceDevice = document.getElementById('addSourceDevice');
+                const targetDevice = document.getElementById('addTargetDevice');
+                const sourcePortSelect = document.getElementById('addSourcePortSelect');
+                const targetPortSelect = document.getElementById('addTargetPortSelect');
+                const sourcePortManual = document.getElementById('addSourcePortManual');
+                const targetPortManual = document.getElementById('addTargetPortManual');
+                const sourceSelectDiv = document.getElementById('addSourceSelectDiv');
+                const sourceManualDiv = document.getElementById('addSourceManualDiv');
+                const targetSelectDiv = document.getElementById('addTargetSelectDiv');
+                const targetManualDiv = document.getElementById('addTargetManualDiv');
+                const sourceModeSelect = document.getElementById('addSourceModeSelect');
+                const sourceModeManual = document.getElementById('addSourceModeManual');
+                const targetModeSelect = document.getElementById('addTargetModeSelect');
+                const targetModeManual = document.getElementById('addTargetModeManual');
+                const sourcePortHidden = document.getElementById('addSourcePort');
+                const targetPortHidden = document.getElementById('addTargetPort');
+                const sourceInterfaceId = document.getElementById('addSourceInterfaceId');
+                const targetInterfaceId = document.getElementById('addTargetInterfaceId');
+                const sourceOccupiedMsg = document.getElementById('addSourcePortOccupiedMsg');
+                const targetOccupiedMsg = document.getElementById('addTargetPortOccupiedMsg');
+                const submitBtn = document.getElementById('addSubmitConnectionBtn');
+
+                let sourceCheckOK = false;
+                let targetCheckOK = false;
+                let sourceCheckInProgress = false;
+                let targetCheckInProgress = false;
+
+                function loadPorts(deviceId, selectElement, interfaceIdHidden, portNameHidden) {
+                    if (!deviceId) {
+                        selectElement.innerHTML = '<option value="">请先选择设备</option>';
+                        selectElement.disabled = true;
+                        interfaceIdHidden.value = '';
+                        portNameHidden.value = '';
+                        return;
+                    }
+                    selectElement.disabled = true;
+                    selectElement.innerHTML = '<option value="">加载中...</option>';
+                    fetch(`/topology/api/interfaces/device/${deviceId}`)
+                        .then(response => response.ok ? response.json() : Promise.reject('加载失败'))
+                        .then(data => {
+                            if (!data.success) throw new Error(data.message || '未知错误');
+                            const interfaces = data.interfaces || [];
+                            selectElement.innerHTML = '<option value="">请选择端口</option>';
+                            interfaces.forEach(iface => {
+                                const option = document.createElement('option');
+                                option.value = iface.id;
+                                option.textContent = `${iface.name}${iface.description ? ' (' + iface.description + ')' : ''}`;
+                                selectElement.appendChild(option);
+                            });
+                            selectElement.disabled = false;
+                        })
+                        .catch(error => {
+                            console.error('加载端口失败:', error);
+                            selectElement.innerHTML = '<option value="">加载失败，请重试</option>';
+                            selectElement.disabled = false;
+                        });
+                }
+
+                function checkPortOccupied(deviceId, interfaceId, type) {
+                    if (!deviceId || !interfaceId) {
+                        if (type === 'source') {
+                            sourceOccupiedMsg.style.display = 'none';
+                            sourceCheckOK = false;
+                        } else {
+                            targetOccupiedMsg.style.display = 'none';
+                            targetCheckOK = false;
+                        }
+                        enableSubmitIfValid();
+                        return;
+                    }
+
+                    if (type === 'source') {
+                        sourceCheckInProgress = true;
+                        sourceCheckOK = false;
+                    } else {
+                        targetCheckInProgress = true;
+                        targetCheckOK = false;
+                    }
+
+                    fetch(`/topology/api/check-port-occupation?device_id=${deviceId}&interface_id=${interfaceId}`)
+                        .then(response => response.ok ? response.json() : Promise.reject('检查失败'))
+                        .then(data => {
+                            const occupied = data.occupied === true;
+                            if (type === 'source') {
+                                sourceOccupiedMsg.style.display = occupied ? 'block' : 'none';
+                                sourceCheckOK = !occupied;
+                            } else {
+                                targetOccupiedMsg.style.display = occupied ? 'block' : 'none';
+                                targetCheckOK = !occupied;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('检查端口占用失败:', error);
+                            if (type === 'source') {
+                                sourceOccupiedMsg.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>检查失败，请稍后重试`;
+                                sourceOccupiedMsg.style.display = 'block';
+                                sourceCheckOK = false;
+                            } else {
+                                targetOccupiedMsg.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>检查失败，请稍后重试`;
+                                targetOccupiedMsg.style.display = 'block';
+                                targetCheckOK = false;
+                            }
+                        })
+                        .finally(() => {
+                            if (type === 'source') sourceCheckInProgress = false;
+                            else targetCheckInProgress = false;
+                            enableSubmitIfValid();
+                        });
+                }
+
+                function enableSubmitIfValid() {
+                    if (sourceCheckInProgress || targetCheckInProgress) {
+                        submitBtn.disabled = true;
+                        return;
+                    }
+
+                    let sourceValid = false;
+                    if (sourceModeSelect.checked) {
+                        sourceValid = sourcePortSelect.value && sourcePortSelect.value !== 'retry' && sourceCheckOK;
+                    } else {
+                        sourceValid = sourcePortManual.value.trim() !== '';
+                    }
+
+                    let targetValid = false;
+                    if (targetModeSelect.checked) {
+                        targetValid = targetPortSelect.value && targetPortSelect.value !== 'retry' && targetCheckOK;
+                    } else {
+                        targetValid = targetPortManual.value.trim() !== '';
+                    }
+
+                    submitBtn.disabled = !(sourceValid && targetValid);
+                }
+
+                sourceModeSelect.addEventListener('change', function() {
+                    if (this.checked) {
+                        sourceSelectDiv.style.display = 'block';
+                        sourceManualDiv.style.display = 'none';
+                        if (sourceDevice.value && sourcePortSelect.value) {
+                            checkPortOccupied(sourceDevice.value, sourcePortSelect.value, 'source');
+                        } else {
+                            sourceOccupiedMsg.style.display = 'none';
+                            sourceCheckOK = false;
+                            enableSubmitIfValid();
+                        }
+                    }
+                });
+                sourceModeManual.addEventListener('change', function() {
+                    if (this.checked) {
+                        sourceSelectDiv.style.display = 'none';
+                        sourceManualDiv.style.display = 'block';
+                        sourceOccupiedMsg.style.display = 'none';
+                        sourceCheckOK = true;
+                        enableSubmitIfValid();
+                    }
+                });
+                targetModeSelect.addEventListener('change', function() {
+                    if (this.checked) {
+                        targetSelectDiv.style.display = 'block';
+                        targetManualDiv.style.display = 'none';
+                        if (targetDevice.value && targetPortSelect.value) {
+                            checkPortOccupied(targetDevice.value, targetPortSelect.value, 'target');
+                        } else {
+                            targetOccupiedMsg.style.display = 'none';
+                            targetCheckOK = false;
+                            enableSubmitIfValid();
+                        }
+                    }
+                });
+                targetModeManual.addEventListener('change', function() {
+                    if (this.checked) {
+                        targetSelectDiv.style.display = 'none';
+                        targetManualDiv.style.display = 'block';
+                        targetOccupiedMsg.style.display = 'none';
+                        targetCheckOK = true;
+                        enableSubmitIfValid();
+                    }
+                });
+
+                sourceDevice.addEventListener('change', function() {
+                    const deviceId = this.value;
+                    loadPorts(deviceId, sourcePortSelect, sourceInterfaceId, sourcePortHidden);
+                    sourcePortSelect.value = '';
+                    sourcePortManual.value = '';
+                    sourceInterfaceId.value = '';
+                    sourcePortHidden.value = '';
+                    sourceOccupiedMsg.style.display = 'none';
+                    sourceCheckOK = false;
+                    enableSubmitIfValid();
+                });
+                targetDevice.addEventListener('change', function() {
+                    const deviceId = this.value;
+                    loadPorts(deviceId, targetPortSelect, targetInterfaceId, targetPortHidden);
+                    targetPortSelect.value = '';
+                    targetPortManual.value = '';
+                    targetInterfaceId.value = '';
+                    targetPortHidden.value = '';
+                    targetOccupiedMsg.style.display = 'none';
+                    targetCheckOK = false;
+                    enableSubmitIfValid();
+                });
+
+                sourcePortSelect.addEventListener('change', function() {
+                    if (this.value && this.value !== 'retry') {
+                        const selectedText = this.options[this.selectedIndex]?.text.split(' ')[0] || '';
+                        sourcePortManual.value = selectedText;
+                        sourceInterfaceId.value = this.value;
+                        sourcePortHidden.value = selectedText;
+                        if (sourceModeSelect.checked) {
+                            checkPortOccupied(sourceDevice.value, this.value, 'source');
+                        }
+                    } else {
+                        sourceInterfaceId.value = '';
+                        sourcePortHidden.value = '';
+                        sourceOccupiedMsg.style.display = 'none';
+                        sourceCheckOK = false;
+                        enableSubmitIfValid();
+                    }
+                });
+                targetPortSelect.addEventListener('change', function() {
+                    if (this.value && this.value !== 'retry') {
+                        const selectedText = this.options[this.selectedIndex]?.text.split(' ')[0] || '';
+                        targetPortManual.value = selectedText;
+                        targetInterfaceId.value = this.value;
+                        targetPortHidden.value = selectedText;
+                        if (targetModeSelect.checked) {
+                            checkPortOccupied(targetDevice.value, this.value, 'target');
+                        }
+                    } else {
+                        targetInterfaceId.value = '';
+                        targetPortHidden.value = '';
+                        targetOccupiedMsg.style.display = 'none';
+                        targetCheckOK = false;
+                        enableSubmitIfValid();
+                    }
+                });
+
+                sourcePortManual.addEventListener('input', function() {
+                    if (sourceModeManual.checked) {
+                        sourcePortHidden.value = this.value;
+                        sourceInterfaceId.value = '';
+                        enableSubmitIfValid();
+                    }
+                });
+                targetPortManual.addEventListener('input', function() {
+                    if (targetModeManual.checked) {
+                        targetPortHidden.value = this.value;
+                        targetInterfaceId.value = '';
+                        enableSubmitIfValid();
+                    }
+                });
+
+                document.getElementById('addConnectionForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    if (sourceDevice.value && targetDevice.value && sourceDevice.value === targetDevice.value) {
+                        alert('源设备和目标设备不能相同！');
+                        return;
+                    }
+
+                    if (sourceModeSelect.checked) {
+                        if (!sourcePortSelect.value || sourcePortSelect.value === 'retry') {
+                            alert('请选择有效的源端口');
+                            return;
+                        }
+                        if (!sourceCheckOK) {
+                            alert('源端口未通过占用检查，请确认端口可用');
+                            return;
+                        }
+                    } else {
+                        if (!sourcePortManual.value.trim()) {
+                            alert('请输入源端口名称');
+                            return;
+                        }
+                    }
+
+                    if (targetModeSelect.checked) {
+                        if (!targetPortSelect.value || targetPortSelect.value === 'retry') {
+                            alert('请选择有效的目标端口');
+                            return;
+                        }
+                        if (!targetCheckOK) {
+                            alert('目标端口未通过占用检查，请确认端口可用');
+                            return;
+                        }
+                    } else {
+                        if (!targetPortManual.value.trim()) {
+                            alert('请输入目标端口名称');
+                            return;
+                        }
+                    }
+
+                    if (sourceModeManual.checked) {
+                        sourcePortHidden.value = sourcePortManual.value.trim();
+                    }
+                    if (targetModeManual.checked) {
+                        targetPortHidden.value = targetPortManual.value.trim();
+                    }
+
+                    fetch('/topology/add_connection', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': getCsrfToken() },
+                        body: new FormData(this)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const modalEl = document.getElementById('addConnectionModal');
+                            const modal = bootstrap.Modal.getInstance(modalEl);
+                            if (modal) modal.hide();
+                            window.location.reload();
+                        } else {
+                            alert('创建失败：' + (data.message || '未知错误'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('提交失败:', error);
+                        alert('提交时发生错误');
+                    });
+                });
+            })();
+
+            // ---------- 编辑连接模态框逻辑（保持不变） ----------
+            (function setupEditModal() {
+                const editConnectionId = document.getElementById('editConnectionId');
+                const editSourceDevice = document.getElementById('editSourceDevice');
+                const editTargetDevice = document.getElementById('editTargetDevice');
+                const editSourcePortSelect = document.getElementById('editSourcePortSelect');
+                const editTargetPortSelect = document.getElementById('editTargetPortSelect');
+                const editSourcePortManual = document.getElementById('editSourcePortManual');
+                const editTargetPortManual = document.getElementById('editTargetPortManual');
+                const editSourceSelectDiv = document.getElementById('editSourceSelectDiv');
+                const editSourceManualDiv = document.getElementById('editSourceManualDiv');
+                const editTargetSelectDiv = document.getElementById('editTargetSelectDiv');
+                const editTargetManualDiv = document.getElementById('editTargetManualDiv');
+                const sourceModeSelect = document.getElementById('editSourceModeSelect');
+                const sourceModeManual = document.getElementById('editSourceModeManual');
+                const targetModeSelect = document.getElementById('editTargetModeSelect');
+                const targetModeManual = document.getElementById('editTargetModeManual');
+                const editSourcePortHidden = document.getElementById('editSourcePort');
+                const editTargetPortHidden = document.getElementById('editTargetPort');
+                const editSourceInterfaceId = document.getElementById('editSourceInterfaceId');
+                const editTargetInterfaceId = document.getElementById('editTargetInterfaceId');
+                const editSourceOccupiedMsg = document.getElementById('editSourcePortOccupiedMsg');
+                const editTargetOccupiedMsg = document.getElementById('editTargetPortOccupiedMsg');
+                const editSubmitBtn = document.getElementById('editSubmitConnectionBtn');
+
+                let originalSourceInterfaceId = null;
+                let originalTargetInterfaceId = null;
+                let originalSourcePort = '';     // 原始端口名，用于比对
+                let originalTargetPort = '';
+
+                let editSourceCheckOK = false;
+                let editTargetCheckOK = false;
+                let editSourceCheckInProgress = false;
+                let editTargetCheckInProgress = false;
+
+                function loadPortsForEdit(deviceId, selectElement, interfaceIdHidden, portNameHidden) {
+                    if (!deviceId) {
+                        selectElement.innerHTML = '<option value="">请先选择设备</option>';
+                        selectElement.disabled = true;
+                        interfaceIdHidden.value = '';
+                        portNameHidden.value = '';
+                        return;
+                    }
+                    selectElement.disabled = true;
+                    selectElement.innerHTML = '<option value="">加载中...</option>';
+                    fetch(`/topology/api/interfaces/device/${deviceId}`)
+                        .then(response => response.ok ? response.json() : Promise.reject('加载失败'))
+                        .then(data => {
+                            if (!data.success) throw new Error(data.message || '未知错误');
+                            const interfaces = data.interfaces || [];
+                            selectElement.innerHTML = '<option value="">请选择端口</option>';
+                            interfaces.forEach(iface => {
+                                const option = document.createElement('option');
+                                option.value = iface.id;
+                                option.textContent = `${iface.name}${iface.description ? ' (' + iface.description + ')' : ''}`;
+                                selectElement.appendChild(option);
+                            });
+                            selectElement.disabled = false;
+                        })
+                        .catch(error => {
+                            console.error('加载端口失败:', error);
+                            selectElement.innerHTML = '<option value="">加载失败，请重试</option>';
+                            selectElement.disabled = false;
+                        });
+                }
+
+                function checkPortOccupiedForEdit(deviceId, interfaceId, type) {
+                    if (!deviceId || !interfaceId) {
+                        if (type === 'source') {
+                            editSourceOccupiedMsg.style.display = 'none';
+                            editSourceCheckOK = false;
+                        } else {
+                            editTargetOccupiedMsg.style.display = 'none';
+                            editTargetCheckOK = false;
+                        }
+                        enableEditSubmitIfValid();
+                        return;
+                    }
+
+                    // 获取当前选中接口的名称
+                    var selectedOption = null;
+                    var selectedPortName = '';
+                    if (type === 'source') {
+                        selectedOption = editSourcePortSelect.options[editSourcePortSelect.selectedIndex];
+                    } else {
+                        selectedOption = editTargetPortSelect.options[editTargetPortSelect.selectedIndex];
+                    }
+                    if (selectedOption) {
+                        selectedPortName = (selectedOption.text || '').split(' ')[0];
+                    }
+
+                    // 如果选中的端口名和原端口名相同，且设备未变 → 自己的端口，不检查
+                    var sameDevice = (type === 'source')
+                        ? (editSourceDevice.value == document.getElementById('editSourceDevice').getAttribute('data-original-device'))
+                        : (editTargetDevice.value == document.getElementById('editTargetDevice').getAttribute('data-original-device'));
+                    var originalPort = (type === 'source') ? originalSourcePort : originalTargetPort;
+                    if (selectedPortName && selectedPortName.toLowerCase() === originalPort.toLowerCase() && sameDevice) {
+                        if (type === 'source') {
+                            editSourceOccupiedMsg.style.display = 'none';
+                            editSourceCheckOK = true;
+                        } else {
+                            editTargetOccupiedMsg.style.display = 'none';
+                            editTargetCheckOK = true;
+                        }
+                        enableEditSubmitIfValid();
+                        return;
+                    }
+
+                    if (type === 'source') {
+                        editSourceCheckInProgress = true;
+                        editSourceCheckOK = false;
+                    } else {
+                        editTargetCheckInProgress = true;
+                        editTargetCheckOK = false;
+                    }
+
+                    fetch(`/topology/api/check-port-occupation?device_id=${deviceId}&interface_id=${interfaceId}&exclude_connection=${editConnectionId.value}`)
+                        .then(response => response.ok ? response.json() : Promise.reject('检查失败'))
+                        .then(data => {
+                            const occupied = data.occupied === true;
+                            if (type === 'source') {
+                                editSourceOccupiedMsg.style.display = occupied ? 'block' : 'none';
+                                editSourceCheckOK = !occupied;
+                            } else {
+                                editTargetOccupiedMsg.style.display = occupied ? 'block' : 'none';
+                                editTargetCheckOK = !occupied;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('检查端口占用失败:', error);
+                            if (type === 'source') {
+                                editSourceOccupiedMsg.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>检查失败，请稍后重试`;
+                                editSourceOccupiedMsg.style.display = 'block';
+                                editSourceCheckOK = false;
+                            } else {
+                                editTargetOccupiedMsg.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>检查失败，请稍后重试`;
+                                editTargetOccupiedMsg.style.display = 'block';
+                                editTargetCheckOK = false;
+                            }
+                        })
+                        .finally(() => {
+                            if (type === 'source') editSourceCheckInProgress = false;
+                            else editTargetCheckInProgress = false;
+                            enableEditSubmitIfValid();
+                        });
+                }
+
+                function enableEditSubmitIfValid() {
+                    if (editSourceCheckInProgress || editTargetCheckInProgress) {
+                        editSubmitBtn.disabled = true;
+                        return;
+                    }
+
+                    let sourceValid = false;
+                    if (sourceModeSelect.checked) {
+                        sourceValid = editSourcePortSelect.value && editSourcePortSelect.value !== 'retry' && editSourceCheckOK;
+                    } else {
+                        sourceValid = editSourcePortManual.value.trim() !== '';
+                    }
+
+                    let targetValid = false;
+                    if (targetModeSelect.checked) {
+                        targetValid = editTargetPortSelect.value && editTargetPortSelect.value !== 'retry' && editTargetCheckOK;
+                    } else {
+                        targetValid = editTargetPortManual.value.trim() !== '';
+                    }
+
+                    editSubmitBtn.disabled = !(sourceValid && targetValid);
+                }
+
+                sourceModeSelect.addEventListener('change', function() {
+                    if (this.checked) {
+                        editSourceSelectDiv.style.display = 'block';
+                        editSourceManualDiv.style.display = 'none';
+                        if (editSourceDevice.value && editSourcePortSelect.value) {
+                            var selText = (editSourcePortSelect.options[editSourcePortSelect.selectedIndex]?.text || '').split(' ')[0];
+                            var isOwn = (originalSourceInterfaceId && editSourcePortSelect.value == originalSourceInterfaceId)
+                                     || (selText && selText.toLowerCase() === originalSourcePort.toLowerCase());
+                            if (isOwn) {
+                                editSourceOccupiedMsg.style.display = 'none';
+                                editSourceCheckOK = true;
+                                enableEditSubmitIfValid();
+                            } else {
+                                checkPortOccupiedForEdit(editSourceDevice.value, editSourcePortSelect.value, 'source');
+                            }
+                        } else {
+                            editSourceOccupiedMsg.style.display = 'none';
+                            editSourceCheckOK = false;
+                            enableEditSubmitIfValid();
+                        }
+                    }
+                });
+                sourceModeManual.addEventListener('change', function() {
+                    if (this.checked) {
+                        editSourceSelectDiv.style.display = 'none';
+                        editSourceManualDiv.style.display = 'block';
+                        editSourceOccupiedMsg.style.display = 'none';
+                        editSourceCheckOK = true;
+                        enableEditSubmitIfValid();
+                    }
+                });
+                targetModeSelect.addEventListener('change', function() {
+                    if (this.checked) {
+                        editTargetSelectDiv.style.display = 'block';
+                        editTargetManualDiv.style.display = 'none';
+                        if (editTargetDevice.value && editTargetPortSelect.value) {
+                            var selText2 = (editTargetPortSelect.options[editTargetPortSelect.selectedIndex]?.text || '').split(' ')[0];
+                            var isOwn2 = (originalTargetInterfaceId && editTargetPortSelect.value == originalTargetInterfaceId)
+                                      || (selText2 && selText2.toLowerCase() === originalTargetPort.toLowerCase());
+                            if (isOwn2) {
+                                editTargetOccupiedMsg.style.display = 'none';
+                                editTargetCheckOK = true;
+                                enableEditSubmitIfValid();
+                            } else {
+                                checkPortOccupiedForEdit(editTargetDevice.value, editTargetPortSelect.value, 'target');
+                            }
+                        } else {
+                            editTargetOccupiedMsg.style.display = 'none';
+                            editTargetCheckOK = false;
+                            enableEditSubmitIfValid();
+                        }
+                    }
+                });
+                targetModeManual.addEventListener('change', function() {
+                    if (this.checked) {
+                        editTargetSelectDiv.style.display = 'none';
+                        editTargetManualDiv.style.display = 'block';
+                        editTargetOccupiedMsg.style.display = 'none';
+                        editTargetCheckOK = true;
+                        enableEditSubmitIfValid();
+                    }
+                });
+
+                editSourceDevice.addEventListener('change', function() {
+                    const deviceId = this.value;
+                    loadPortsForEdit(deviceId, editSourcePortSelect, editSourceInterfaceId, editSourcePortHidden);
+                    editSourcePortSelect.value = '';
+                    editSourcePortManual.value = '';
+                    editSourceInterfaceId.value = '';
+                    editSourcePortHidden.value = '';
+                    editSourceOccupiedMsg.style.display = 'none';
+                    editSourceCheckOK = false;
+                    enableEditSubmitIfValid();
+                });
+                editTargetDevice.addEventListener('change', function() {
+                    const deviceId = this.value;
+                    loadPortsForEdit(deviceId, editTargetPortSelect, editTargetInterfaceId, editTargetPortHidden);
+                    editTargetPortSelect.value = '';
+                    editTargetPortManual.value = '';
+                    editTargetInterfaceId.value = '';
+                    editTargetPortHidden.value = '';
+                    editTargetOccupiedMsg.style.display = 'none';
+                    editTargetCheckOK = false;
+                    enableEditSubmitIfValid();
+                });
+
+                editSourcePortSelect.addEventListener('change', function() {
+                    if (this.value && this.value !== 'retry') {
+                        const selectedText = this.options[this.selectedIndex]?.text.split(' ')[0] || '';
+                        editSourcePortManual.value = selectedText;
+                        editSourceInterfaceId.value = this.value;
+                        editSourcePortHidden.value = selectedText;
+                        if (sourceModeSelect.checked) {
+                            // 判断是否选中了原有端口：接口ID匹配 或 端口名匹配
+                            var isOwnPort = (originalSourceInterfaceId && this.value == originalSourceInterfaceId)
+                                         || (selectedText && selectedText.toLowerCase() === originalSourcePort.toLowerCase());
+                            if (isOwnPort) {
+                                editSourceOccupiedMsg.style.display = 'none';
+                                editSourceCheckOK = true;
+                                enableEditSubmitIfValid();
+                            } else {
+                                checkPortOccupiedForEdit(editSourceDevice.value, this.value, 'source');
+                            }
+                        }
+                    } else {
+                        editSourceInterfaceId.value = '';
+                        editSourcePortHidden.value = '';
+                        editSourceOccupiedMsg.style.display = 'none';
+                        editSourceCheckOK = false;
+                        enableEditSubmitIfValid();
+                    }
+                });
+                editTargetPortSelect.addEventListener('change', function() {
+                    if (this.value && this.value !== 'retry') {
+                        const selectedText = this.options[this.selectedIndex]?.text.split(' ')[0] || '';
+                        editTargetPortManual.value = selectedText;
+                        editTargetInterfaceId.value = this.value;
+                        editTargetPortHidden.value = selectedText;
+                        if (targetModeSelect.checked) {
+                            var isOwnPort = (originalTargetInterfaceId && this.value == originalTargetInterfaceId)
+                                         || (selectedText && selectedText.toLowerCase() === originalTargetPort.toLowerCase());
+                            if (isOwnPort) {
+                                editTargetOccupiedMsg.style.display = 'none';
+                                editTargetCheckOK = true;
+                                enableEditSubmitIfValid();
+                            } else {
+                                checkPortOccupiedForEdit(editTargetDevice.value, this.value, 'target');
+                            }
+                        }
+                    } else {
+                        editTargetInterfaceId.value = '';
+                        editTargetPortHidden.value = '';
+                        editTargetOccupiedMsg.style.display = 'none';
+                        editTargetCheckOK = false;
+                        enableEditSubmitIfValid();
+                    }
+                });
+
+                editSourcePortManual.addEventListener('input', function() {
+                    if (sourceModeManual.checked) {
+                        editSourcePortHidden.value = this.value;
+                        editSourceInterfaceId.value = '';
+                        enableEditSubmitIfValid();
+                    }
+                });
+                editTargetPortManual.addEventListener('input', function() {
+                    if (targetModeManual.checked) {
+                        editTargetPortHidden.value = this.value;
+                        editTargetInterfaceId.value = '';
+                        enableEditSubmitIfValid();
+                    }
+                });
+
+                document.getElementById('editConnectionModal').addEventListener('hidden.bs.modal', function() {
+                    originalSourceInterfaceId = null;
+                    originalTargetInterfaceId = null;
+                    originalSourcePort = '';
+                    originalTargetPort = '';
+                });
+
+                document.getElementById('editConnectionForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    if (editSourceDevice.value && editTargetDevice.value && editSourceDevice.value === editTargetDevice.value) {
+                        alert('源设备和目标设备不能相同！');
+                        return;
+                    }
+
+                    if (sourceModeSelect.checked) {
+                        if (!editSourcePortSelect.value || editSourcePortSelect.value === 'retry') {
+                            alert('请选择有效的源端口');
+                            return;
+                        }
+                        if (!editSourceCheckOK) {
+                            alert('源端口未通过占用检查，请确认端口可用');
+                            return;
+                        }
+                    } else {
+                        if (!editSourcePortManual.value.trim()) {
+                            alert('请输入源端口名称');
+                            return;
+                        }
+                    }
+
+                    if (targetModeSelect.checked) {
+                        if (!editTargetPortSelect.value || editTargetPortSelect.value === 'retry') {
+                            alert('请选择有效的目标端口');
+                            return;
+                        }
+                        if (!editTargetCheckOK) {
+                            alert('目标端口未通过占用检查，请确认端口可用');
+                            return;
+                        }
+                    } else {
+                        if (!editTargetPortManual.value.trim()) {
+                            alert('请输入目标端口名称');
+                            return;
+                        }
+                    }
+
+                    if (sourceModeManual.checked) {
+                        editSourcePortHidden.value = editSourcePortManual.value.trim();
+                    }
+                    if (targetModeManual.checked) {
+                        editTargetPortHidden.value = editTargetPortManual.value.trim();
+                    }
+
+                    fetch(`/topology/connections/${editConnectionId.value}/edit`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': getCsrfToken()
+                        },
+                        body: new FormData(this)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const modalEl = document.getElementById('editConnectionModal');
+                            const modal = bootstrap.Modal.getInstance(modalEl);
+                            if (modal) modal.hide();
+                            window.location.reload();
+                        } else {
+                            alert('更新失败：' + (data.message || '未知错误'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('提交失败:', error);
+                        alert('提交时发生错误');
+                    });
+                });
+
+                window.editConnection = function(connectionId) {
+                    fetch(`/topology/api/connections/${connectionId}`)
+                        .then(response => {
+                            if (!response.ok) throw new Error('获取连接详情失败');
+                            return response.json();
+                        })
+                        .then(data => {
+                            editConnectionId.value = connectionId;
+                            document.getElementById('editConnectionForm').action = `/topology/connections/${connectionId}/edit`;
+
+                            // 记录原始端口名和接口ID
+                            originalSourceInterfaceId = data.source_interface_id;
+                            originalTargetInterfaceId = data.target_interface_id;
+                            originalSourcePort = data.source_port || '';
+                            originalTargetPort = data.target_port || '';
+
+                            editSourceDevice.value = data.source_device_id || '';
+                            editTargetDevice.value = data.target_device_id || '';
+                            // 记录原始设备ID，用于设备变更检测
+                            editSourceDevice.setAttribute('data-original-device', data.source_device_id || '');
+                            editTargetDevice.setAttribute('data-original-device', data.target_device_id || '');
+
+                            const sourceDeviceChange = new Event('change', { bubbles: true });
+                            const targetDeviceChange = new Event('change', { bubbles: true });
+                            editSourceDevice.dispatchEvent(sourceDeviceChange);
+                            editTargetDevice.dispatchEvent(targetDeviceChange);
+
+                            setTimeout(() => {
+                                // ----- 源端口：优先 select 模式，unknown 时也选 dropdown -----
+                                var srcPortName = data.source_port || '';
+                                var srcIsUnknown = !srcPortName || srcPortName.toLowerCase() === 'unknown';
+
+                                if (data.source_interface_id && editSourcePortSelect.querySelector(`option[value="${data.source_interface_id}"]`)) {
+                                    // 有接口ID且在列表中 → select 模式直接选中
+                                    sourceModeSelect.checked = true; sourceModeManual.checked = false;
+                                    editSourceSelectDiv.style.display = 'block'; editSourceManualDiv.style.display = 'none';
+                                    editSourcePortSelect.value = data.source_interface_id;
+                                    editSourcePortSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                } else {
+                                    // 无接口ID或不在列表中 → manual 模式，载入现有端口
+                                    sourceModeManual.checked = true; sourceModeSelect.checked = false;
+                                    editSourceSelectDiv.style.display = 'none'; editSourceManualDiv.style.display = 'block';
+                                    editSourceOccupiedMsg.style.display = 'none';
+                                    editSourceInterfaceId.value = '';
+                                    editSourceCheckOK = true;
+                                    if (srcIsUnknown) {
+                                        editSourcePortManual.value = '';
+                                        editSourcePortHidden.value = '';
+                                    } else {
+                                        editSourcePortManual.value = srcPortName;
+                                        editSourcePortHidden.value = srcPortName;
+                                    }
+                                }
+
+                                // ----- 目标端口：同样逻辑 -----
+                                var tgtPortName = data.target_port || '';
+                                var tgtIsUnknown = !tgtPortName || tgtPortName.toLowerCase() === 'unknown';
+
+                                if (data.target_interface_id && editTargetPortSelect.querySelector(`option[value="${data.target_interface_id}"]`)) {
+                                    targetModeSelect.checked = true; targetModeManual.checked = false;
+                                    editTargetSelectDiv.style.display = 'block'; editTargetManualDiv.style.display = 'none';
+                                    editTargetPortSelect.value = data.target_interface_id;
+                                    editTargetPortSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                } else {
+                                    targetModeManual.checked = true; targetModeSelect.checked = false;
+                                    editTargetSelectDiv.style.display = 'none'; editTargetManualDiv.style.display = 'block';
+                                    editTargetOccupiedMsg.style.display = 'none';
+                                    editTargetInterfaceId.value = '';
+                                    editTargetCheckOK = true;
+                                    if (tgtIsUnknown) {
+                                        editTargetPortManual.value = '';
+                                        editTargetPortHidden.value = '';
+                                    } else {
+                                        editTargetPortManual.value = tgtPortName;
+                                        editTargetPortHidden.value = tgtPortName;
+                                    }
+                                }
+
+                                document.getElementById('editConnectionType').value = data.connection_type || 'physical';
+                                document.getElementById('editLinkStatus').value = data.link_status || 'active';
+                                document.getElementById('editBandwidth').value = data.bandwidth || '';
+                                document.getElementById('editMediaType').value = data.media_type || '';
+                                document.getElementById('editVlanId').value = data.vlan_id || '';
+                                document.getElementById('editDiscoveredBy').value = data.discovered_by || '';
+                                document.getElementById('editDescription').value = data.description || '';
+
+                                enableEditSubmitIfValid();
+
+                                const modal = new bootstrap.Modal(document.getElementById('editConnectionModal'));
+                                modal.show();
+                            }, 300);
+                        })
+                        .catch(error => {
+                            console.error('加载连接详情失败:', error);
+                            alert('无法加载连接详情，请稍后重试。');
+                        });
+                };
+            })();
+        });
+    })();
+</script>
+{% endblock %}

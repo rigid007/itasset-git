@@ -1,0 +1,1704 @@
+{% extends "base.html" %}
+
+{% block title %}监控模板管理 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<!-- Toastr CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<style>
+    :root {
+        --primary-color: #4361ee;
+        --success-color: #06d6a0;
+        --warning-color: #ffd166;
+        --danger-color: #ef476f;
+        --info-color: #118ab2;
+    }
+    
+    .card {
+        border-radius: 10px;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .card:hover {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .card-header {
+        background-color: #fff;
+        border-bottom: 1px solid #eaeaea;
+        font-weight: 600;
+        font-size: 1.1rem;
+        padding: 15px 20px;
+        border-radius: 10px 10px 0 0 !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .template-card {
+        border-left: 4px solid var(--primary-color);
+        height: 100%;
+    }
+    
+    .template-card.default {
+        border-left-color: var(--warning-color);
+        background-color: rgba(255, 209, 102, 0.05);
+    }
+    
+    .template-card.disabled {
+        border-left-color: #ccc;
+        opacity: 0.7;
+    }
+    
+    .template-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+    
+    .badge-default {
+        background-color: rgba(255, 209, 102, 0.1);
+        color: #856404;
+    }
+    
+    .badge-enabled {
+        background-color: rgba(6, 214, 160, 0.1);
+        color: var(--success-color);
+    }
+    
+    .badge-disabled {
+        background-color: rgba(108, 117, 125, 0.1);
+        color: #6c757d;
+    }
+    
+    .badge-device-type {
+        background-color: rgba(67, 97, 238, 0.1);
+        color: var(--primary-color);
+    }
+    
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.9);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+    
+    .stats-card {
+        border-radius: 10px;
+        padding: 15px;
+        text-align: center;
+        color: white;
+        margin-bottom: 20px;
+    }
+    
+    .stats-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .stats-success {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .stats-info {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stats-warning {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    
+    .stats-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        margin-top: 15px;
+    }
+    
+    .action-btn {
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 0.85rem;
+        border: none;
+        transition: all 0.3s;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+    }
+    
+    .action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .btn-edit {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    
+    .btn-delete {
+        background-color: var(--danger-color);
+        color: white;
+    }
+    
+    .btn-apply {
+        background-color: var(--success-color);
+        color: white;
+    }
+    
+    .btn-copy {
+        background-color: var(--info-color);
+        color: white;
+    }
+    
+    .nav-tabs {
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .nav-tabs .nav-link {
+        color: #6c757d;
+        font-weight: 500;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 10px 20px;
+        transition: all 0.3s;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: var(--primary-color);
+        background-color: transparent;
+        border-bottom-color: var(--primary-color);
+    }
+    
+    .nav-tabs .nav-link:hover:not(.active) {
+        color: var(--primary-color);
+        background-color: rgba(67, 97, 238, 0.05);
+    }
+    
+    .template-info {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    .template-info-item {
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .template-info-label {
+        font-weight: 500;
+        min-width: 80px;
+    }
+    
+    .monitoring-item {
+        border: 1px solid #e9ecef;
+        border-radius: 5px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background-color: #f8f9fa;
+    }
+    
+    .monitoring-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+    
+    .monitoring-item-name {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .monitoring-item-type {
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background-color: #e9ecef;
+        color: #6c757d;
+    }
+    
+    .monitoring-item-desc {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-bottom: 5px;
+    }
+    
+    .threshold-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 3px;
+        font-size: 0.8rem;
+    }
+    
+    .threshold-label {
+        min-width: 60px;
+        font-weight: 500;
+    }
+    
+    .threshold-value {
+        color: #495057;
+    }
+    
+    .threshold-critical {
+        color: var(--danger-color);
+        font-weight: 600;
+    }
+    
+    .threshold-warning {
+        color: var(--warning-color);
+        font-weight: 600;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #dee2e6;
+    }
+    
+    .search-container {
+        position: relative;
+        margin-bottom: 20px;
+    }
+    
+    .search-input {
+        padding-left: 40px;
+        border-radius: 25px;
+    }
+    
+    .search-icon {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+        z-index: 10;
+    }
+    
+    .filter-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .filter-badge {
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .filter-badge.active {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    
+    .form-section {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .form-section-title {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 10px;
+        font-size: 1rem;
+    }
+    
+    .json-editor-container {
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        min-height: 150px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .monitoring-item-editor {
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: white;
+    }
+    
+    .monitoring-item-editor-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .monitoring-item-title {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .remove-monitoring-item {
+        color: var(--danger-color);
+        cursor: pointer;
+        font-size: 1.2rem;
+    }
+    
+    .add-monitoring-item-btn {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .threshold-config-row {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 10px;
+    }
+    
+    .threshold-config-item {
+        flex: 1;
+    }
+    
+    .device-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        background-color: #e3f2fd;
+        color: var(--primary-color);
+    }
+    
+    .template-preview {
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+<i class="fas fa-tachometer-alt me-2"></i>监控模板管理
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <button class="btn btn-outline-primary me-2" id="importTemplateBtn">
+        <i class="fas fa-file-import me-2"></i>导入模板
+    </button>
+    <button class="btn btn-primary" id="addTemplateBtn">
+        <i class="fas fa-plus me-2"></i>添加模板
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+</div>
+
+<!-- 统计信息 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="stats-card stats-primary">
+            <div class="stats-number">{{ templates|length }}</div>
+            <div class="stats-label">总模板数</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-success">
+            <div class="stats-number" id="enabledTemplates">{{ templates|selectattr('enabled')|list|length }}</div>
+            <div class="stats-label">启用模板</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-info">
+            <div class="stats-number" id="defaultTemplates">{{ templates|selectattr('is_default')|list|length }}</div>
+            <div class="stats-label">默认模板</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-warning">
+            <div class="stats-number" id="deviceTypes">{{ templates|map(attribute='device_type')|unique|list|length }}</div>
+            <div class="stats-label">设备类型</div>
+        </div>
+    </div>
+</div>
+
+<!-- 搜索和过滤 -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="search-container">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" class="form-control search-input" id="templateSearch" placeholder="搜索模板名称、描述、厂商或型号...">
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="d-flex justify-content-end">
+            <div class="form-check form-switch me-3">
+                <input class="form-check-input" type="checkbox" id="showDisabledTemplates" checked>
+                <label class="form-check-label" for="showDisabledTemplates">显示禁用模板</label>
+            </div>
+            <button class="btn btn-outline-secondary" id="resetFiltersBtn">
+                <i class="fas fa-redo me-1"></i>重置筛选
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 过滤标签 -->
+<div class="filter-badges" id="deviceTypeFilters">
+    <span class="badge filter-badge active" data-type="all">全部</span>
+    {% set device_types = templates|map(attribute='device_type')|select|unique|list %}
+    {% for device_type in device_types %}
+        {% if device_type %}
+        <span class="badge filter-badge bg-secondary" data-type="{{ device_type }}">
+            {{ device_type }}
+        </span>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<!-- 模板列表 -->
+<div class="row" id="templatesContainer">
+    {% if templates %}
+        {% for template in templates %}
+        {% set template_dict = template.to_dict() %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card template-card {% if template_dict.is_default %}default{% endif %} {% if not template_dict.enabled %}disabled{% endif %}"
+                 data-name="{{ template_dict.name }}" 
+                 data-description="{{ template_dict.description|default('') }}"
+                 data-device-type="{{ template_dict.device_type|default('') }}"
+                 data-vendor="{{ template_dict.vendor|default('') }}"
+                 data-model="{{ template_dict.model|default('') }}">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <div class="device-icon">
+                            <i class="fas fa-{% if template_dict.device_type == 'router' %}router{% elif template_dict.device_type == 'switch' %}sitemap{% elif template_dict.device_type == 'firewall' %}shield-alt{% elif template_dict.device_type == 'server' %}server{% else %}desktop{% endif %}"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">{{ template_dict.name }}</h6>
+                            <small class="text-muted">{{ template_dict.vendor }} {{ template_dict.model }}</small>
+                        </div>
+                    </div>
+                    <div>
+                        {% if template_dict.is_default %}
+                        <span class="template-badge badge-default">
+                            <i class="fas fa-star me-1"></i>默认
+                        </span>
+                        {% endif %}
+                        <span class="template-badge {% if template_dict.enabled %}badge-enabled{% else %}badge-disabled{% endif %}">
+                            {% if template_dict.enabled %}启用{% else %}禁用{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="template-info mb-3">
+                        {% if template_dict.description %}
+                        <div class="template-info-item">
+                            <div class="template-info-label">描述:</div>
+                            <div>{{ template_dict.description|truncate(50) }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if template_dict.device_type %}
+                        <div class="template-info-item">
+                            <div class="template-info-label">设备类型:</div>
+                            <div>
+                                <span class="badge badge-device-type">{{ template_dict.device_type }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="template-info-item">
+                            <div class="template-info-label">轮询间隔:</div>
+                            <div>{{ template_dict.polling_interval }} 秒</div>
+                        </div>
+                        
+                        <div class="template-info-item">
+                            <div class="template-info-label">超时时间:</div>
+                            <div>{{ template_dict.timeout }} 秒</div>
+                        </div>
+                        
+                        <div class="template-info-item">
+                            <div class="template-info-label">监控项:</div>
+                            <div>{{ template_dict.monitoring_items|length }} 个</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 监控项预览 -->
+                    {% set monitoring_items = template_dict.monitoring_items %}
+                    {% if monitoring_items %}
+                    <div class="template-preview mb-3">
+                        {% for item in monitoring_items[:3] %}
+                        <div class="monitoring-item">
+                            <div class="monitoring-item-header">
+                                <div class="monitoring-item-name">{{ item.name|truncate(20) }}</div>
+                                <div class="monitoring-item-type">{{ item.type|default('metric') }}</div>
+                            </div>
+                            {% if item.description %}
+                            <div class="monitoring-item-desc">{{ item.description|truncate(30) }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        {% if monitoring_items|length > 3 %}
+                        <div class="text-center text-muted small">
+                            <i class="fas fa-ellipsis-h"></i> 还有 {{ monitoring_items|length - 3 }} 个监控项
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="action-buttons">
+                        <button class="action-btn btn-apply" data-template-id="{{ template_dict.id }}" title="应用此模板">
+                            <i class="fas fa-check"></i> 应用
+                        </button>
+                        <button class="action-btn btn-edit" data-template-id="{{ template_dict.id }}" title="编辑模板">
+                            <i class="fas fa-edit"></i> 编辑
+                        </button>
+                        <button class="action-btn btn-copy" data-template-id="{{ template_dict.id }}" title="复制模板">
+                            <i class="fas fa-copy"></i> 复制
+                        </button>
+                        <button class="action-btn btn-delete" data-template-id="{{ template_dict.id }}" title="删除模板">
+                            <i class="fas fa-trash"></i> 删除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="empty-state">
+                <i class="fas fa-tachometer-alt"></i>
+                <h5>暂无监控模板</h5>
+                <p>点击右上角"添加模板"按钮创建您的第一个监控模板</p>
+                <button class="btn btn-primary mt-3" id="createFirstTemplateBtn">
+                    <i class="fas fa-plus me-2"></i>创建第一个模板
+                </button>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- 添加/编辑模板模态框 -->
+<div class="modal fade" id="templateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="templateModalTitle">添加监控模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="templateForm">
+                    <input type="hidden" id="templateId">
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-section">
+                                <div class="form-section-title">基本信息</div>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="templateName" class="form-label">模板名称 <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="templateName" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="templateDeviceType" class="form-label">设备类型</label>
+                                        <select class="form-select" id="templateDeviceType">
+                                            <option value="">选择设备类型</option>
+                                            <option value="router">路由器</option>
+                                            <option value="switch">交换机</option>
+                                            <option value="firewall">防火墙</option>
+                                            <option value="server">服务器</option>
+                                            <option value="storage">存储设备</option>
+                                            <option value="printer">打印机</option>
+                                            <option value="wireless">无线设备</option>
+                                            <option value="other">其他</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="templateVendor" class="form-label">厂商</label>
+                                        <input type="text" class="form-control" id="templateVendor" placeholder="例如: Cisco, Huawei, Dell">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="templateModel" class="form-label">型号</label>
+                                        <input type="text" class="form-control" id="templateModel" placeholder="例如: Catalyst 2960, PowerEdge R740">
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="templateDescription" class="form-label">描述</label>
+                                    <textarea class="form-control" id="templateDescription" rows="3" placeholder="模板的详细描述..."></textarea>
+                                </div>
+                            </div>
+                            
+                            <div class="form-section">
+                                <div class="form-section-title">监控项配置</div>
+                                <div id="monitoringItemsContainer">
+                                    <!-- 监控项将通过JavaScript动态添加 -->
+                                </div>
+                                <button type="button" class="btn btn-outline-primary add-monitoring-item-btn" id="addMonitoringItemBtn">
+                                    <i class="fas fa-plus me-2"></i>添加监控项
+                                </button>
+                            </div>
+                            
+                            <div class="form-section">
+                                <div class="form-section-title">阈值配置</div>
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="thresholdWarning" class="form-label">警告阈值</label>
+                                        <input type="number" class="form-control" id="thresholdWarning" placeholder="80">
+                                        <div class="form-text">达到此值触发警告</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="thresholdCritical" class="form-label">严重阈值</label>
+                                        <input type="number" class="form-control" id="thresholdCritical" placeholder="90">
+                                        <div class="form-text">达到此值触发严重警报</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="thresholdUnit" class="form-label">单位</label>
+                                        <select class="form-select" id="thresholdUnit">
+                                            <option value="percent">百分比 (%)</option>
+                                            <option value="ms">毫秒 (ms)</option>
+                                            <option value="mb">兆字节 (MB)</option>
+                                            <option value="count">计数</option>
+                                            <option value="other">其他</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="form-section">
+                                <div class="form-section-title">监控设置</div>
+                                <div class="mb-3">
+                                    <label for="pollingInterval" class="form-label">轮询间隔（秒） <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="pollingInterval" value="300" min="30" max="3600" required>
+                                    <div class="form-text">设备监控数据采集间隔时间</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="timeout" class="form-label">超时时间（秒） <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="timeout" value="30" min="5" max="300" required>
+                                    <div class="form-text">监控请求超时时间</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="templateEnabled" checked>
+                                        <label class="form-check-label" for="templateEnabled">
+                                            启用此模板
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="templateIsDefault">
+                                        <label class="form-check-label" for="templateIsDefault">
+                                            设为默认模板
+                                        </label>
+                                        <div class="form-text">设置为该设备类型的默认模板</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-section">
+                                <div class="form-section-title">模板预览</div>
+                                <div id="templatePreview" class="template-preview">
+                                    <div class="text-center text-muted py-4">
+                                        <i class="fas fa-eye"></i>
+                                        <p>添加监控项后在此预览</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveTemplateBtn">保存模板</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 应用模板模态框 -->
+<div class="modal fade" id="applyTemplateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">应用监控模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="applyToDevices" class="form-label">选择设备</label>
+                    <select class="form-select select2" id="applyToDevices" multiple>
+                        <!-- 通过AJAX加载设备列表 -->
+                    </select>
+                    <div class="form-text">选择要应用此模板的设备</div>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="overrideExisting" checked>
+                    <label class="form-check-label" for="overrideExisting">
+                        覆盖现有监控配置
+                    </label>
+                    <div class="form-text">如果设备已有监控配置，将被此模板覆盖</div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    此操作将为选中的设备应用监控模板，可能会影响现有监控配置。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmApplyBtn">确认应用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除此监控模板吗？</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    此操作不可恢复，但不会影响已应用此模板的设备。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入模板模态框 -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">导入监控模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="importFile" class="form-label">选择模板文件</label>
+                    <input class="form-control" type="file" id="importFile" accept=".json">
+                    <div class="form-text">支持JSON格式的模板文件</div>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="overwriteExistingTemplates" checked>
+                    <label class="form-check-label" for="overwriteExistingTemplates">
+                        覆盖同名模板
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmImportBtn">导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Toastr JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    // 确保页面正常加载
+    console.log('监控模板管理页面加载中...');
+    
+    // 简化Toastr配置
+    toastr.options = {
+        "closeButton": true,
+        "positionClass": "toast-top-right",
+        "timeOut": "3000",
+        "extendedTimeOut": "1000"
+    };
+    
+    // 全局变量
+    let currentTemplateId = null;
+    let currentMonitoringItems = [];
+    let monitoringItemCounter = 0;
+    
+    // 显示加载动画
+    function showLoading() {
+        try {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.style.display = 'flex';
+        } catch (e) {
+            console.log('显示加载动画失败:', e);
+        }
+    }
+    
+    // 隐藏加载动画
+    function hideLoading() {
+        try {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.style.display = 'none';
+        } catch (e) {
+            console.log('隐藏加载动画失败:', e);
+        }
+    }
+    
+    // 页面初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM加载完成');
+        
+        // 确保加载动画被隐藏
+        setTimeout(hideLoading, 500);
+        
+        // 绑定事件
+        bindEvents();
+        
+        // 初始化监控项编辑器
+        initMonitoringItemEditor();
+    });
+    
+    // 绑定所有事件
+    function bindEvents() {
+        try {
+            // 添加模板按钮
+            const addTemplateBtn = document.getElementById('addTemplateBtn');
+            if (addTemplateBtn) {
+                addTemplateBtn.addEventListener('click', function() {
+                    showTemplateModal();
+                });
+            }
+            
+            // 创建第一个模板按钮
+            const createFirstTemplateBtn = document.getElementById('createFirstTemplateBtn');
+            if (createFirstTemplateBtn) {
+                createFirstTemplateBtn.addEventListener('click', function() {
+                    showTemplateModal();
+                });
+            }
+            
+            // 导入模板按钮
+            const importTemplateBtn = document.getElementById('importTemplateBtn');
+            if (importTemplateBtn) {
+                importTemplateBtn.addEventListener('click', function() {
+                    const modal = new bootstrap.Modal(document.getElementById('importModal'));
+                    modal.show();
+                });
+            }
+            
+            // 保存模板按钮
+            const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+            if (saveTemplateBtn) {
+                saveTemplateBtn.addEventListener('click', saveTemplate);
+            }
+            
+            // 确认导入按钮
+            const confirmImportBtn = document.getElementById('confirmImportBtn');
+            if (confirmImportBtn) {
+                confirmImportBtn.addEventListener('click', importTemplate);
+            }
+            
+            // 确认删除按钮
+            const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+            if (confirmDeleteBtn) {
+                confirmDeleteBtn.addEventListener('click', deleteTemplate);
+            }
+            
+            // 搜索功能
+            const searchInput = document.getElementById('templateSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', filterTemplates);
+            }
+            
+            // 显示/禁用模板开关
+            const showDisabledToggle = document.getElementById('showDisabledTemplates');
+            if (showDisabledToggle) {
+                showDisabledToggle.addEventListener('change', filterTemplates);
+            }
+            
+            // 重置筛选按钮
+            const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+            if (resetFiltersBtn) {
+                resetFiltersBtn.addEventListener('click', function() {
+                    searchInput.value = '';
+                    showDisabledToggle.checked = true;
+                    filterTemplates();
+                    resetDeviceTypeFilters();
+                });
+            }
+            
+            // 设备类型过滤器
+            const filterBadges = document.querySelectorAll('.filter-badge');
+            filterBadges.forEach(badge => {
+                badge.addEventListener('click', function() {
+                    const type = this.getAttribute('data-type');
+                    filterByDeviceType(type);
+                });
+            });
+            
+            // 动态绑定模板卡片按钮事件
+            document.addEventListener('click', function(e) {
+                // 应用模板按钮
+                if (e.target.closest('.btn-apply')) {
+                    const button = e.target.closest('.btn-apply');
+                    const templateId = button.getAttribute('data-template-id');
+                    if (templateId) {
+                        showApplyTemplateModal(templateId);
+                    }
+                }
+                
+                // 编辑模板按钮
+                if (e.target.closest('.btn-edit')) {
+                    const button = e.target.closest('.btn-edit');
+                    const templateId = button.getAttribute('data-template-id');
+                    if (templateId) {
+                        editTemplate(templateId);
+                    }
+                }
+                
+                // 复制模板按钮
+                if (e.target.closest('.btn-copy')) {
+                    const button = e.target.closest('.btn-copy');
+                    const templateId = button.getAttribute('data-template-id');
+                    if (templateId) {
+                        copyTemplate(templateId);
+                    }
+                }
+                
+                // 删除模板按钮
+                if (e.target.closest('.btn-delete')) {
+                    const button = e.target.closest('.btn-delete');
+                    const templateId = button.getAttribute('data-template-id');
+                    if (templateId) {
+                        showDeleteModal(templateId);
+                    }
+                }
+            });
+            
+        } catch (e) {
+            console.log('事件绑定失败:', e);
+            toastr.error('页面初始化失败，请刷新页面重试');
+        }
+    }
+    
+    // 初始化监控项编辑器
+    function initMonitoringItemEditor() {
+        const addItemBtn = document.getElementById('addMonitoringItemBtn');
+        if (addItemBtn) {
+            addItemBtn.addEventListener('click', addMonitoringItem);
+        }
+        
+        // 添加第一个监控项
+        addMonitoringItem();
+    }
+    
+    // 添加监控项
+    function addMonitoringItem() {
+        const container = document.getElementById('monitoringItemsContainer');
+        const itemId = `monitoring-item-${monitoringItemCounter++}`;
+        
+        const itemHtml = `
+            <div class="monitoring-item-editor" id="${itemId}">
+                <div class="monitoring-item-editor-header">
+                    <div class="monitoring-item-title">监控项 #${monitoringItemCounter}</div>
+                    <div>
+                        <i class="fas fa-times remove-monitoring-item" data-item-id="${itemId}"></i>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="${itemId}-name" class="form-label">名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control monitoring-item-name" id="${itemId}-name" placeholder="例如: CPU使用率" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="${itemId}-type" class="form-label">类型</label>
+                        <select class="form-select monitoring-item-type" id="${itemId}-type">
+                            <option value="metric">指标</option>
+                            <option value="status">状态</option>
+                            <option value="counter">计数器</option>
+                            <option value="gauge">仪表</option>
+                            <option value="health">健康检查</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="${itemId}-description" class="form-label">描述</label>
+                    <textarea class="form-control monitoring-item-description" id="${itemId}-description" rows="2" placeholder="监控项的详细描述..."></textarea>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="${itemId}-oid" class="form-label">OID/指标名</label>
+                        <input type="text" class="form-control monitoring-item-oid" id="${itemId}-oid" placeholder="例如: 1.3.6.1.4.1.2021.10.1.3.1">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="${itemId}-unit" class="form-label">单位</label>
+                        <input type="text" class="form-control monitoring-item-unit" id="${itemId}-unit" placeholder="例如: %, MB, ms">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="${itemId}-interval" class="form-label">采集间隔（秒）</label>
+                        <input type="number" class="form-control monitoring-item-interval" id="${itemId}-interval" value="60" min="10" max="3600">
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', itemHtml);
+        
+        // 绑定删除事件
+        const removeBtn = document.querySelector(`[data-item-id="${itemId}"]`);
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function() {
+                document.getElementById(itemId).remove();
+                updateTemplatePreview();
+            });
+        }
+        
+        // 监控项输入变化时更新预览
+        const inputs = document.querySelectorAll(`#${itemId} input, #${itemId} select, #${itemId} textarea`);
+        inputs.forEach(input => {
+            input.addEventListener('input', updateTemplatePreview);
+        });
+        
+        updateTemplatePreview();
+    }
+    
+    // 更新模板预览
+    function updateTemplatePreview() {
+        const previewContainer = document.getElementById('templatePreview');
+        if (!previewContainer) return;
+        
+        // 收集监控项数据
+        const monitoringItems = [];
+        const itemEditors = document.querySelectorAll('.monitoring-item-editor');
+        
+        itemEditors.forEach(editor => {
+            const name = editor.querySelector('.monitoring-item-name')?.value;
+            if (!name) return;
+            
+            const item = {
+                name: name,
+                type: editor.querySelector('.monitoring-item-type')?.value || 'metric',
+                description: editor.querySelector('.monitoring-item-description')?.value || '',
+                oid: editor.querySelector('.monitoring-item-oid')?.value || '',
+                unit: editor.querySelector('.monitoring-item-unit')?.value || '',
+                interval: parseInt(editor.querySelector('.monitoring-item-interval')?.value) || 60
+            };
+            
+            monitoringItems.push(item);
+        });
+        
+        // 生成预览HTML
+        let previewHtml = '';
+        
+        if (monitoringItems.length === 0) {
+            previewHtml = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-eye"></i>
+                    <p>添加监控项后在此预览</p>
+                </div>
+            `;
+        } else {
+            monitoringItems.forEach((item, index) => {
+                previewHtml += `
+                    <div class="monitoring-item">
+                        <div class="monitoring-item-header">
+                            <div class="monitoring-item-name">${item.name}</div>
+                            <div class="monitoring-item-type">${item.type}</div>
+                        </div>
+                        ${item.description ? `<div class="monitoring-item-desc">${item.description}</div>` : ''}
+                        <div class="small text-muted">
+                            ${item.oid ? `OID: ${item.oid}<br>` : ''}
+                            单位: ${item.unit || '无'}, 间隔: ${item.interval}秒
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        previewContainer.innerHTML = previewHtml;
+    }
+    
+    // 显示模板模态框
+    function showTemplateModal() {
+        try {
+            // 重置表单
+            document.getElementById('templateForm').reset();
+            document.getElementById('templateId').value = '';
+            document.getElementById('templateModalTitle').textContent = '添加监控模板';
+            
+            // 清空监控项
+            const container = document.getElementById('monitoringItemsContainer');
+            container.innerHTML = '';
+            monitoringItemCounter = 0;
+            
+            // 添加第一个监控项
+            addMonitoringItem();
+            
+            // 更新预览
+            updateTemplatePreview();
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('templateModal'));
+            modal.show();
+        } catch (e) {
+            console.log('显示模板模态框失败:', e);
+            toastr.error('无法打开模板对话框');
+        }
+    }
+    
+    // 编辑模板
+    function editTemplate(templateId) {
+        showLoading();
+        
+        fetch(`/config/api/monitoring-templates/${templateId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': AppConfig.csrfToken || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            
+            if (data && data.id) {
+                // 填充表单
+                document.getElementById('templateId').value = data.id;
+                document.getElementById('templateName').value = data.name || '';
+                document.getElementById('templateDescription').value = data.description || '';
+                document.getElementById('templateDeviceType').value = data.device_type || '';
+                document.getElementById('templateVendor').value = data.vendor || '';
+                document.getElementById('templateModel').value = data.model || '';
+                document.getElementById('pollingInterval').value = data.polling_interval || 300;
+                document.getElementById('timeout').value = data.timeout || 30;
+                document.getElementById('templateEnabled').checked = data.enabled || false;
+                document.getElementById('templateIsDefault').checked = data.is_default || false;
+                
+                // 阈值配置
+                if (data.threshold_config) {
+                    document.getElementById('thresholdWarning').value = data.threshold_config.warning || '';
+                    document.getElementById('thresholdCritical').value = data.threshold_config.critical || '';
+                    document.getElementById('thresholdUnit').value = data.threshold_config.unit || 'percent';
+                }
+                
+                // 监控项
+                const container = document.getElementById('monitoringItemsContainer');
+                container.innerHTML = '';
+                monitoringItemCounter = 0;
+                
+                if (data.monitoring_items && data.monitoring_items.length > 0) {
+                    data.monitoring_items.forEach(item => {
+                        addMonitoringItem();
+                        
+                        // 填充最后一个添加的监控项
+                        const lastEditor = container.lastElementChild;
+                        if (lastEditor) {
+                            lastEditor.querySelector('.monitoring-item-name').value = item.name || '';
+                            lastEditor.querySelector('.monitoring-item-type').value = item.type || 'metric';
+                            lastEditor.querySelector('.monitoring-item-description').value = item.description || '';
+                            lastEditor.querySelector('.monitoring-item-oid').value = item.oid || '';
+                            lastEditor.querySelector('.monitoring-item-unit').value = item.unit || '';
+                            lastEditor.querySelector('.monitoring-item-interval').value = item.interval || 60;
+                        }
+                    });
+                } else {
+                    addMonitoringItem();
+                }
+                
+                // 更新标题和预览
+                document.getElementById('templateModalTitle').textContent = '编辑监控模板';
+                updateTemplatePreview();
+                
+                // 显示模态框
+                const modal = new bootstrap.Modal(document.getElementById('templateModal'));
+                modal.show();
+            } else {
+                toastr.error('获取模板信息失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('获取模板信息失败:', error);
+            toastr.error('获取模板信息失败，请检查网络连接');
+        });
+    }
+    
+    // 保存模板
+    function saveTemplate() {
+        const form = document.getElementById('templateForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        // 收集监控项数据
+        const monitoringItems = [];
+        const itemEditors = document.querySelectorAll('.monitoring-item-editor');
+        
+        itemEditors.forEach(editor => {
+            const name = editor.querySelector('.monitoring-item-name')?.value;
+            if (!name) return;
+            
+            const item = {
+                name: name,
+                type: editor.querySelector('.monitoring-item-type')?.value || 'metric',
+                description: editor.querySelector('.monitoring-item-description')?.value || '',
+                oid: editor.querySelector('.monitoring-item-oid')?.value || '',
+                unit: editor.querySelector('.monitoring-item-unit')?.value || '',
+                interval: parseInt(editor.querySelector('.monitoring-item-interval')?.value) || 60
+            };
+            
+            monitoringItems.push(item);
+        });
+        
+        if (monitoringItems.length === 0) {
+            toastr.error('请至少添加一个监控项');
+            return;
+        }
+        
+        // 收集阈值配置
+        const thresholdConfig = {
+            warning: document.getElementById('thresholdWarning').value || null,
+            critical: document.getElementById('thresholdCritical').value || null,
+            unit: document.getElementById('thresholdUnit').value || 'percent'
+        };
+        
+        const templateData = {
+            name: document.getElementById('templateName').value,
+            description: document.getElementById('templateDescription').value,
+            device_type: document.getElementById('templateDeviceType').value || null,
+            vendor: document.getElementById('templateVendor').value || null,
+            model: document.getElementById('templateModel').value || null,
+            monitoring_items: monitoringItems,
+            threshold_config: thresholdConfig,
+            polling_interval: parseInt(document.getElementById('pollingInterval').value),
+            timeout: parseInt(document.getElementById('timeout').value),
+            enabled: document.getElementById('templateEnabled').checked,
+            is_default: document.getElementById('templateIsDefault').checked
+        };
+        
+        const templateId = document.getElementById('templateId').value;
+        const url = templateId ? `/config/api/monitoring-templates/${templateId}` : '/config/api/monitoring-templates';
+        const method = templateId ? 'PUT' : 'POST';
+        
+        showLoading();
+        
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': AppConfig.csrfToken || ''
+            },
+            body: JSON.stringify(templateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data && data.success) {
+                toastr.success(data.message || '模板保存成功');
+                
+                // 关闭模态框
+                const modal = bootstrap.Modal.getInstance(document.getElementById('templateModal'));
+                modal.hide();
+                
+                // 重新加载页面
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                toastr.error(data && data.message ? data.message : '保存失败，请重试');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('保存模板失败:', error);
+            toastr.error('保存失败，请检查网络连接');
+        });
+    }
+    
+    // 复制模板
+    function copyTemplate(templateId) {
+        showLoading();
+        
+        fetch(`/config/api/monitoring-templates/${templateId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': AppConfig.csrfToken || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            
+            if (data && data.id) {
+                // 修改名称
+                const originalName = data.name;
+                const copyName = `${originalName} - 副本`;
+                
+                // 准备复制的数据
+                const templateData = {
+                    name: copyName,
+                    description: data.description,
+                    device_type: data.device_type,
+                    vendor: data.vendor,
+                    model: data.model,
+                    monitoring_items: data.monitoring_items || [],
+                    threshold_config: data.threshold_config || {},
+                    polling_interval: data.polling_interval,
+                    timeout: data.timeout,
+                    enabled: data.enabled,
+                    is_default: false  // 副本不设为默认
+                };
+                
+                // 保存副本
+                showLoading();
+                return fetch('/config/api/monitoring-templates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': AppConfig.csrfToken || ''
+                    },
+                    body: JSON.stringify(templateData)
+                });
+            } else {
+                throw new Error('获取模板数据失败');
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data && data.success) {
+                toastr.success('模板复制成功');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                toastr.error(data && data.message ? data.message : '复制失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('复制模板失败:', error);
+            toastr.error('复制失败，请检查网络连接');
+        });
+    }
+    
+    // 显示删除确认模态框
+    function showDeleteModal(templateId) {
+        currentTemplateId = templateId;
+        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        modal.show();
+    }
+    
+    // 删除模板
+    function deleteTemplate() {
+        if (!currentTemplateId) {
+            toastr.error('无效的模板ID');
+            return;
+        }
+        
+        showLoading();
+        
+        fetch(`/config/api/monitoring-templates/${currentTemplateId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': AppConfig.csrfToken || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data && data.success) {
+                toastr.success(data.message || '模板删除成功');
+                
+                // 关闭模态框
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+                modal.hide();
+                
+                // 重新加载页面
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                toastr.error(data && data.message ? data.message : '删除失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('删除模板失败:', error);
+            toastr.error('删除失败，请检查网络连接');
+        });
+    }
+    
+    // 显示应用模板模态框
+    function showApplyTemplateModal(templateId) {
+        currentTemplateId = templateId;
+        
+        // 初始化Select2
+        $('#applyToDevices').select2({
+            width: '100%',
+            placeholder: '选择要应用模板的设备...',
+            ajax: {
+                url: '/api/devices/search',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return {
+                        q: params.term,
+                        page: params.page || 1
+                    };
+                },
+                processResults: function(data) {
+                    return {
+                        results: data.devices || []
+                    };
+                }
+            }
+        });
+        
+        const modal = new bootstrap.Modal(document.getElementById('applyTemplateModal'));
+        modal.show();
+    }
+    
+    // 确认应用模板
+    document.getElementById('confirmApplyBtn')?.addEventListener('click', function() {
+        if (!currentTemplateId) {
+            toastr.error('无效的模板ID');
+            return;
+        }
+        
+        const selectedDevices = $('#applyToDevices').val();
+        if (!selectedDevices || selectedDevices.length === 0) {
+            toastr.error('请选择要应用模板的设备');
+            return;
+        }
+        
+        const overrideExisting = document.getElementById('overrideExisting').checked;
+        
+        showLoading();
+        
+        fetch(`/config/api/monitoring-templates/${currentTemplateId}/apply`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': AppConfig.csrfToken || ''
+            },
+            body: JSON.stringify({
+                device_ids: selectedDevices,
+                override: overrideExisting
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data && data.success) {
+                toastr.success(data.message || '模板应用成功');
+                
+                // 关闭模态框
+                const modal = bootstrap.Modal.getInstance(document.getElementById('applyTemplateModal'));
+                modal.hide();
+            } else {
+                toastr.error(data && data.message ? data.message : '应用失败');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('应用模板失败:', error);
+            toastr.error('应用失败，请检查网络连接');
+        });
+    });
+    
+    // 导入模板
+    function importTemplate() {
+        const fileInput = document.getElementById('importFile');
+        const overwrite = document.getElementById('overwriteExistingTemplates').checked;
+        
+        if (!fileInput.files.length) {
+            toastr.error('请选择要导入的模板文件');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const templateData = JSON.parse(e.target.result);
+                
+                showLoading();
+                
+                fetch('/config/api/monitoring-templates/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': AppConfig.csrfToken || ''
+                    },
+                    body: JSON.stringify({
+                        template: templateData,
+                        overwrite: overwrite
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data && data.success) {
+                        toastr.success(data.message || '模板导入成功');
+                        
+                        // 关闭模态框
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
+                        modal.hide();
+                        
+                        // 清空文件输入
+                        fileInput.value = '';
+                        
+                        // 重新加载页面
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        toastr.error(data && data.message ? data.message : '导入失败');
+                    }
+                })
+                .catch(error => {
+                    hideLoading();
+                    console.error('导入模板失败:', error);
+                    toastr.error('导入失败，请检查网络连接');
+                });
+            } catch (error) {
+                toastr.error('模板文件格式错误');
+            }
+        };
+        
+        reader.readAsText(file);
+    }
+    
+    // 过滤模板
+    function filterTemplates() {
+        const searchText = document.getElementById('templateSearch').value.toLowerCase();
+        const showDisabled = document.getElementById('showDisabledTemplates').checked;
+        
+        document.querySelectorAll('.template-card').forEach(card => {
+            const name = card.getAttribute('data-name')?.toLowerCase() || '';
+            const description = card.getAttribute('data-description')?.toLowerCase() || '';
+            const deviceType = card.getAttribute('data-device-type')?.toLowerCase() || '';
+            const vendor = card.getAttribute('data-vendor')?.toLowerCase() || '';
+            const model = card.getAttribute('data-model')?.toLowerCase() || '';
+            
+            const isDisabled = card.classList.contains('disabled');
+            const matchesSearch = searchText === '' || 
+                name.includes(searchText) || 
+                description.includes(searchText) ||
+                deviceType.includes(searchText) ||
+                vendor.includes(searchText) ||
+                model.includes(searchText);
+            
+            const shouldShow = matchesSearch && (showDisabled || !isDisabled);
+            
+            card.closest('.col-md-6').style.display = shouldShow ? '' : 'none';
+        });
+    }
+    
+    // 按设备类型过滤
+    function filterByDeviceType(type) {
+        // 更新过滤标签状态
+        document.querySelectorAll('.filter-badge').forEach(badge => {
+            badge.classList.remove('active');
+            if (type === 'all') {
+                if (badge.getAttribute('data-type') === 'all') {
+                    badge.classList.add('active');
+                }
+            } else if (badge.getAttribute('data-type') === type) {
+                badge.classList.add('active');
+            }
+        });
+        
+        if (type === 'all') {
+            // 显示所有模板
+            document.querySelectorAll('.template-card').forEach(card => {
+                card.closest('.col-md-6').style.display = '';
+            });
+        } else {
+            // 只显示指定设备类型的模板
+            document.querySelectorAll('.template-card').forEach(card => {
+                const deviceType = card.getAttribute('data-device-type') || '';
+                card.closest('.col-md-6').style.display = deviceType === type ? '' : 'none';
+            });
+        }
+    }
+    
+    // 重置设备类型过滤器
+    function resetDeviceTypeFilters() {
+        document.querySelectorAll('.filter-badge').forEach(badge => {
+            badge.classList.remove('active');
+            if (badge.getAttribute('data-type') === 'all') {
+                badge.classList.add('active');
+            }
+        });
+        
+        document.querySelectorAll('.template-card').forEach(card => {
+            card.closest('.col-md-6').style.display = '';
+        });
+    }
+    
+    // 全局错误处理
+    window.addEventListener('error', function(event) {
+        console.error('页面错误:', event.error);
+        hideLoading();
+    });
+</script>
+{% endblock %}

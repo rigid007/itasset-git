@@ -1,0 +1,1246 @@
+{% extends "base.html" %}
+
+{% block title %}机柜使用率报表 - 数据中心管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- 引入Chart.js用于图表 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .cabinet-card {
+        transition: transform 0.3s;
+        border-left: 4px solid #007bff;
+    }
+    .cabinet-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .stat-card {
+        border-left: 4px solid #007bff;
+        background-color: #f8f9fa;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 30px;
+    }
+    .cabinet-table th {
+        border-top: none;
+    }
+    .progress {
+        height: 20px;
+        font-size: 12px;
+    }
+    .export-btn {
+        margin-right: 10px;
+    }
+    .u-slots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        margin: 10px 0;
+    }
+    .u-slot {
+        width: 24px;
+        height: 24px;
+        border: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: bold;
+        position: relative;
+    }
+    .u-slot.used {
+        background-color: #28a745;
+        color: white;
+    }
+    .u-slot.partial {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    .u-slot.empty {
+        background-color: #e9ecef;
+        color: #6c757d;
+    }
+    .u-slot-label {
+        position: absolute;
+        top: -20px;
+        left: 0;
+        font-size: 10px;
+        color: #6c757d;
+    }
+    
+    .utilization-badge {
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .utilization-low { background-color: #d4edda; color: #155724; }
+    .utilization-medium { background-color: #fff3cd; color: #856404; }
+    .utilization-high { background-color: #f8d7da; color: #721c24; }
+    .utilization-full { background-color: #dc3545; color: white; }
+    
+    .cabinet-rack {
+        background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+        border: 2px solid #6c757d;
+        border-radius: 4px;
+        padding: 10px;
+        margin: 10px 0;
+        position: relative;
+    }
+    .rack-u {
+        height: 20px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        padding-left: 5px;
+        font-size: 11px;
+        position: relative;
+    }
+    .rack-u.used {
+        background-color: #28a745;
+        color: white;
+        border-radius: 2px;
+        margin: 1px;
+    }
+    .rack-u-number {
+        position: absolute;
+        left: 5px;
+        font-size: 10px;
+        color: #6c757d;
+    }
+    .device-name {
+        position: absolute;
+        left: 30px;
+        font-size: 10px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        max-width: calc(100% - 35px);
+    }
+    
+    .tab-content {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        padding: 20px;
+        border-radius: 0 0 0.35rem 0.35rem;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: 600;
+    }
+    
+    /* 位置标签 */
+    .location-badge {
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        background-color: #e9ecef;
+        color: #495057;
+    }
+    
+    /* 排序按钮 */
+    .sort-btn {
+        background: none;
+        border: none;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0 5px;
+    }
+    .sort-btn:hover {
+        color: #007bff;
+    }
+    .sort-btn.active {
+        color: #007bff;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">机柜使用率报表</h1>
+            <p class="text-muted">统计数据中心机柜空间使用情况，优化机柜空间规划</p>
+        </div>
+        <div>
+            <button onclick="exportToCSV()" class="btn btn-outline-success export-btn">
+                <i class="fas fa-file-csv"></i> 导出CSV
+            </button>
+            <button onclick="printReport()" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> 打印报表
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计概览卡片 -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2 stat-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                机柜总数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ cabinet_stats|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                平均使用率
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if cabinet_stats|length > 0 %}
+                                    {% set total_utilization = 0 %}
+                                    {% for stat in cabinet_stats %}
+                                        {% set total_utilization = total_utilization + stat.utilization %}
+                                    {% endfor %}
+                                    {{ "%.1f"|format(total_utilization / cabinet_stats|length) }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-pie fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                高使用率机柜
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set high_count = 0 %}
+                                {% for stat in cabinet_stats %}
+                                    {% if stat.utilization >= 80 %}
+                                        {% set high_count = high_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ high_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                已使用U位总数
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set total_used_u = 0 %}
+                                {% for stat in cabinet_stats %}
+                                    {% set total_used_u = total_used_u + stat.used_u %}
+                                {% endfor %}
+                                {{ total_used_u }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-cube fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="cabinetTab" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="list-tab" data-toggle="tab" href="#list" role="tab">
+                                <i class="fas fa-list mr-1"></i> 机柜列表
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="chart-tab" data-toggle="tab" href="#chart" role="tab">
+                                <i class="fas fa-chart-bar mr-1"></i> 使用率图表
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="summary-tab" data-toggle="tab" href="#summary" role="tab">
+                                <i class="fas fa-chart-pie mr-1"></i> 统计摘要
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content" id="cabinetTabContent">
+                    <!-- 机柜列表标签页 -->
+                    <div class="tab-pane fade show active" id="list" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-bordered cabinet-table" width="100%" cellspacing="0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th width="40">#</th>
+                                        <th>
+                                            机柜名称
+                                            <button class="sort-btn" onclick="sortTable('name')">
+                                                <i class="fas fa-sort"></i>
+                                            </button>
+                                        </th>
+                                        <th>位置</th>
+                                        <th>
+                                            使用率
+                                            <button class="sort-btn active" onclick="sortTable('utilization')">
+                                                <i class="fas fa-sort-down"></i>
+                                            </button>
+                                        </th>
+                                        <th>
+                                            U位使用
+                                            <button class="sort-btn" onclick="sortTable('used_u')">
+                                                <i class="fas fa-sort"></i>
+                                            </button>
+                                        </th>
+                                        <th>
+                                            设备数量
+                                            <button class="sort-btn" onclick="sortTable('device_count')">
+                                                <i class="fas fa-sort"></i>
+                                            </button>
+                                        </th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if cabinet_stats %}
+                                        {% for stat in cabinet_stats %}
+                                        {% set i = loop.index %}
+                                        <tr id="cabinet-row-{{ stat.cabinet.id }}">
+                                            <td class="text-center">{{ i }}</td>
+                                            <td>
+                                                <strong>{{ stat.cabinet.name }}</strong>
+                                                {% if stat.cabinet.description %}
+                                                <br>
+                                                <small class="text-muted">{{ stat.cabinet.description|truncate(30) }}</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if stat.cabinet.location %}
+                                                <span class="location-badge">
+                                                    {{ stat.cabinet.location.name|default('未指定') }}
+                                                </span>
+                                                {% else %}
+                                                <span class="text-muted">未指定</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="mr-3" style="width: 60px;">
+                                                        <div class="progress">
+                                                            <div class="progress-bar 
+                                                                {% if stat.utilization >= 90 %}bg-danger
+                                                                {% elif stat.utilization >= 70 %}bg-warning
+                                                                {% elif stat.utilization >= 50 %}bg-info
+                                                                {% else %}bg-success{% endif %}" 
+                                                                 role="progressbar" 
+                                                                 style="width: {{ stat.utilization if stat.utilization <= 100 else 100 }}%"
+                                                                 aria-valuenow="{{ stat.utilization }}" 
+                                                                 aria-valuemin="0" 
+                                                                 aria-valuemax="100">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-weight-bold">{{ "%.1f"|format(stat.utilization) }}%</span>
+                                                        <br>
+                                                        <span class="text-muted" style="font-size: 11px;">
+                                                            {{ stat.used_u }}/{{ stat.total_u }}U
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="u-slots">
+                                                    {% for u in range(1, stat.total_u + 1) %}
+                                                        {% set is_used = false %}
+                                                        {% for device in stat.cabinet.devices %}
+                                                            {% if device.position_u and device.height_u %}
+                                                                {% if u >= device.position_u and u < device.position_u + device.height_u %}
+                                                                    {% set is_used = true %}
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        <div class="u-slot {% if is_used %}used{% else %}empty{% endif %}">
+                                                            {% if u % 5 == 0 or u == 1 %}
+                                                                <span class="u-slot-label">{{ u }}</span>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="font-weight-bold">{{ stat.device_count }}</span>
+                                                <br>
+                                                <small class="text-muted">台设备</small>
+                                            </td>
+                                            <td>
+                                                {% if stat.utilization >= 90 %}
+                                                    <span class="utilization-badge utilization-full">满载</span>
+                                                {% elif stat.utilization >= 70 %}
+                                                    <span class="utilization-badge utilization-high">高</span>
+                                                {% elif stat.utilization >= 50 %}
+                                                    <span class="utilization-badge utilization-medium">中</span>
+                                                {% else %}
+                                                    <span class="utilization-badge utilization-low">低</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if url_for('cabinet.view') %}
+                                                <a href="{{ url_for('cabinet.view', id=stat.cabinet.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary" title="查看机柜详情">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                {% endif %}
+                                                <button onclick="showCabinetDetails({{ stat.cabinet.id }})" 
+                                                        class="btn btn-sm btn-outline-info" title="查看U位详情">
+                                                    <i class="fas fa-cube"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">
+                                            <i class="fas fa-inbox fa-2x mb-3"></i>
+                                            <p>暂无机柜数据</p>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- 机柜详情卡片视图 -->
+                        {% if cabinet_stats %}
+                        <div class="row mt-4">
+                            <h6 class="col-12 mb-3 font-weight-bold text-primary">
+                                <i class="fas fa-th-large mr-2"></i>机柜卡片视图
+                            </h6>
+                            {% for stat in cabinet_stats %}
+                            <div class="col-xl-4 col-lg-6 mb-4">
+                                <div class="card cabinet-card">
+                                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                                        <h6 class="m-0 font-weight-bold text-primary">
+                                            <i class="fas fa-server mr-2"></i>{{ stat.cabinet.name }}
+                                        </h6>
+                                        <span class="badge 
+                                            {% if stat.utilization >= 90 %}badge-danger
+                                            {% elif stat.utilization >= 70 %}badge-warning
+                                            {% elif stat.utilization >= 50 %}badge-info
+                                            {% else %}badge-success{% endif %}">
+                                            {{ "%.1f"|format(stat.utilization) }}%
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <p class="card-text mb-1">
+                                                    <small class="text-muted">位置:</small><br>
+                                                    <strong>{{ stat.cabinet.location.name|default('未指定') }}</strong>
+                                                </p>
+                                            </div>
+                                            <div class="col-6">
+                                                <p class="card-text mb-1">
+                                                    <small class="text-muted">设备数量:</small><br>
+                                                    <strong>{{ stat.device_count }} 台</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mt-3">
+                                            <p class="mb-1">
+                                                <small class="text-muted">U位使用情况:</small>
+                                                <span class="float-right">
+                                                    <strong>{{ stat.used_u }}/{{ stat.total_u }} U</strong>
+                                                </span>
+                                            </p>
+                                            <div class="progress mb-3">
+                                                <div class="progress-bar 
+                                                    {% if stat.utilization >= 90 %}bg-danger
+                                                    {% elif stat.utilization >= 70 %}bg-warning
+                                                    {% elif stat.utilization >= 50 %}bg-info
+                                                    {% else %}bg-success{% endif %}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ stat.utilization if stat.utilization <= 100 else 100 }}%"
+                                                     aria-valuenow="{{ stat.utilization }}" 
+                                                     aria-valuemin="0" 
+                                                     aria-valuemax="100">
+                                                    {{ "%.1f"|format(stat.utilization) }}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 简易机柜图 -->
+                                        <div class="cabinet-rack mt-3" style="height: {{ stat.total_u * 2 + 20 }}px;">
+                                            <div class="rack-u" style="position: absolute; top: 0; left: 0; width: 100%;">
+                                                <span class="rack-u-number">U1</span>
+                                            </div>
+                                            {% for device in stat.cabinet.devices if device.position_u and device.height_u %}
+                                            <div class="rack-u used" 
+                                                 style="top: {{ (device.position_u - 1) * 2 }}px; 
+                                                        height: {{ device.height_u * 2 }}px; 
+                                                        width: 100%;">
+                                                <span class="device-name">{{ device.name|truncate(20) }}</span>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        
+                                        <div class="mt-3">
+                                            {% if url_for('cabinet.view') %}
+                                            <a href="{{ url_for('cabinet.view', id=stat.cabinet.id) }}" 
+                                               class="btn btn-sm btn-outline-primary btn-block">
+                                                <i class="fas fa-eye mr-1"></i> 查看详情
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 使用率图表标签页 -->
+                    <div class="tab-pane fade" id="chart" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="chart-container">
+                                    <canvas id="cabinetChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">使用率分布</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <table class="table table-sm">
+                                            <tbody>
+                                                {% if cabinet_stats|length > 0 %}
+                                                {% set full_count = 0 %}
+                                                {% set high_count = 0 %}
+                                                {% set medium_count = 0 %}
+                                                {% set low_count = 0 %}
+                                                
+                                                {% for stat in cabinet_stats %}
+                                                    {% if stat.utilization >= 90 %}
+                                                        {% set full_count = full_count + 1 %}
+                                                    {% elif stat.utilization >= 70 %}
+                                                        {% set high_count = high_count + 1 %}
+                                                    {% elif stat.utilization >= 50 %}
+                                                        {% set medium_count = medium_count + 1 %}
+                                                    {% else %}
+                                                        {% set low_count = low_count + 1 %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                                
+                                                <tr>
+                                                    <td><span class="badge badge-danger">90-100%</span></td>
+                                                    <td class="text-right">{{ full_count }} 个</td>
+                                                    <td class="text-right">
+                                                        {{ "%.1f"|format(full_count / cabinet_stats|length * 100) }}%
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><span class="badge badge-warning">70-89%</span></td>
+                                                    <td class="text-right">{{ high_count }} 个</td>
+                                                    <td class="text-right">
+                                                        {{ "%.1f"|format(high_count / cabinet_stats|length * 100) }}%
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><span class="badge badge-info">50-69%</span></td>
+                                                    <td class="text-right">{{ medium_count }} 个</td>
+                                                    <td class="text-right">
+                                                        {{ "%.1f"|format(medium_count / cabinet_stats|length * 100) }}%
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><span class="badge badge-success">0-49%</span></td>
+                                                    <td class="text-right">{{ low_count }} 个</td>
+                                                    <td class="text-right">
+                                                        {{ "%.1f"|format(low_count / cabinet_stats|length * 100) }}%
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">优化建议</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled mb-0">
+                                            {% if cabinet_stats %}
+                                                {% set high_util_cabinets = [] %}
+                                                {% set low_util_cabinets = [] %}
+                                                
+                                                {% for stat in cabinet_stats %}
+                                                    {% if stat.utilization >= 80 %}
+                                                        {% set high_util_cabinets = high_util_cabinets + [stat] %}
+                                                    {% elif stat.utilization < 30 %}
+                                                        {% set low_util_cabinets = low_util_cabinets + [stat] %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                                
+                                                {% if high_util_cabinets %}
+                                                <li class="mb-2">
+                                                    <i class="fas fa-exclamation-triangle text-warning mr-2"></i>
+                                                    <strong>高使用率机柜:</strong>
+                                                    <ul>
+                                                        {% for stat in high_util_cabinets %}
+                                                            {% if loop.index <= 3 %}
+                                                            <li>{{ stat.cabinet.name }} ({{ "%.1f"|format(stat.utilization) }}%)</li>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </ul>
+                                                </li>
+                                                {% endif %}
+                                                
+                                                {% if low_util_cabinets and low_util_cabinets|length > 0 %}
+                                                <li class="mb-2">
+                                                    <i class="fas fa-lightbulb text-success mr-2"></i>
+                                                    <strong>可整合机柜:</strong> {{ low_util_cabinets|length }} 个机柜使用率低于30%，考虑设备整合
+                                                </li>
+                                                {% endif %}
+                                            {% endif %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 统计摘要标签页 -->
+                    <div class="tab-pane fade" id="summary" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">机柜使用率排名</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if cabinet_stats %}
+                                        <div class="list-group">
+                                            <!-- 修正：不能使用 [:10]，改用循环控制 -->
+                                            {% set sorted_cabinets = cabinet_stats|sort(attribute='utilization', reverse=true) %}
+                                            {% for stat in sorted_cabinets %}
+                                                {% if loop.index <= 10 %}
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <strong>{{ stat.cabinet.name }}</strong>
+                                                        <br>
+                                                        <small class="text-muted">{{ stat.cabinet.location.name|default('未指定') }}</small>
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <span class="font-weight-bold">{{ "%.1f"|format(stat.utilization) }}%</span>
+                                                        <br>
+                                                        <small class="text-muted">{{ stat.used_u }}/{{ stat.total_u }} U</small>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <p class="text-muted text-center">暂无数据</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">位置分布统计</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if cabinet_stats %}
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>位置</th>
+                                                    <th class="text-right">机柜数</th>
+                                                    <th class="text-right">平均使用率</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set location_data = {} %}
+                                                {% for stat in cabinet_stats %}
+                                                    {% set location_name = stat.cabinet.location.name|default('未指定') %}
+                                                    {% if location_name not in location_data %}
+                                                        {% set location_data = location_data|merge({(location_name): {'count': 0, 'total_util': 0}}) %}
+                                                    {% endif %}
+                                                    {% set temp = location_data[location_name] %}
+                                                    
+                                                    {% set temp = dict(temp, **{'count': temp.count + 1, 'total_util': temp.total_util + stat.utilization}) %}
+                                                    {% set _ = location_data.update({location_name: temp}) %}
+                                                {% endfor %}
+                                                
+                                                {% for location_name, stats in location_data.items() %}
+                                                <tr>
+                                                    <td>{{ location_name }}</td>
+                                                    <td class="text-right">{{ stats.count }}</td>
+                                                    <td class="text-right">
+                                                        {{ "%.1f"|format(stats.total_util / stats.count) }}%
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                        {% else %}
+                                        <p class="text-muted text-center">暂无数据</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">空间利用率统计</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if cabinet_stats %}
+                                        <div class="text-center">
+                                            <h3 class="font-weight-bold text-primary">
+                                                {% set total_capacity = 0 %}
+                                                {% set total_used = 0 %}
+                                                {% for stat in cabinet_stats %}
+                                                    {% set total_capacity = total_capacity + stat.total_u %}
+                                                    {% set total_used = total_used + stat.used_u %}
+                                                {% endfor %}
+                                                {% if total_capacity > 0 %}
+                                                {{ "%.1f"|format(total_used / total_capacity * 100) }}%
+                                                {% else %}0%{% endif %}
+                                            </h3>
+                                            <p class="text-muted mb-2">总体空间使用率</p>
+                                            <div class="progress">
+                                                <div class="progress-bar bg-primary" 
+                                                     style="width: {% if total_capacity > 0 %}{{ total_used / total_capacity * 100 }}{% else %}0{% endif %}%">
+                                                </div>
+                                            </div>
+                                            <p class="mt-2 mb-0">
+                                                <small>
+                                                    已使用: {{ total_used }} U / 总容量: {{ total_capacity }} U
+                                                </small>
+                                            </p>
+                                        </div>
+                                        {% else %}
+                                        <p class="text-muted text-center">暂无数据</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 机柜详情模态框 -->
+<div class="modal fade" id="cabinetDetailModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">机柜详情</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="cabinetDetailContent">
+                <!-- 内容通过JavaScript动态加载 -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 获取机柜统计数据
+    const cabinetStats = [
+        {% for stat in cabinet_stats %}
+        {
+            id: {{ stat.cabinet.id }},
+            name: '{{ stat.cabinet.name }}',
+            location: '{{ stat.cabinet.location.name|default("未指定")|e }}',
+            used_u: {{ stat.used_u }},
+            total_u: {{ stat.total_u }},
+            utilization: {{ stat.utilization }},
+            device_count: {{ stat.device_count }}
+        },
+        {% endfor %}
+    ];
+
+    // 准备图表数据
+    const cabinetLabels = cabinetStats.map(stat => {
+        // 如果名称太长，截断显示
+        return stat.name.length > 10 ? stat.name.substring(0, 10) + '...' : stat.name;
+    });
+    const cabinetUtilization = cabinetStats.map(stat => stat.utilization);
+    const cabinetUsedU = cabinetStats.map(stat => stat.used_u);
+    const cabinetTotalU = cabinetStats.map(stat => stat.total_u);
+    
+    // 生成颜色数组
+    const cabinetColors = cabinetUtilization.map(util => {
+        if (util >= 90) return '#dc3545'; // 红色
+        if (util >= 70) return '#ffc107'; // 黄色
+        if (util >= 50) return '#17a2b8'; // 青色
+        return '#28a745'; // 绿色
+    });
+
+    // 绘制机柜使用率图表
+    if (cabinetStats.length > 0) {
+        const cabinetCtx = document.getElementById('cabinetChart').getContext('2d');
+        const cabinetChart = new Chart(cabinetCtx, {
+            type: 'bar',
+            data: {
+                labels: cabinetLabels,
+                datasets: [
+                    {
+                        label: '已使用U位',
+                        data: cabinetUsedU,
+                        backgroundColor: cabinetColors,
+                        borderColor: cabinetColors.map(color => color.replace('rgb', 'rgba').replace(')', ', 0.8)')),
+                        borderWidth: 1,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '总U位',
+                        data: cabinetTotalU,
+                        type: 'line',
+                        borderColor: '#6c757d',
+                        backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '使用率 (%)',
+                        data: cabinetUtilization,
+                        type: 'line',
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        borderWidth: 2,
+                        fill: false,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'U位数量'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        max: 100,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: '使用率 (%)'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.datasetIndex === 2) {
+                                    label += context.raw.toFixed(1) + '%';
+                                } else {
+                                    label += context.raw + ' U';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('cabinetChart').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p>暂无数据可显示图表</p>
+            </div>
+        `;
+    }
+
+    // 表格排序功能
+    let currentSort = { column: 'utilization', direction: 'desc' };
+    
+    function sortTable(column) {
+        const tbody = document.querySelector('.cabinet-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter(tr => tr.id);
+        
+        if (rows.length === 0) return;
+        
+        // 更新排序按钮状态
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.classList.remove('active');
+            btn.innerHTML = '<i class="fas fa-sort"></i>';
+        });
+        
+        const sortBtn = event.target.closest('.sort-btn');
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'desc';
+        }
+        
+        sortBtn.classList.add('active');
+        sortBtn.innerHTML = currentSort.direction === 'asc' ? 
+            '<i class="fas fa-sort-up"></i>' : '<i class="fas fa-sort-down"></i>';
+        
+        // 排序行
+        rows.sort((a, b) => {
+            let aValue, bValue;
+            
+            if (column === 'name') {
+                aValue = a.cells[1].querySelector('strong').textContent;
+                bValue = b.cells[1].querySelector('strong').textContent;
+            } else if (column === 'utilization') {
+                aValue = parseFloat(a.cells[3].querySelector('.font-weight-bold').textContent);
+                bValue = parseFloat(b.cells[3].querySelector('.font-weight-bold').textContent);
+            } else if (column === 'used_u') {
+                aValue = parseInt(a.cells[4].querySelector('.text-muted').textContent.split('/')[0]);
+                bValue = parseInt(b.cells[4].querySelector('.text-muted').textContent.split('/')[0]);
+            } else if (column === 'device_count') {
+                aValue = parseInt(a.cells[5].querySelector('.font-weight-bold').textContent);
+                bValue = parseInt(b.cells[5].querySelector('.font-weight-bold').textContent);
+            }
+            
+            if (currentSort.direction === 'asc') {
+                return aValue > bValue ? 1 : -1;
+            } else {
+                return aValue < bValue ? 1 : -1;
+            }
+        });
+        
+        // 重新添加行
+        rows.forEach(row => tbody.appendChild(row));
+        
+        // 更新行号
+        updateRowNumbers();
+    }
+    
+    function updateRowNumbers() {
+        document.querySelectorAll('.cabinet-table tbody tr').forEach((row, index) => {
+            if (row.id) {
+                row.cells[0].textContent = index + 1;
+            }
+        });
+    }
+
+    // 显示机柜详情
+    function showCabinetDetails(cabinetId) {
+        const stat = cabinetStats.find(c => c.id === cabinetId);
+        if (!stat) return;
+        
+        // 构建详情内容
+        let content = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>${stat.name}</h5>
+                    <p><strong>位置:</strong> ${stat.location}</p>
+                    <p><strong>使用率:</strong> <span class="font-weight-bold">${stat.utilization.toFixed(1)}%</span></p>
+                    <p><strong>U位使用:</strong> ${stat.used_u} / ${stat.total_u} U</p>
+                    <p><strong>设备数量:</strong> ${stat.device_count} 台</p>
+                </div>
+                <div class="col-md-6">
+                    <h6>U位分布图</h6>
+                    <div style="display: flex; flex-wrap: wrap; gap: 2px; margin-top: 10px;">
+        `;
+        
+        // 生成U位图
+        for (let i = 1; i <= stat.total_u; i++) {
+            const isUsed = i <= stat.used_u; // 简化逻辑
+            content += `
+                <div class="u-slot ${isUsed ? 'used' : 'empty'}" style="position: relative;">
+                    ${i % 5 === 0 || i === 1 ? `<span style="position: absolute; top: -15px; left: 0; font-size: 9px;">${i}</span>` : ''}
+                </div>
+            `;
+        }
+        
+        content += `
+                    </div>
+                    <div class="mt-3">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar ${stat.utilization >= 90 ? 'bg-danger' : stat.utilization >= 70 ? 'bg-warning' : stat.utilization >= 50 ? 'bg-info' : 'bg-success'}" 
+                                 style="width: ${stat.utilization}%">
+                                ${stat.utilization.toFixed(1)}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-outline-secondary" data-dismiss="modal">
+                    <i class="fas fa-times mr-1"></i> 关闭
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('cabinetDetailContent').innerHTML = content;
+        $('#cabinetDetailModal').modal('show');
+    }
+
+    // 导出CSV功能
+    function exportToCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        
+        // 添加标题行
+        csvContent += "机柜名称,位置,U位使用(U位),使用率(%),设备数量,状态\r\n";
+        
+        // 添加数据行
+        cabinetStats.forEach(stat => {
+            let status = '';
+            if (stat.utilization >= 90) status = '满载';
+            else if (stat.utilization >= 70) status = '高';
+            else if (stat.utilization >= 50) status = '中';
+            else status = '低';
+            
+            csvContent += `${stat.name},${stat.location},${stat.used_u}/${stat.total_u},${stat.utilization.toFixed(1)}%,${stat.device_count},${status}\r\n`;
+        });
+        
+        // 添加统计行
+        csvContent += "\r\n统计信息:\r\n";
+        csvContent += `机柜总数,${cabinetStats.length}\r\n`;
+        csvContent += `总U位容量,${cabinetStats.reduce((sum, stat) => sum + stat.total_u, 0)}\r\n`;
+        csvContent += `已使用U位,${cabinetStats.reduce((sum, stat) => sum + stat.used_u, 0)}\r\n`;
+        csvContent += `平均使用率,${(cabinetStats.reduce((sum, stat) => sum + stat.utilization, 0) / cabinetStats.length).toFixed(1)}%\r\n`;
+        csvContent += `高使用率机柜(>80%),${cabinetStats.filter(stat => stat.utilization >= 80).length}\r\n`;
+        
+        // 创建下载链接
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `机柜使用率报表_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        
+        // 触发下载
+        link.click();
+        document.body.removeChild(link);
+        
+        // 显示提示
+        showAlert('success', 'CSV文件已开始下载');
+    }
+
+    // 打印报表功能
+    function printReport() {
+        const printContent = `
+            <html>
+            <head>
+                <title>机柜使用率报表</title>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .print-header { text-align: center; margin-bottom: 30px; }
+                    .print-header h1 { margin-bottom: 5px; }
+                    .print-header .date { color: #666; margin-bottom: 20px; }
+                    .stat-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .stat-table th, .stat-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .stat-table th { background-color: #f2f2f2; }
+                    .section-title { margin-top: 30px; margin-bottom: 15px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; }
+                    .summary { margin-top: 30px; font-weight: bold; }
+                    .page-break { page-break-before: always; }
+                </style>
+            </head>
+            <body>
+                <div class="print-header">
+                    <h1>机柜使用率报表</h1>
+                    <div class="date">生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+                </div>
+                
+                <div class="section-title">机柜使用率列表</div>
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>机柜名称</th>
+                            <th>位置</th>
+                            <th>U位使用</th>
+                            <th>使用率</th>
+                            <th>设备数量</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cabinetStats.map(stat => {
+                            let status = '';
+                            if (stat.utilization >= 90) status = '满载';
+                            else if (stat.utilization >= 70) status = '高';
+                            else if (stat.utilization >= 50) status = '中';
+                            else status = '低';
+                            
+                            return `
+                                <tr>
+                                    <td>${stat.name}</td>
+                                    <td>${stat.location}</td>
+                                    <td>${stat.used_u}/${stat.total_u} U</td>
+                                    <td>${stat.utilization.toFixed(1)}%</td>
+                                    <td>${stat.device_count}</td>
+                                    <td>${status}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="page-break"></div>
+                
+                <div class="section-title">统计摘要</div>
+                <table class="stat-table">
+                    <tbody>
+                        <tr>
+                            <td>机柜总数</td>
+                            <td>${cabinetStats.length}</td>
+                        </tr>
+                        <tr>
+                            <td>总U位容量</td>
+                            <td>${cabinetStats.reduce((sum, stat) => sum + stat.total_u, 0)} U</td>
+                        </tr>
+                        <tr>
+                            <td>已使用U位</td>
+                            <td>${cabinetStats.reduce((sum, stat) => sum + stat.used_u, 0)} U</td>
+                        </tr>
+                        <tr>
+                            <td>平均使用率</td>
+                            <td>${(cabinetStats.reduce((sum, stat) => sum + stat.utilization, 0) / cabinetStats.length).toFixed(1)}%</td>
+                        </tr>
+                        <tr>
+                            <td>高使用率机柜 (>80%)</td>
+                            <td>${cabinetStats.filter(stat => stat.utilization >= 80).length}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    报表统计信息:<br>
+                    生成单位: 数据中心管理系统
+                </div>
+            </body>
+            </html>
+        `;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    // 显示提示
+    function showAlert(type, message) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="close" data-dismiss="alert">
+                    <span>&times;</span>
+                </button>
+            </div>
+        `;
+        
+        const alertContainer = document.createElement('div');
+        alertContainer.innerHTML = alertHtml;
+        const container = document.querySelector('.container-fluid');
+        if (container) {
+            container.prepend(alertContainer.firstElementChild);
+        }
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+            const alert = document.querySelector('.alert');
+            if (alert) {
+                $(alert).alert('close');
+            }
+        }, 3000);
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        // 添加标签页切换事件
+        const tabLinks = document.querySelectorAll('#cabinetTab a');
+        tabLinks.forEach(link => {
+            link.addEventListener('shown.bs.tab', function (e) {
+                // 重新渲染图表以适应新的大小
+                if (typeof cabinetChart !== 'undefined') {
+                    cabinetChart.resize();
+                }
+            });
+        });
+        
+        // 初始化排序按钮
+        updateRowNumbers();
+    });
+</script>
+{% endblock %}

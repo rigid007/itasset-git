@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <h4 class="page-title">系统设置</h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- 成功提示 Toast 容器 -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+        <div id="successToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    设置已更新
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    {% for category in categories %}
+                    <div class="settings-category mb-4">
+                        <h5 class="category-title">{{ category }}</h5>
+                        <hr>
+                        {% for setting in settings_by_category[category] %}
+                        {# 生成安全的 ID（替换特殊字符为连字符） #}
+                        {% set safe_key = setting.key|replace('.', '-')|replace('_', '-') %}
+                        {% set modal_id = 'editModal-' + safe_key %}
+
+                        {# 管理员可编辑所有项，因此强制 editable 为 true #}
+                        {% set editable = true %}
+
+                        <div class="form-group row mb-3 setting-row" data-key="{{ setting.key }}">
+                            <label class="col-sm-3 col-form-label">{{ setting.key }}</label>
+                            <div class="col-sm-7">
+                                <input type="text" class="form-control setting-value" value="{{ setting.value }}" readonly>
+                                {% if setting.description %}
+                                <small class="form-text text-muted">{{ setting.description }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="col-sm-2">
+                                {% if editable %}
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-btn" 
+                                        data-bs-toggle="modal" data-bs-target="#{{ modal_id }}">
+                                    编辑
+                                </button>
+                                {% else %}
+                                <span class="text-muted">（只读）</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 模态框：编辑设置值 -->
+                        {% if editable %}
+                        <div class="modal fade" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="{{ modal_id }}Label">编辑 {{ setting.key }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <input type="text" class="form-control modal-setting-input" value="{{ setting.value }}" data-key="{{ setting.key }}">
+                                        {% if setting.description %}
+                                        <small class="form-text text-muted">{{ setting.description }}</small>
+                                        {% endif %}
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                        <button type="button" class="btn btn-primary btn-save-setting">保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 获取 CSRF token（如果启用了 CSRF 保护）
+    const csrfToken = '{{ csrf_token() if csrf_token else "" }}';
+
+    // 显示成功 Toast 的函数
+    function showSuccessToast(message) {
+        const toastEl = document.getElementById('successToast');
+        const toastBody = toastEl.querySelector('.toast-body');
+        toastBody.textContent = message || '设置已更新';
+        const toast = new bootstrap.Toast(toastEl, { delay: 2000 });
+        toast.show();
+    }
+
+    // 为所有保存按钮绑定点击事件
+    document.querySelectorAll('.btn-save-setting').forEach(button => {
+        button.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            const input = modal.querySelector('.modal-setting-input');
+            const key = input.dataset.key;
+            const newValue = input.value.trim();
+
+            // 禁用按钮防止重复提交
+            this.disabled = true;
+            const originalText = this.textContent;
+            this.textContent = '保存中...';
+
+            // 准备 fetch 参数
+            const fetchOptions = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ key: key, value: newValue })
+            };
+            if (csrfToken) {
+                fetchOptions.headers['X-CSRFToken'] = csrfToken;
+            }
+
+            // 发送 AJAX 请求到更新路由
+            fetch('{{ url_for("config.update_system_setting") }}', fetchOptions)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.message || '请求失败'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        // 更新页面对应行的只读输入框值
+                        const row = document.querySelector(`.setting-row[data-key="${key}"]`);
+                        if (row) {
+                            const readonlyInput = row.querySelector('.setting-value');
+                            readonlyInput.value = newValue;
+                        }
+                        // 关闭模态框
+                        const modalInstance = bootstrap.Modal.getInstance(modal);
+                        modalInstance.hide();
+                        // 显示成功提示
+                        showSuccessToast('设置已更新');
+                    } else {
+                        alert('保存失败：' + (data.message || '未知错误'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('保存时发生错误：' + error.message);
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    this.disabled = false;
+                    this.textContent = originalText;
+                });
+        });
+    });
+
+    // 当模态框隐藏时，将输入值重置为当前显示的值（防止未保存的修改残留）
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.addEventListener('hidden.bs.modal', function () {
+            const input = this.querySelector('.modal-setting-input');
+            if (!input) return;
+            const key = input.dataset.key;
+            const row = document.querySelector(`.setting-row[data-key="${key}"]`);
+            if (row) {
+                const currentValue = row.querySelector('.setting-value').value;
+                input.value = currentValue;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

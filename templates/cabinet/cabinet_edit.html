@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+
+{% block title %}编辑机柜 - 网络资产管理系统{% endblock %}
+
+{% block page_title %}编辑机柜：{{ cabinet.name }}{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> 返回机柜列表
+</a>
+<a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="btn btn-info ms-2">
+    <i class="fas fa-eye"></i> 查看详情
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* 表单样式 */
+.form-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007bff;
+}
+.form-section h5 {
+    color: #495057;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+.required-field::after {
+    content: " *";
+    color: #dc3545;
+}
+/* U位预览样式 */
+.u-preview-container {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #dee2e6;
+}
+.u-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    background-color: white;
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+}
+.u-preview-slot {
+    display: flex;
+    align-items: center;
+    height: 35px;
+    border: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+.u-preview-number {
+    width: 50px;
+    text-align: center;
+    font-weight: bold;
+    color: #495057;
+    border-right: 1px solid #dee2e6;
+    padding: 0 10px;
+    background-color: #e9ecef;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.u-preview-content {
+    flex: 1;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.u-preview-slot.occupied {
+    background-color: #d1ecf1;
+    border-left: 4px solid #0dcaf0;
+}
+.u-preview-slot.empty {
+    background-color: #ffffff;
+}
+.device-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+.help-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+.is-invalid {
+    border-color: #dc3545 !important;
+}
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 0.875em;
+    margin-top: 0.25rem;
+}
+.form-control.is-invalid ~ .invalid-feedback,
+.form-select.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+@media (max-width: 768px) {
+    .form-section { padding: 15px; }
+    .u-preview { max-height: 300px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Flash 消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('cabinet.cabinet_edit', id=cabinet.id) }}" id="cabinetForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+
+            {# 预计算设备统计信息（使用 namespace 避免作用域问题） #}
+            {% set ns = namespace(used_u=0, online_count=0) %}
+            {% for device in cabinet.devices %}
+                {% if device.height_u %}
+                    {% set ns.used_u = ns.used_u + device.height_u %}
+                {% endif %}
+                {% if device.status == 'online' %}
+                    {% set ns.online_count = ns.online_count + 1 %}
+                {% endif %}
+            {% endfor %}
+            {% set total_u = cabinet.height_u or 42 %}
+            {% set remaining_u = total_u - ns.used_u %}
+
+            <!-- 基本信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-info-circle me-2"></i>基本信息</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label required-field">机柜名称</label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                               value="{{ cabinet.name }}" maxlength="128">
+                        <div class="invalid-feedback">请输入机柜名称</div>
+                        <div class="help-text">机柜的唯一标识，建议使用清晰明确的名称</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="location_id" class="form-label required-field">所属位置</label>
+                        <select class="form-select" id="location_id" name="location_id" required>
+                            <option value="">请选择位置</option>
+                            {% for location in locations %}
+                                <option value="{{ location.id }}"
+                                    {% if cabinet.location_id is not none and cabinet.location_id|string == location.id|string %}selected{% endif %}>
+                                    {{ location.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">请选择所属位置</div>
+                        <div class="help-text">机柜所在的物理位置</div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="model" class="form-label">机柜型号</label>
+                        <input type="text" class="form-control" id="model" name="model"
+                               value="{{ cabinet.model or '' }}" maxlength="64">
+                        <div class="help-text">机柜的具体型号</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="manufacturer" class="form-label">制造厂商</label>
+                        <input type="text" class="form-control" id="manufacturer" name="manufacturer"
+                               value="{{ cabinet.manufacturer or '' }}" maxlength="64">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 规格参数 -->
+            <div class="form-section">
+                <h5><i class="fas fa-ruler me-2"></i>规格参数</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="height_u" class="form-label required-field">U位高度</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="height_u" name="height_u" required
+                                   value="{{ cabinet.height_u or 42 }}" min="1" max="100">
+                            <span class="input-group-text">U</span>
+                        </div>
+                        <div class="invalid-feedback">请输入有效的U位高度（1-100）</div>
+                        <div class="help-text">标准机柜通常为42U</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="width" class="form-label">宽度(mm)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="width" name="width"
+                                   value="{{ cabinet.width or '' }}" min="1" step="1">
+                            <span class="input-group-text">mm</span>
+                        </div>
+                        <div class="help-text">标准机柜宽度通常为600mm或800mm</div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="depth" class="form-label">深度(mm)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="depth" name="depth"
+                                   value="{{ cabinet.depth or '' }}" min="1" step="1">
+                            <span class="input-group-text">mm</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="weight_capacity" class="form-label">承重(kg)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="weight_capacity" name="weight_capacity"
+                                   value="{{ cabinet.weight_capacity or '' }}" min="1" step="1">
+                            <span class="input-group-text">kg</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- U位使用预览 -->
+                <div class="mb-3">
+                    <label class="form-label">U位使用预览</label>
+                    <div class="u-preview-container">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <span class="badge bg-primary me-2">总高度 {{ total_u }}U</span>
+                                <span class="badge bg-success me-2">已用 {{ ns.used_u }}U</span>
+                                <span class="badge bg-warning">剩余 {{ remaining_u }}U</span>
+                            </div>
+                            {% if ns.used_u > 0 %}
+                            <div>使用率: {{ ((ns.used_u / total_u) * 100)|round(1) }}%</div>
+                            {% endif %}
+                        </div>
+                        <div class="u-preview">
+                            {# 构建设备占用映射，确保正确显示 #}
+                            {% set device_map = {} %}
+                            {% for device in cabinet.devices %}
+                                {% if device.position_u and device.height_u %}
+                                    {% for u in range(device.position_u, device.position_u + device.height_u) %}
+                                        {% set _ = device_map.update({u: device}) %}
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                            {% for u in range(1, total_u + 1) %}
+                                {% set slot_device = device_map.get(u) %}
+                                <div class="u-preview-slot {% if slot_device %}occupied{% else %}empty{% endif %}">
+                                    <div class="u-preview-number">U{{ u }}</div>
+                                    <div class="u-preview-content">
+                                        {% if slot_device %}
+                                            <div>
+                                                <strong>{{ slot_device.name }}</strong>
+                                                <small class="text-muted ms-2">{{ slot_device.device_type or '未知类型' }}</small>
+                                            </div>
+                                            <div>
+                                                <span class="device-badge bg-info">{{ slot_device.height_u }}U</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="text-muted">空闲</span>
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                若设备未显示，请检查设备是否分配了起始U位（position_u）和高度（height_u）
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-cog me-2"></i>配置信息</h5>
+                <div class="mb-3">
+                    <label for="power_supply" class="form-label">电源配置</label>
+                    <textarea class="form-control" id="power_supply" name="power_supply" rows="2"
+                              placeholder="例如：双路UPS供电，32A">{{ cabinet.power_supply or '' }}</textarea>
+                    <div class="help-text">描述机柜的电源配置情况</div>
+                </div>
+                <div class="mb-3">
+                    <label for="network_access" class="form-label">网络接入</label>
+                    <textarea class="form-control" id="network_access" name="network_access" rows="2"
+                              placeholder="例如：双万兆上联，24口千兆交换机">{{ cabinet.network_access or '' }}</textarea>
+                    <div class="help-text">描述机柜的网络接入情况</div>
+                </div>
+                <div class="mb-3">
+                    <label for="cooling_system" class="form-label">制冷系统</label>
+                    <input type="text" class="form-control" id="cooling_system" name="cooling_system"
+                           value="{{ cabinet.cooling_system or '' }}" placeholder="例如：前门进风，后门出风">
+                </div>
+            </div>
+
+            <!-- 其他信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-sticky-note me-2"></i>其他信息</h5>
+                <div class="mb-3">
+                    <label for="description" class="form-label">描述说明</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"
+                              placeholder="机柜的详细描述">{{ cabinet.description or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="notes" class="form-label">备注</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3"
+                              placeholder="其他需要说明的信息">{{ cabinet.notes or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="tags" class="form-label">标签</label>
+                    <input type="text" class="form-control" id="tags" name="tags"
+                           value="{{ cabinet.tags or '' }}" placeholder="例如：核心、生产环境、备份 (用逗号分隔)">
+                    <div class="help-text">用于快速分类和搜索，用逗号分隔多个标签</div>
+                </div>
+            </div>
+
+            <!-- 警告信息（如果有设备且修改U位高度） -->
+            {% set device_count = cabinet.devices|length %}
+            {% if device_count > 0 %}
+            <div class="alert alert-warning" id="heightWarning" style="display: none;">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>警告：</strong>此机柜中有 {{ device_count }} 台设备。减少U位高度可能导致部分设备失去U位信息。
+            </div>
+            {% endif %}
+
+            <!-- 表单操作按钮 -->
+            <div class="d-flex justify-content-between mt-4">
+                <div>
+                    <a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> 取消
+                    </a>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存更改
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- 右侧帮助信息 -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>编辑机柜指南</h5>
+            </div>
+            <div class="card-body">
+                <h6>重要字段说明：</h6>
+                <ul>
+                    <li><strong>机柜名称</strong>：机柜的唯一标识，建议使用清晰明确的命名</li>
+                    <li><strong>U位高度</strong>：机柜的标准高度，修改会影响现有设备布局</li>
+                    <li><strong>所属位置</strong>：机柜所在的具体物理位置</li>
+                </ul>
+                <h6 class="mt-3">U位管理说明：</h6>
+                <ul>
+                    <li>U位高度决定了机柜的设备容纳能力</li>
+                    <li>标准机柜通常为42U（约2米高）</li>
+                    <li>减少U位高度可能导致设备失去U位信息</li>
+                    <li>增加U位高度可以提供更多设备空间</li>
+                </ul>
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>注意：</strong>修改机柜信息可能会影响已关联的设备，请谨慎操作。
+                </div>
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-history me-2"></i>
+                    <strong>历史记录：</strong>此机柜创建于 {{ cabinet.created_at.strftime('%Y-%m-%d %H:%M') if cabinet.created_at else '未知时间' }}，
+                    最后更新于 {{ cabinet.updated_at.strftime('%Y-%m-%d %H:%M') if cabinet.updated_at else '从未更新' }}。
+                </div>
+            </div>
+        </div>
+
+        <!-- 设备统计卡片 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>设备统计</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        设备总数
+                        <span class="badge bg-primary rounded-pill">{{ cabinet.devices|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        在线设备
+                        <span class="badge bg-success rounded-pill">{{ ns.online_count }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        已用U位
+                        <span class="badge bg-warning rounded-pill">{{ ns.used_u }}U</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        剩余U位
+                        <span class="badge bg-info rounded-pill">{{ remaining_u }}U</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 机柜内设备列表卡片 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-server me-2"></i>机柜内设备</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if cabinet.devices %}
+                    <div class="list-group list-group-flush">
+                        {% for device in cabinet.devices %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ device.name }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="fas fa-tag me-1"></i>{{ device.device_type or '未分类' }}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-secondary">{{ device.height_u or 1 }}U</span>
+                                        {% if device.position_u %}
+                                            <span class="badge bg-info ms-1">U{{ device.position_u }} 起始</span>
+                                        {% else %}
+                                            <span class="badge bg-warning ms-1">未分配U位</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if device.model %}
+                                    <div class="mt-1">
+                                        <small class="text-muted">型号: {{ device.model }}</small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="card-body text-center text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <p>此机柜暂无设备</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 位置信息卡片 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i>位置信息</h5>
+            </div>
+            <div class="card-body">
+                {% if cabinet.location %}
+                    <p><strong>{{ cabinet.location.name }}</strong></p>
+                    {% if cabinet.location.address %}
+                        <p class="text-muted small">
+                            <i class="fas fa-location-dot me-1"></i>
+                            {{ cabinet.location.address }}
+                        </p>
+                    {% endif %}
+                    {% if cabinet.location.room_number %}
+                        <p class="text-muted small">
+                            <i class="fas fa-door-closed me-1"></i>
+                            房间号: {{ cabinet.location.room_number }}
+                        </p>
+                    {% endif %}
+                    {% if cabinet.location.floor %}
+                        <p class="text-muted small">
+                            <i class="fas fa-building me-1"></i>
+                            楼层: {{ cabinet.location.floor }}
+                        </p>
+                    {% endif %}
+                    <a href="{{ url_for('location.location_detail', id=cabinet.location.id) }}" 
+                       class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-external-link-alt me-1"></i> 查看位置详情
+                    </a>
+                {% else %}
+                    <p class="text-muted">未指定位置</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('cabinetForm');
+    const heightInput = document.getElementById('height_u');
+    const heightWarning = document.getElementById('heightWarning');
+    const locationSelect = document.getElementById('location_id');
+
+    // 表单提交验证
+    form.addEventListener('submit', function(event) {
+        let isValid = true;
+
+        // 验证必填字段
+        const requiredFields = form.querySelectorAll('[required]');
+        requiredFields.forEach(field => {
+            if (!field.value.trim()) {
+                field.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                field.classList.remove('is-invalid');
+            }
+        });
+
+        // 验证U位高度范围
+        if (heightInput.value) {
+            const height = parseInt(heightInput.value);
+            if (height < 1 || height > 100) {
+                heightInput.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                heightInput.classList.remove('is-invalid');
+            }
+        }
+
+        // 位置字段必填（因为数据库 NOT NULL）
+        if (!locationSelect.value) {
+            locationSelect.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            locationSelect.classList.remove('is-invalid');
+        }
+
+        if (!isValid) {
+            event.preventDefault();
+            const firstInvalid = form.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+        }
+    });
+
+    // U位高度修改警告
+    if (heightInput && heightWarning) {
+        const originalHeight = parseInt(heightInput.value) || 42;
+        heightInput.addEventListener('input', function() {
+            const newHeight = parseInt(this.value) || 0;
+            if (newHeight < originalHeight) {
+                heightWarning.style.display = 'block';
+            } else {
+                heightWarning.style.display = 'none';
+            }
+        });
+    }
+
+    // 实时清除错误样式
+    const fields = form.querySelectorAll('input, select, textarea');
+    fields.forEach(field => {
+        field.addEventListener('blur', function() {
+            if (this.required && !this.value.trim()) {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+            }
+        });
+        field.addEventListener('input', function() {
+            if (this.classList.contains('is-invalid')) {
+                this.classList.remove('is-invalid');
+            }
+        });
+    });
+
+    // 键盘快捷键
+    document.addEventListener('keydown', function(event) {
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault();
+            form.dispatchEvent(new Event('submit'));
+        }
+        if (event.key === 'Escape') {
+            window.location.href = "{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}";
+        }
+    });
+});
+</script>
+{% endblock %}

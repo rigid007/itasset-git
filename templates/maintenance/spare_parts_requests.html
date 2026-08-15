@@ -1,0 +1,1827 @@
+{% extends "base.html" %}
+
+{% block title %}备件申请管理 - IT资产管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .status-pending {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .status-approved {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .status-rejected {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .status-fulfilled {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .status-cancelled {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .urgency-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .urgency-low {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .urgency-normal {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .urgency-high {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .urgency-emergency {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .request-card {
+        border-left: 4px solid #dee2e6;
+        transition: all 0.2s;
+    }
+    
+    .request-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+        transform: translateY(-1px);
+    }
+    
+    .request-card-pending {
+        border-left-color: #ffc107;
+        background-color: #fffcf5;
+    }
+    
+    .request-card-approved {
+        border-left-color: #198754;
+        background-color: #f5fff9;
+    }
+    
+    .request-card-rejected {
+        border-left-color: #dc3545;
+        background-color: #fff5f5;
+    }
+    
+    .request-card-fulfilled {
+        border-left-color: #0dcaf0;
+        background-color: #f5fdff;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+    }
+    
+    .stat-card {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+    
+    .stat-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: bold;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .request-number-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: #495057;
+    }
+    
+    .part-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e7f5ff;
+        color: #0d6efd;
+    }
+    
+    .device-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e6f7ee;
+        color: #198754;
+    }
+    
+    .maintenance-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f3f0ff;
+        color: #6f42c1;
+    }
+    
+    .user-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .action-icons {
+        display: flex;
+        gap: 0.25rem;
+        justify-content: center;
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .timeline-item:before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.5rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #dee2e6;
+    }
+    
+    .timeline-item.pending:before {
+        background-color: #ffc107;
+    }
+    
+    .timeline-item.approved:before {
+        background-color: #198754;
+    }
+    
+    .timeline-item.rejected:before {
+        background-color: #dc3545;
+    }
+    
+    .timeline-item.fulfilled:before {
+        background-color: #0dcaf0;
+    }
+    
+    .quantity-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .quantity-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e9ecef;
+        color: #495057;
+    }
+    
+    .notes-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: #6c757d;
+        border: 1px solid #dee2e6;
+    }
+    
+    .date-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+    
+    .table-action-buttons {
+        display: flex;
+        gap: 0.25rem;
+        flex-wrap: wrap;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .table-action-buttons {
+            flex-direction: column;
+            align-items: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">首页</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('maintenance.maintenance_dashboard') }}">设备维护</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('maintenance.spare_parts_inventory') }}">备件库存</a></li>
+            <li class="breadcrumb-item active">备件申请</li>
+        </ol>
+    </nav>
+
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">备件申请管理</h1>
+            <p class="text-muted mb-0">管理备件申请、审批和发放流程</p>
+        </div>
+        <div class="action-buttons">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRequestModal">
+                <i class="fas fa-plus me-2"></i>新建申请
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="exportBtn">
+                <i class="fas fa-download me-2"></i>导出申请
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">申请总数</h6>
+                        <div class="stat-number">{{ requests|length }}</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-file-alt text-primary" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">待处理申请</h6>
+                        <div class="stat-number text-warning">{{ pending_requests }}</div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-clock text-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">已批准申请</h6>
+                        <div class="stat-number text-success" id="approvedCount">0</div>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-check-circle text-success" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">紧急申请</h6>
+                        <div class="stat-number text-danger" id="emergencyCount">0</div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 筛选和搜索区域 -->
+    <div class="filter-section mb-4">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="statusFilter" class="form-label">申请状态</label>
+                <select class="form-select" id="statusFilter">
+                    <option value="">全部状态</option>
+                    <option value="pending">待处理</option>
+                    <option value="approved">已批准</option>
+                    <option value="rejected">已拒绝</option>
+                    <option value="fulfilled">已完成</option>
+                    <option value="cancelled">已取消</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="urgencyFilter" class="form-label">紧急程度</label>
+                <select class="form-select" id="urgencyFilter">
+                    <option value="">全部等级</option>
+                    <option value="low">低</option>
+                    <option value="normal">普通</option>
+                    <option value="high">高</option>
+                    <option value="emergency">紧急</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="dateFilter" class="form-label">申请日期</label>
+                <select class="form-select" id="dateFilter">
+                    <option value="">全部日期</option>
+                    <option value="today">今日</option>
+                    <option value="week">本周</option>
+                    <option value="month">本月</option>
+                    <option value="custom">自定义范围</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="searchInput" class="form-label">搜索申请</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索申请编号、备件名称...">
+                    <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 自定义日期范围筛选（默认隐藏） -->
+        <div class="row mt-3" id="customDateRange" style="display: none;">
+            <div class="col-md-3 mb-3">
+                <label for="dateFrom" class="form-label">开始日期</label>
+                <input type="date" class="form-control" id="dateFrom">
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="dateTo" class="form-label">结束日期</label>
+                <input type="date" class="form-control" id="dateTo">
+            </div>
+            <div class="col-md-6 mb-3 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-primary" onclick="applyDateRange()">应用筛选</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 备件申请列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">备件申请列表</h5>
+            <div class="text-muted small">
+                共 <span id="requestCount">{{ requests|length }}</span> 个申请
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if requests %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>申请信息</th>
+                            <th>备件信息</th>
+                            <th>数量</th>
+                            <th>申请人</th>
+                            <th>申请日期</th>
+                            <th>紧急程度</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in requests %}
+                        {% set status_class = 'status-' + req.status %}
+                        {% set card_class = 'request-card-' + req.status %}
+                        {% set urgency_class = 'urgency-' + req.urgency %}
+                        
+                        <tr class="{{ card_class }}">
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <div class="fw-semibold">
+                                    <span class="request-number-badge">{{ req.request_number }}</span>
+                                </div>
+                                {% if req.purpose %}
+                                <div class="text-muted small text-truncate" style="max-width: 200px;">
+                                    {{ req.purpose }}
+                                </div>
+                                {% endif %}
+                                {% if req.device %}
+                                <div class="small mt-1">
+                                    <span class="device-badge">
+                                        <i class="fas fa-server me-1"></i>{{ req.device.hostname }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                                {% if req.maintenance_task %}
+                                <div class="small mt-1">
+                                    <span class="maintenance-badge">
+                                        <i class="fas fa-wrench me-1"></i>{{ req.maintenance_task.name|truncate(20) }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-medium">{{ req.part.name if req.part else '未知备件' }}</div>
+                                <div class="text-muted small">
+                                    {% if req.part %}
+                                    <span class="part-badge">{{ req.part.part_number }}</span>
+                                    {% if req.part.model %}
+                                    <span class="ms-1">{{ req.part.model }}</span>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
+                                {% if req.part and req.part.current_stock is defined %}
+                                <div class="small mt-1">
+                                    <span class="text-muted">库存: {{ req.part.current_stock }} 个</span>
+                                    {% if req.part.min_stock_level %}
+                                    <span class="text-muted ms-2">最低: {{ req.part.min_stock_level }} 个</span>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="quantity-indicator">
+                                    <span class="fw-medium">{{ req.quantity }}</span>
+                                    <span class="quantity-badge">个</span>
+                                </div>
+                                {% if req.part and req.part.unit_price %}
+                                <div class="text-muted small mt-1">
+                                    总价: ¥{{ "%.2f"|format(req.quantity * req.part.unit_price) }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if req.requested_by_user %}
+                                <span class="user-badge">{{ req.requested_by_user.name|default(req.requested_by_user.username) }}</span>
+                                <div class="text-muted small mt-1">
+                                    {{ req.request_date.strftime('%m-%d %H:%M') }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">未知用户</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-medium">{{ req.request_date.strftime('%Y-%m-%d') }}</div>
+                                <div class="text-muted small">
+                                    {{ req.request_date.strftime('%H:%M') }}
+                                </div>
+                                {% if req.approved_at %}
+                                <div class="date-badge mt-1">
+                                    批准: {{ req.approved_at.strftime('%m-%d') }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="urgency-badge {{ urgency_class }}">
+                                    {% if req.urgency == 'low' %}
+                                        低
+                                    {% elif req.urgency == 'normal' %}
+                                        普通
+                                    {% elif req.urgency == 'high' %}
+                                        高
+                                    {% elif req.urgency == 'emergency' %}
+                                        紧急
+                                    {% else %}
+                                        {{ req.urgency }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge {{ status_class }}">
+                                    {% if req.status == 'pending' %}
+                                        待处理
+                                    {% elif req.status == 'approved' %}
+                                        已批准
+                                    {% elif req.status == 'rejected' %}
+                                        已拒绝
+                                    {% elif req.status == 'fulfilled' %}
+                                        已完成
+                                    {% elif req.status == 'cancelled' %}
+                                        已取消
+                                    {% else %}
+                                        {{ req.status }}
+                                    {% endif %}
+                                </span>
+                                {% if req.notes %}
+                                <div class="notes-badge mt-1" data-bs-toggle="tooltip" title="{{ req.notes }}">
+                                    <i class="fas fa-sticky-note"></i> 有备注
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="table-action-buttons">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewRequest({{ req.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% if req.status == 'pending' %}
+                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="approveRequest({{ req.id }})">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="rejectRequest({{ req.id }})">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if req.status == 'approved' %}
+                                    <button type="button" class="btn btn-sm btn-outline-info" onclick="fulfillRequest({{ req.id }})">
+                                        <i class="fas fa-box-open"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if req.status in ['pending', 'approved'] %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="cancelRequest({{ req.id }})">
+                                        <i class="fas fa-ban"></i>
+                                    </button>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editRequest({{ req.id }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <h4 class="mb-3">暂无备件申请</h4>
+                <p class="text-muted mb-4">您还没有创建任何备件申请，点击右上角按钮创建第一个申请</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRequestModal">
+                    <i class="fas fa-plus me-2"></i>创建申请
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% if requests %}
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                显示 {{ requests|length }} 个申请中的 {{ requests|length }} 个
+            </div>
+            <nav aria-label="申请分页">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item disabled"><a class="page-link" href="#">下一页</a></li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 创建申请模态框 -->
+<div class="modal fade" id="createRequestModal" tabindex="-1" aria-labelledby="createRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createRequestModalLabel">创建备件申请</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createRequestForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="requestPart" class="form-label">申请备件 *</label>
+                            <select class="form-select" id="requestPart" name="part_id" required>
+                                <option value="">选择备件...</option>
+                                <!-- 备件选项将通过JavaScript动态加载 -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="requestQuantity" class="form-label">申请数量 *</label>
+                            <input type="number" class="form-control" id="requestQuantity" name="quantity" min="1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="requestPurpose" class="form-label">申请用途 *</label>
+                        <textarea class="form-control" id="requestPurpose" name="purpose" rows="3" required placeholder="请详细说明申请此备件的用途..."></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="requestDevice" class="form-label">关联设备</label>
+                            <select class="form-select" id="requestDevice" name="device_id">
+                                <option value="">选择设备...</option>
+                                <!-- 设备选项将通过JavaScript动态加载 -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="requestMaintenance" class="form-label">关联维护任务</label>
+                            <select class="form-select" id="requestMaintenance" name="maintenance_id">
+                                <option value="">选择维护任务...</option>
+                                <!-- 维护任务选项将通过JavaScript动态加载 -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="requestUrgency" class="form-label">紧急程度 *</label>
+                            <select class="form-select" id="requestUrgency" name="urgency" required>
+                                <option value="low">低</option>
+                                <option value="normal" selected>普通</option>
+                                <option value="high">高</option>
+                                <option value="emergency">紧急</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="requestNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="requestNotes" name="notes" rows="2"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- 备件信息预览 -->
+                    <div class="card mt-3" id="partInfoCard" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="card-title">备件信息</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-2"><strong>备件名称:</strong> <span id="previewPartName">-</span></div>
+                                    <div class="mb-2"><strong>零件号:</strong> <span id="previewPartNumber">-</span></div>
+                                    <div class="mb-2"><strong>型号:</strong> <span id="previewPartModel">-</span></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-2"><strong>当前库存:</strong> <span id="previewPartStock">-</span> 个</div>
+                                    <div class="mb-2"><strong>最低库存:</strong> <span id="previewPartMinStock">-</span> 个</div>
+                                    <div class="mb-2"><strong>单价:</strong> ¥<span id="previewPartPrice">-</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">提交申请</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 申请详情模态框 -->
+<div class="modal fade" id="requestDetailModal" tabindex="-1" aria-labelledby="requestDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="requestDetailModalLabel">备件申请详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="requestDetailContent">
+                <!-- 申请详情将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="printRequestDetails()">
+                    <i class="fas fa-print me-1"></i>打印
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑申请模态框 -->
+<div class="modal fade" id="editRequestModal" tabindex="-1" aria-labelledby="editRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editRequestModalLabel">编辑备件申请</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editRequestForm">
+                <div class="modal-body" id="editRequestContent">
+                    <!-- 编辑表单将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 操作确认模态框 -->
+<div class="modal fade" id="confirmActionModal" tabindex="-1" aria-labelledby="confirmActionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmActionModalLabel">确认操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="confirmActionMessage">
+                <!-- 确认消息将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmActionBtn">确认</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作备注模态框 -->
+<div class="modal fade" id="actionNotesModal" tabindex="-1" aria-labelledby="actionNotesModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="actionNotesModalLabel">操作备注</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="actionNotesForm">
+                <div class="modal-body">
+                    <input type="hidden" id="actionRequestId">
+                    <input type="hidden" id="actionType">
+                    
+                    <div class="mb-3">
+                        <label for="actionNotes" class="form-label">备注（可选）</label>
+                        <textarea class="form-control" id="actionNotes" name="notes" rows="3" placeholder="请输入操作备注..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="submitActionBtn">提交</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化
+        initializePage();
+        
+        // 添加刷新按钮事件
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 添加导出按钮事件
+        document.getElementById('exportBtn').addEventListener('click', exportRequests);
+        
+        // 初始化筛选功能
+        initializeFilters();
+        
+        // 统计申请数据
+        countRequests();
+        
+        // 加载数据
+        loadParts();
+        loadDevices();
+        loadMaintenanceTasks();
+        
+        // 设置创建表单提交事件
+        const createForm = document.getElementById('createRequestForm');
+        if (createForm) {
+            createForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                createSparePartRequest();
+            });
+        }
+        
+        // 设置备件选择事件
+        const partSelect = document.getElementById('requestPart');
+        if (partSelect) {
+            partSelect.addEventListener('change', function() {
+                updatePartPreview(this.value);
+            });
+        }
+        
+        // 设置日期筛选事件
+        const dateFilter = document.getElementById('dateFilter');
+        if (dateFilter) {
+            dateFilter.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    document.getElementById('customDateRange').style.display = 'flex';
+                } else {
+                    document.getElementById('customDateRange').style.display = 'none';
+                    filterRequests();
+                }
+            });
+        }
+        
+        // 设置操作备注表单提交事件
+        const notesForm = document.getElementById('actionNotesForm');
+        if (notesForm) {
+            notesForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitActionWithNotes();
+            });
+        }
+        
+        // 初始化工具提示
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+    
+    // 初始化页面
+    function initializePage() {
+        // 设置今日日期为默认值
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dateFrom').value = today;
+        document.getElementById('dateTo').value = today;
+    }
+    
+    // 初始化筛选功能
+    function initializeFilters() {
+        const statusFilter = document.getElementById('statusFilter');
+        const urgencyFilter = document.getElementById('urgencyFilter');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        
+        // 状态筛选
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterRequests);
+        }
+        
+        // 紧急程度筛选
+        if (urgencyFilter) {
+            urgencyFilter.addEventListener('change', filterRequests);
+        }
+        
+        // 搜索功能
+        if (searchBtn) {
+            searchBtn.addEventListener('click', filterRequests);
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    filterRequests();
+                }
+            });
+        }
+    }
+    
+    // 筛选申请
+    function filterRequests() {
+        const statusFilter = document.getElementById('statusFilter').value;
+        const urgencyFilter = document.getElementById('urgencyFilter').value;
+        const dateFilter = document.getElementById('dateFilter').value;
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            let showRow = true;
+            
+            // 状态筛选
+            if (statusFilter && showRow) {
+                const statusCell = row.cells[7];
+                const statusBadge = statusCell.querySelector('.status-badge');
+                let status = '';
+                
+                if (statusBadge) {
+                    if (statusBadge.textContent.includes('待处理')) {
+                        status = 'pending';
+                    } else if (statusBadge.textContent.includes('已批准')) {
+                        status = 'approved';
+                    } else if (statusBadge.textContent.includes('已拒绝')) {
+                        status = 'rejected';
+                    } else if (statusBadge.textContent.includes('已完成')) {
+                        status = 'fulfilled';
+                    } else if (statusBadge.textContent.includes('已取消')) {
+                        status = 'cancelled';
+                    }
+                }
+                
+                if (statusFilter !== status) {
+                    showRow = false;
+                }
+            }
+            
+            // 紧急程度筛选
+            if (urgencyFilter && showRow) {
+                const urgencyCell = row.cells[6];
+                const urgencyBadge = urgencyCell.querySelector('.urgency-badge');
+                let urgency = '';
+                
+                if (urgencyBadge) {
+                    if (urgencyBadge.textContent.includes('低')) {
+                        urgency = 'low';
+                    } else if (urgencyBadge.textContent.includes('普通')) {
+                        urgency = 'normal';
+                    } else if (urgencyBadge.textContent.includes('高')) {
+                        urgency = 'high';
+                    } else if (urgencyBadge.textContent.includes('紧急')) {
+                        urgency = 'emergency';
+                    }
+                }
+                
+                if (urgencyFilter !== urgency) {
+                    showRow = false;
+                }
+            }
+            
+            // 日期筛选
+            if (dateFilter && showRow && dateFilter !== 'custom') {
+                const dateCell = row.cells[5];
+                const dateText = dateCell.querySelector('.fw-medium').textContent;
+                
+                const requestDate = new Date(dateText);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (dateFilter === 'today') {
+                    if (requestDate.toDateString() !== today.toDateString()) {
+                        showRow = false;
+                    }
+                } else if (dateFilter === 'week') {
+                    const startOfWeek = new Date(today);
+                    startOfWeek.setDate(today.getDate() - today.getDay());
+                    const endOfWeek = new Date(today);
+                    endOfWeek.setDate(today.getDate() + (6 - today.getDay()));
+                    
+                    if (requestDate < startOfWeek || requestDate > endOfWeek) {
+                        showRow = false;
+                    }
+                } else if (dateFilter === 'month') {
+                    if (requestDate.getMonth() !== today.getMonth() || requestDate.getFullYear() !== today.getFullYear()) {
+                        showRow = false;
+                    }
+                }
+            }
+            
+            // 自定义日期范围筛选
+            if (dateFilter === 'custom' && showRow) {
+                const dateFrom = document.getElementById('dateFrom').value;
+                const dateTo = document.getElementById('dateTo').value;
+                
+                if (dateFrom && dateTo) {
+                    const dateCell = row.cells[5];
+                    const dateText = dateCell.querySelector('.fw-medium').textContent;
+                    const requestDate = new Date(dateText);
+                    const fromDate = new Date(dateFrom);
+                    const toDate = new Date(dateTo);
+                    
+                    if (requestDate < fromDate || requestDate > toDate) {
+                        showRow = false;
+                    }
+                }
+            }
+            
+            // 搜索筛选
+            if (searchQuery && showRow) {
+                const requestInfoCell = row.cells[1];
+                const requestNumber = requestInfoCell.querySelector('.request-number-badge')?.textContent.toLowerCase() || '';
+                const partInfoCell = row.cells[2];
+                const partName = partInfoCell.querySelector('.fw-medium')?.textContent.toLowerCase() || '';
+                
+                if (!requestNumber.includes(searchQuery) && !partName.includes(searchQuery)) {
+                    showRow = false;
+                }
+            }
+            
+            // 显示/隐藏行
+            row.style.display = showRow ? '' : 'none';
+            if (showRow) visibleCount++;
+        });
+        
+        // 更新申请计数
+        document.getElementById('requestCount').textContent = visibleCount;
+        
+        // 如果没有显示任何申请，显示空状态
+        const tbody = document.querySelector('tbody');
+        const emptyState = document.querySelector('.empty-state');
+        
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!emptyState) {
+                const newEmptyState = document.createElement('div');
+                newEmptyState.className = 'empty-state';
+                newEmptyState.innerHTML = `
+                    <div class="empty-state-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h4 class="mb-3">未找到匹配的申请</h4>
+                    <p class="text-muted mb-4">请尝试其他筛选条件或搜索关键词</p>
+                    <button type="button" class="btn btn-outline-secondary" id="resetFiltersBtn">
+                        重置筛选条件
+                    </button>
+                `;
+                tbody.parentNode.insertBefore(newEmptyState, tbody);
+                tbody.style.display = 'none';
+                
+                document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+            }
+        } else if (emptyState && emptyState.id !== 'emptyState') {
+            emptyState.remove();
+            tbody.style.display = '';
+        }
+    }
+    
+    // 应用自定义日期范围
+    function applyDateRange() {
+        filterRequests();
+    }
+    
+    // 重置筛选条件
+    function resetFilters() {
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('urgencyFilter').value = '';
+        document.getElementById('dateFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        document.getElementById('customDateRange').style.display = 'none';
+        filterRequests();
+    }
+    
+    // 统计申请数据
+    function countRequests() {
+        let approvedCount = 0;
+        let emergencyCount = 0;
+        
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const urgencyCell = row.cells[6];
+            const urgencyBadge = urgencyCell.querySelector('.urgency-badge');
+            const statusCell = row.cells[7];
+            const statusBadge = statusCell.querySelector('.status-badge');
+            
+            // 统计已批准申请
+            if (statusBadge && statusBadge.textContent.includes('已批准')) {
+                approvedCount++;
+            }
+            
+            // 统计紧急申请
+            if (urgencyBadge && urgencyBadge.textContent.includes('紧急')) {
+                emergencyCount++;
+            }
+        });
+        
+        // 更新统计显示
+        document.getElementById('approvedCount').textContent = approvedCount;
+        document.getElementById('emergencyCount').textContent = emergencyCount;
+    }
+    
+    // 查看申请详情
+    function viewRequest(requestId) {
+        // 从API获取申请详情
+        fetch(`/api/maintenance/spare_part_requests/${requestId}`)
+            .then(response => response.json())
+            .then(request => {
+                if (!request) {
+                    alert('申请不存在');
+                    return;
+                }
+                
+                // 构建详情内容
+                let statusBadge = '';
+                if (request.status === 'pending') {
+                    statusBadge = '<span class="badge bg-warning">待处理</span>';
+                } else if (request.status === 'approved') {
+                    statusBadge = '<span class="badge bg-success">已批准</span>';
+                } else if (request.status === 'rejected') {
+                    statusBadge = '<span class="badge bg-danger">已拒绝</span>';
+                } else if (request.status === 'fulfilled') {
+                    statusBadge = '<span class="badge bg-info">已完成</span>';
+                } else if (request.status === 'cancelled') {
+                    statusBadge = '<span class="badge bg-secondary">已取消</span>';
+                }
+                
+                let urgencyBadge = '';
+                if (request.urgency === 'low') {
+                    urgencyBadge = '<span class="badge bg-secondary">低</span>';
+                } else if (request.urgency === 'normal') {
+                    urgencyBadge = '<span class="badge bg-primary">普通</span>';
+                } else if (request.urgency === 'high') {
+                    urgencyBadge = '<span class="badge bg-warning">高</span>';
+                } else if (request.urgency === 'emergency') {
+                    urgencyBadge = '<span class="badge bg-danger">紧急</span>';
+                }
+                
+                // 时间线
+                let timelineHtml = `
+                    <div class="timeline-item">
+                        <div class="fw-bold">申请提交</div>
+                        <div class="text-muted small">${new Date(request.request_date).toLocaleString()}</div>
+                        <div>由 ${request.requested_by_name} 提交</div>
+                    </div>
+                `;
+                
+                if (request.approved_at) {
+                    timelineHtml += `
+                        <div class="timeline-item approved">
+                            <div class="fw-bold">申请批准</div>
+                            <div class="text-muted small">${new Date(request.approved_at).toLocaleString()}</div>
+                            <div>由 ${request.approved_by_name} 批准</div>
+                        </div>
+                    `;
+                }
+                
+                if (request.rejected_at) {
+                    timelineHtml += `
+                        <div class="timeline-item rejected">
+                            <div class="fw-bold">申请拒绝</div>
+                            <div class="text-muted small">${new Date(request.rejected_at).toLocaleString()}</div>
+                            <div>由 ${request.rejected_by_name} 拒绝</div>
+                        </div>
+                    `;
+                }
+                
+                if (request.fulfilled_at) {
+                    timelineHtml += `
+                        <div class="timeline-item fulfilled">
+                            <div class="fw-bold">申请完成</div>
+                            <div class="text-muted small">${new Date(request.fulfilled_at).toLocaleString()}</div>
+                            <div>由 ${request.fulfilled_by_name} 完成</div>
+                        </div>
+                    `;
+                }
+                
+                if (request.cancelled_at) {
+                    timelineHtml += `
+                        <div class="timeline-item">
+                            <div class="fw-bold">申请取消</div>
+                            <div class="text-muted small">${new Date(request.cancelled_at).toLocaleString()}</div>
+                            <div>由 ${request.cancelled_by_name} 取消</div>
+                        </div>
+                    `;
+                }
+                
+                const detailHtml = `
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4>备件申请</h4>
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="badge bg-secondary me-2">${request.request_number}</span>
+                                ${statusBadge}
+                                ${urgencyBadge}
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="text-muted small">
+                                申请日期: ${new Date(request.request_date).toLocaleDateString()}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">申请信息</h6>
+                            <dl class="request-modal-info">
+                                <dt>申请备件:</dt>
+                                <dd>${request.part_name} (${request.part_number})</dd>
+                                
+                                <dt>申请数量:</dt>
+                                <dd class="fw-bold">${request.quantity} 个</dd>
+                                
+                                ${request.unit_price ? `
+                                <dt>备件单价:</dt>
+                                <dd>¥${request.unit_price.toFixed(2)}</dd>
+                                
+                                <dt>总价:</dt>
+                                <dd class="text-success fw-bold">¥${(request.quantity * request.unit_price).toFixed(2)}</dd>
+                                ` : ''}
+                                
+                                ${request.device_name ? `
+                                <dt>关联设备:</dt>
+                                <dd>${request.device_name} (${request.device_ip})</dd>
+                                ` : ''}
+                                
+                                ${request.maintenance_task_name ? `
+                                <dt>关联维护任务:</dt>
+                                <dd>${request.maintenance_task_name}</dd>
+                                ` : ''}
+                                
+                                ${request.notes ? `
+                                <dt>申请备注:</dt>
+                                <dd>${request.notes}</dd>
+                                ` : ''}
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3">备件信息</h6>
+                            <dl class="request-modal-info">
+                                <dt>备件型号:</dt>
+                                <dd>${request.part_model || '未指定'}</dd>
+                                
+                                <dt>供应商:</dt>
+                                <dd>${request.part_vendor || '未指定'}</dd>
+                                
+                                <dt>当前库存:</dt>
+                                <dd class="${request.part_stock < request.quantity ? 'text-danger fw-bold' : ''}">
+                                    ${request.part_stock} 个
+                                    ${request.part_stock < request.quantity ? '<span class="badge bg-danger ms-2">库存不足</span>' : ''}
+                                </dd>
+                                
+                                <dt>最低库存:</dt>
+                                <dd>${request.part_min_stock || 1} 个</dd>
+                                
+                                <dt>存放位置:</dt>
+                                <dd>${request.part_location || '未指定'}</dd>
+                            </dl>
+                            
+                            <div class="mt-3">
+                                <h6>申请用途</h6>
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <p class="mb-0">${request.purpose || '未说明用途'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="mt-3">
+                        <h6>申请流程时间线</h6>
+                        <div class="mt-3">
+                            ${timelineHtml}
+                        </div>
+                    </div>
+                `;
+                
+                // 显示模态框
+                document.getElementById('requestDetailContent').innerHTML = detailHtml;
+                
+                const modal = new bootstrap.Modal(document.getElementById('requestDetailModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching request details:', error);
+                alert('获取申请详情失败');
+            });
+    }
+    
+    // 批准申请
+    function approveRequest(requestId) {
+        showActionConfirmation('批准申请', '确定要批准这个备件申请吗？', function() {
+            performRequestAction(requestId, 'approve');
+        });
+    }
+    
+    // 拒绝申请
+    function rejectRequest(requestId) {
+        showActionWithNotes('拒绝申请', '请填写拒绝原因（可选）：', requestId, 'reject');
+    }
+    
+    // 完成申请
+    function fulfillRequest(requestId) {
+        showActionWithNotes('完成申请', '请填写完成备注（可选）：', requestId, 'fulfill');
+    }
+    
+    // 取消申请
+    function cancelRequest(requestId) {
+        showActionConfirmation('取消申请', '确定要取消这个备件申请吗？', function() {
+            performRequestAction(requestId, 'cancel');
+        });
+    }
+    
+    // 显示操作确认对话框
+    function showActionConfirmation(title, message, confirmCallback) {
+        document.getElementById('confirmActionModalLabel').textContent = title;
+        document.getElementById('confirmActionMessage').textContent = message;
+        
+        const confirmBtn = document.getElementById('confirmActionBtn');
+        confirmBtn.onclick = confirmCallback;
+        
+        const modal = new bootstrap.Modal(document.getElementById('confirmActionModal'));
+        modal.show();
+    }
+    
+    // 显示带备注的操作对话框
+    function showActionWithNotes(title, placeholder, requestId, actionType) {
+        document.getElementById('actionNotesModalLabel').textContent = title;
+        document.getElementById('actionNotes').placeholder = placeholder;
+        document.getElementById('actionRequestId').value = requestId;
+        document.getElementById('actionType').value = actionType;
+        
+        const modal = new bootstrap.Modal(document.getElementById('actionNotesModal'));
+        modal.show();
+    }
+    
+    // 执行申请操作
+    function performRequestAction(requestId, action, notes = '') {
+        const data = {
+            action: action,
+            notes: notes
+        };
+        
+        fetch(`/api/maintenance/spare_part_requests/${requestId}/action`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('操作成功');
+                const modal1 = bootstrap.Modal.getInstance(document.getElementById('confirmActionModal'));
+                if (modal1) modal1.hide();
+                const modal2 = bootstrap.Modal.getInstance(document.getElementById('actionNotesModal'));
+                if (modal2) modal2.hide();
+                window.location.reload();
+            } else {
+                alert('操作失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error performing request action:', error);
+            alert('操作失败');
+        });
+    }
+    
+    // 提交带备注的操作
+    function submitActionWithNotes() {
+        const requestId = document.getElementById('actionRequestId').value;
+        const actionType = document.getElementById('actionType').value;
+        const notes = document.getElementById('actionNotes').value;
+        
+        performRequestAction(requestId, actionType, notes);
+    }
+    
+    // 编辑申请
+    function editRequest(requestId) {
+        // 从API获取申请数据
+        fetch(`/api/maintenance/spare_part_requests/${requestId}`)
+            .then(response => response.json())
+            .then(request => {
+                if (!request) {
+                    alert('申请不存在');
+                    return;
+                }
+                
+                // 构建编辑表单
+                const editHtml = `
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestPart" class="form-label">申请备件 *</label>
+                            <select class="form-select" id="editRequestPart" name="part_id" required>
+                                <option value="">选择备件...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestQuantity" class="form-label">申请数量 *</label>
+                            <input type="number" class="form-control" id="editRequestQuantity" name="quantity" value="${request.quantity}" min="1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editRequestPurpose" class="form-label">申请用途 *</label>
+                        <textarea class="form-control" id="editRequestPurpose" name="purpose" rows="3" required>${request.purpose || ''}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestDevice" class="form-label">关联设备</label>
+                            <select class="form-select" id="editRequestDevice" name="device_id">
+                                <option value="">选择设备...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestMaintenance" class="form-label">关联维护任务</label>
+                            <select class="form-select" id="editRequestMaintenance" name="maintenance_id">
+                                <option value="">选择维护任务...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestUrgency" class="form-label">紧急程度 *</label>
+                            <select class="form-select" id="editRequestUrgency" name="urgency" required>
+                                <option value="low" ${request.urgency === 'low' ? 'selected' : ''}>低</option>
+                                <option value="normal" ${request.urgency === 'normal' ? 'selected' : ''}>普通</option>
+                                <option value="high" ${request.urgency === 'high' ? 'selected' : ''}>高</option>
+                                <option value="emergency" ${request.urgency === 'emergency' ? 'selected' : ''}>紧急</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editRequestNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="editRequestNotes" name="notes" rows="2">${request.notes || ''}</textarea>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" name="request_id" value="${request.id}">
+                `;
+                
+                // 显示编辑表单
+                document.getElementById('editRequestContent').innerHTML = editHtml;
+                
+                // 设置表单提交URL
+                document.getElementById('editRequestForm').action = `/api/maintenance/spare_part_requests/${requestId}`;
+                
+                // 加载并选中备件
+                loadPartsForEdit(request.part_id);
+                
+                // 加载并选中设备
+                loadDevicesForEdit(request.device_id);
+                
+                // 加载并选中维护任务
+                loadMaintenanceTasksForEdit(request.maintenance_id);
+                
+                // 添加表单提交事件
+                document.getElementById('editRequestForm').onsubmit = function(e) {
+                    e.preventDefault();
+                    updateSparePartRequest(requestId);
+                };
+                
+                const modal = new bootstrap.Modal(document.getElementById('editRequestModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching request for edit:', error);
+                alert('获取申请信息失败');
+            });
+    }
+    
+    // 创建备件申请
+    function createSparePartRequest() {
+        const form = document.getElementById('createRequestForm');
+        const formData = new FormData(form);
+        
+        // 构建数据对象
+        const data = {
+            part_id: formData.get('part_id'),
+            quantity: parseInt(formData.get('quantity')),
+            purpose: formData.get('purpose'),
+            device_id: formData.get('device_id') || null,
+            maintenance_id: formData.get('maintenance_id') || null,
+            urgency: formData.get('urgency'),
+            notes: formData.get('notes') || ''
+        };
+        
+        fetch('/api/maintenance/spare_part_requests', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('备件申请创建成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createRequestModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('创建申请失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error creating request:', error);
+            alert('创建申请失败');
+        });
+    }
+    
+    // 更新备件申请
+    function updateSparePartRequest(requestId) {
+        const form = document.getElementById('editRequestForm');
+        const formData = new FormData(form);
+        
+        // 构建数据对象
+        const data = {
+            part_id: formData.get('part_id'),
+            quantity: parseInt(formData.get('quantity')),
+            purpose: formData.get('purpose'),
+            device_id: formData.get('device_id') || null,
+            maintenance_id: formData.get('maintenance_id') || null,
+            urgency: formData.get('urgency'),
+            notes: formData.get('notes') || ''
+        };
+        
+        fetch(`/api/maintenance/spare_part_requests/${requestId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('备件申请更新成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editRequestModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('更新申请失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating request:', error);
+            alert('更新申请失败');
+        });
+    }
+    
+    // 更新备件预览
+    function updatePartPreview(partId) {
+        if (!partId) {
+            document.getElementById('partInfoCard').style.display = 'none';
+            return;
+        }
+        
+        // 从API获取备件详情
+        fetch(`/api/maintenance/spare_parts/${partId}`)
+            .then(response => response.json())
+            .then(part => {
+                if (!part) {
+                    document.getElementById('partInfoCard').style.display = 'none';
+                    return;
+                }
+                
+                // 更新预览信息
+                document.getElementById('previewPartName').textContent = part.name || '-';
+                document.getElementById('previewPartNumber').textContent = part.part_number || '-';
+                document.getElementById('previewPartModel').textContent = part.model || '-';
+                document.getElementById('previewPartStock').textContent = part.current_stock || '0';
+                document.getElementById('previewPartMinStock').textContent = part.min_stock_level || '1';
+                document.getElementById('previewPartPrice').textContent = part.unit_price ? part.unit_price.toFixed(2) : '-';
+                
+                // 显示预览卡片
+                document.getElementById('partInfoCard').style.display = 'block';
+                
+                // 检查库存是否充足
+                const quantity = document.getElementById('requestQuantity').value;
+                if (quantity && part.current_stock < quantity) {
+                    const previewElement = document.getElementById('previewPartStock');
+                    previewElement.innerHTML = `${part.current_stock} 个 <span class="badge bg-danger ms-2">库存不足</span>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching part details:', error);
+                document.getElementById('partInfoCard').style.display = 'none';
+            });
+    }
+    
+    // 导出申请
+    function exportRequests() {
+        // 这里可以实现导出功能，如导出为Excel或CSV
+        alert('导出功能开发中...');
+        
+        // 示例：导出为CSV
+        /*
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "申请编号,备件名称,零件号,数量,申请人,申请日期,紧急程度,状态,用途\n";
+        
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.style.display !== 'none') {
+                const cells = row.cells;
+                const rowData = [
+                    cells[1].querySelector('.request-number-badge')?.textContent || '',
+                    cells[2].querySelector('.fw-medium')?.textContent || '',
+                    cells[2].querySelector('.part-badge')?.textContent || '',
+                    cells[3].querySelector('.fw-medium')?.textContent || '',
+                    cells[4].querySelector('.user-badge')?.textContent || '',
+                    cells[5].querySelector('.fw-medium')?.textContent || '',
+                    cells[6].querySelector('.urgency-badge')?.textContent || '',
+                    cells[7].querySelector('.status-badge')?.textContent || '',
+                    cells[1].querySelector('.small')?.textContent || ''
+                ];
+                csvContent += rowData.join(",") + "\n";
+            }
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "备件申请.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        */
+    }
+    
+    // 打印申请详情
+    function printRequestDetails() {
+        const printContent = document.getElementById('requestDetailContent').innerHTML;
+        const originalContent = document.body.innerHTML;
+        
+        document.body.innerHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>备件申请详情 - 打印</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            </head>
+            <body>
+                <div class="container mt-4">
+                    ${printContent}
+                </div>
+            </body>
+            </html>
+        `;
+        
+        window.print();
+        document.body.innerHTML = originalContent;
+        window.location.reload();
+    }
+    
+    // 加载备件列表
+    function loadParts() {
+        // 从API获取备件数据
+        fetch('/api/maintenance/spare_parts')
+            .then(response => response.json())
+            .then(parts => {
+                const partSelect = document.getElementById('requestPart');
+                if (partSelect) {
+                    parts.forEach(part => {
+                        const option = document.createElement('option');
+                        option.value = part.id;
+                        option.textContent = `${part.name} (${part.part_number}) - 库存: ${part.current_stock}个`;
+                        partSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading parts:', error);
+            });
+    }
+    
+    // 加载备件列表用于编辑
+    function loadPartsForEdit(selectedPartId) {
+        // 从API获取备件数据
+        fetch('/api/maintenance/spare_parts')
+            .then(response => response.json())
+            .then(parts => {
+                const partSelect = document.getElementById('editRequestPart');
+                if (partSelect) {
+                    parts.forEach(part => {
+                        const option = document.createElement('option');
+                        option.value = part.id;
+                        option.textContent = `${part.name} (${part.part_number}) - 库存: ${part.current_stock}个`;
+                        
+                        // 如果备件ID是选中的备件，则选中
+                        if (selectedPartId && part.id == selectedPartId) {
+                            option.selected = true;
+                        }
+                        
+                        partSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading parts for edit:', error);
+            });
+    }
+    
+    // 加载设备列表
+    function loadDevices() {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('requestDevice');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定类型'})`;
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices:', error);
+            });
+    }
+    
+    // 加载设备列表用于编辑
+    function loadDevicesForEdit(selectedDeviceId) {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('editRequestDevice');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定类型'})`;
+                        
+                        // 如果设备ID是选中的设备，则选中
+                        if (selectedDeviceId && device.id == selectedDeviceId) {
+                            option.selected = true;
+                        }
+                        
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices for edit:', error);
+            });
+    }
+    
+    // 加载维护任务列表
+    function loadMaintenanceTasks() {
+        // 从API获取维护任务数据
+        fetch('/api/maintenance/maintenance_tasks')
+            .then(response => response.json())
+            .then(tasks => {
+                const maintenanceSelect = document.getElementById('requestMaintenance');
+                if (maintenanceSelect) {
+                    tasks.forEach(task => {
+                        const option = document.createElement('option');
+                        option.value = task.id;
+                        option.textContent = `${task.name} (${task.status})`;
+                        maintenanceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading maintenance tasks:', error);
+            });
+    }
+    
+    // 加载维护任务列表用于编辑
+    function loadMaintenanceTasksForEdit(selectedTaskId) {
+        // 从API获取维护任务数据
+        fetch('/api/maintenance/maintenance_tasks')
+            .then(response => response.json())
+            .then(tasks => {
+                const maintenanceSelect = document.getElementById('editRequestMaintenance');
+                if (maintenanceSelect) {
+                    tasks.forEach(task => {
+                        const option = document.createElement('option');
+                        option.value = task.id;
+                        option.textContent = `${task.name} (${task.status})`;
+                        
+                        // 如果任务ID是选中的任务，则选中
+                        if (selectedTaskId && task.id == selectedTaskId) {
+                            option.selected = true;
+                        }
+                        
+                        maintenanceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading maintenance tasks for edit:', error);
+            });
+    }
+</script>
+{% endblock %}

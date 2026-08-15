@@ -1,0 +1,261 @@
+{# templates/monitoring/device_config_edit.html #}
+{% extends "base.html" %}
+
+{% block title %}编辑设备监控配置 - {{ config.device.name if config.device else '未知设备' }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>编辑设备监控配置</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('monitoring.device_config_edit', config_id=config.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <!-- 设备信息（只读显示） -->
+                        <div class="mb-3">
+                            <label class="form-label">设备</label>
+                            <input type="text" class="form-control" value="{{ config.device.name if config.device else '未知设备' }} ({{ config.device.management_ip or config.device.ip_address or '无IP' }})" readonly>
+                            <input type="hidden" name="device_id" value="{{ config.device_id }}">
+                        </div>
+
+                        <!-- 监控类型启用（预填充） -->
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_ping" name="enable_ping" {% if config.enable_ping %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_ping">启用 Ping 监控</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_snmp" name="enable_snmp" {% if config.enable_snmp %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_snmp">启用 SNMP 监控</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="enable_ssh" class="form-label">SSH 监控</label>
+                                <select class="form-select form-select-sm" id="enable_ssh" name="enable_ssh">
+                                    <option value="auto" {% if config.enable_ssh == 'auto' %}selected{% endif %}>自动</option>
+                                    <option value="yes" {% if config.enable_ssh == 'yes' %}selected{% endif %}>启用</option>
+                                    <option value="no" {% if config.enable_ssh == 'no' %}selected{% endif %}>禁用</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_api" name="enable_api" {% if config.enable_api %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_api">启用 API 监控</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 监控频率与超时（预填充） -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light py-2">监控频率与超时</div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="ping_interval" class="form-label">Ping 间隔 (秒)</label>
+                                        <input type="number" class="form-control form-control-sm" id="ping_interval" name="ping_interval" value="{{ config.ping_interval }}" min="1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="ping_timeout" class="form-label">Ping 超时 (秒)</label>
+                                        <input type="number" step="0.1" class="form-control form-control-sm" id="ping_timeout" name="ping_timeout" value="{{ config.ping_timeout }}" min="0.1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_interval" class="form-label">SNMP 间隔 (秒)</label>
+                                        <input type="number" class="form-control form-control-sm" id="snmp_interval" name="snmp_interval" value="{{ config.snmp_interval }}" min="1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_timeout" class="form-label">SNMP 超时 (秒)</label>
+                                        <input type="number" step="0.1" class="form-control form-control-sm" id="snmp_timeout" name="snmp_timeout" value="{{ config.snmp_timeout }}" min="0.1">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-3">
+                                        <label for="ssh_interval" class="form-label">SSH 间隔 (秒)</label>
+                                        <input type="number" class="form-control form-control-sm" id="ssh_interval" name="ssh_interval" value="{{ config.ssh_interval }}" min="1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="ssh_timeout" class="form-label">SSH 超时 (秒)</label>
+                                        <input type="number" step="0.1" class="form-control form-control-sm" id="ssh_timeout" name="ssh_timeout" value="{{ config.ssh_timeout }}" min="0.1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="api_interval" class="form-label">API 间隔 (秒)</label>
+                                        <input type="number" class="form-control form-control-sm" id="api_interval" name="api_interval" value="{{ config.api_interval }}" min="1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="api_timeout" class="form-label">API 超时 (秒)</label>
+                                        <input type="number" step="0.1" class="form-control form-control-sm" id="api_timeout" name="api_timeout" value="{{ config.api_timeout }}" min="0.1">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-3">
+                                        <label for="retry_count" class="form-label">重试次数</label>
+                                        <input type="number" class="form-control form-control-sm" id="retry_count" name="retry_count" value="{{ config.retry_count }}" min="0">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="retry_interval" class="form-label">重试间隔 (秒)</label>
+                                        <input type="number" class="form-control form-control-sm" id="retry_interval" name="retry_interval" value="{{ config.retry_interval }}" min="1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SNMP 配置 -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light py-2">SNMP 配置</div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="snmp_version" class="form-label">SNMP 版本</label>
+                                        <select class="form-select form-select-sm" id="snmp_version" name="snmp_version">
+                                            <option value="1" {% if config.snmp_version == 1 %}selected{% endif %}>v1</option>
+                                            <option value="2" {% if config.snmp_version == 2 %}selected{% endif %}>v2c</option>
+                                            <option value="3" {% if config.snmp_version == 3 %}selected{% endif %}>v3</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_community" class="form-label">Community</label>
+                                        <input type="text" class="form-control form-control-sm" id="snmp_community" name="snmp_community" value="{{ config.snmp_community or '' }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_username" class="form-label">用户名 (v3)</label>
+                                        <input type="text" class="form-control form-control-sm" id="snmp_username" name="snmp_username" value="{{ config.snmp_username or '' }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_auth_password" class="form-label">认证密码 (v3)</label>
+                                        <input type="password" class="form-control form-control-sm" id="snmp_auth_password" name="snmp_auth_password" placeholder="留空则不修改">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-3">
+                                        <label for="snmp_priv_password" class="form-label">加密密码 (v3)</label>
+                                        <input type="password" class="form-control form-control-sm" id="snmp_priv_password" name="snmp_priv_password" placeholder="留空则不修改">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_auth_protocol" class="form-label">认证协议</label>
+                                        <select class="form-select form-select-sm" id="snmp_auth_protocol" name="snmp_auth_protocol">
+                                            <option value="" {% if not config.snmp_auth_protocol %}selected{% endif %}>无</option>
+                                            <option value="MD5" {% if config.snmp_auth_protocol == 'MD5' %}selected{% endif %}>MD5</option>
+                                            <option value="SHA" {% if config.snmp_auth_protocol == 'SHA' %}selected{% endif %}>SHA</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="snmp_priv_protocol" class="form-label">加密协议</label>
+                                        <select class="form-select form-select-sm" id="snmp_priv_protocol" name="snmp_priv_protocol">
+                                            <option value="" {% if not config.snmp_priv_protocol %}selected{% endif %}>无</option>
+                                            <option value="DES" {% if config.snmp_priv_protocol == 'DES' %}selected{% endif %}>DES</option>
+                                            <option value="AES" {% if config.snmp_priv_protocol == 'AES' %}selected{% endif %}>AES</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SSH 配置 -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light py-2">SSH 配置</div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="ssh_username" class="form-label">用户名</label>
+                                        <input type="text" class="form-control form-control-sm" id="ssh_username" name="ssh_username" value="{{ config.ssh_username or '' }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="ssh_password" class="form-label">密码</label>
+                                        <input type="password" class="form-control form-control-sm" id="ssh_password" name="ssh_password" placeholder="留空则不修改">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="ssh_port" class="form-label">端口</label>
+                                        <input type="number" class="form-control form-control-sm" id="ssh_port" name="ssh_port" value="{{ config.ssh_port }}" min="1" max="65535">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="ssh_key_file" class="form-label">密钥文件路径</label>
+                                        <input type="text" class="form-control form-control-sm" id="ssh_key_file" name="ssh_key_file" value="{{ config.ssh_key_file or '' }}" placeholder="/path/to/key">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- API 配置 -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light py-2">API 配置</div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label for="api_url" class="form-label">API URL</label>
+                                        <input type="url" class="form-control form-control-sm" id="api_url" name="api_url" value="{{ config.api_url or '' }}" placeholder="http://example.com/api">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="api_method" class="form-label">请求方法</label>
+                                        <select class="form-select form-select-sm" id="api_method" name="api_method">
+                                            <option value="GET" {% if config.api_method == 'GET' %}selected{% endif %}>GET</option>
+                                            <option value="POST" {% if config.api_method == 'POST' %}selected{% endif %}>POST</option>
+                                            <option value="PUT" {% if config.api_method == 'PUT' %}selected{% endif %}>PUT</option>
+                                            <option value="DELETE" {% if config.api_method == 'DELETE' %}selected{% endif %}>DELETE</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="api_auth_type" class="form-label">认证类型</label>
+                                        <select class="form-select form-select-sm" id="api_auth_type" name="api_auth_type">
+                                            <option value="" {% if not config.api_auth_type %}selected{% endif %}>无</option>
+                                            <option value="basic" {% if config.api_auth_type == 'basic' %}selected{% endif %}>Basic</option>
+                                            <option value="bearer" {% if config.api_auth_type == 'bearer' %}selected{% endif %}>Bearer Token</option>
+                                            <option value="api_key" {% if config.api_auth_type == 'api_key' %}selected{% endif %}>API Key</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="api_auth_value" class="form-label">认证凭据</label>
+                                        <input type="text" class="form-control form-control-sm" id="api_auth_value" name="api_auth_value" value="{{ config.api_auth_value or '' }}">
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        <label for="api_headers" class="form-label">请求头 (JSON)</label>
+                                        <textarea class="form-control form-control-sm" id="api_headers" name="api_headers" rows="2">{{ config.get_api_headers() | tojson(indent=2) if config.get_api_headers() else '{}' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="api_body" class="form-label">请求体 (JSON)</label>
+                                        <textarea class="form-control form-control-sm" id="api_body" name="api_body" rows="2">{{ config.api_body | default('{}', true) }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 监控指标配置 -->
+                        <div class="mb-3">
+                            <label for="monitor_metrics" class="form-label">监控指标 (JSON)</label>
+                            <textarea class="form-control" id="monitor_metrics" name="monitor_metrics" rows="3">{{ config.get_monitor_metrics() | tojson(indent=2) if config.get_monitor_metrics() else '{}' }}</textarea>
+                            <div class="form-text">指定需要采集的指标，格式为 JSON 对象。</div>
+                        </div>
+
+                        <!-- 其他选项 -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="inherit_alerts" name="inherit_alerts" {% if config.inherit_alerts %}checked{% endif %}>
+                                    <label class="form-check-label" for="inherit_alerts">继承全局告警规则</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enabled" name="enabled" {% if config.enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="enabled">启用监控</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('monitoring.device_config_list') }}" class="btn btn-secondary">取消</a>
+                            <button type="submit" class="btn btn-primary">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

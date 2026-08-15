@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机柜可视化 - {{ cabinet.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --cabinet-bg: #f8f9fa;
+            --cabinet-border: #dee2e6;
+            --rack-unit-height: 26px;
+            --router-color: #28a745;
+            --switch-color: #007bff;
+            --server-color: #6610f2;
+            --storage-color: #e83e8c;
+            --firewall-color: #fd7e14;
+            --other-color: #6c757d;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .cabinet-header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .header-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .header-subtitle {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .rack-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .rack-view {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .rack-visual {
+            display: flex;
+            border: 2px solid #495057;
+            border-radius: 6px;
+            overflow: hidden;
+            background: white;
+            min-height: 600px;
+        }
+        
+        .rack-u-numbers {
+            width: 50px;
+            background: #495057;
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .rack-u-number {
+            height: var(--rack-unit-height);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #6c757d;
+        }
+        
+        .rack-u-number:last-child {
+            border-bottom: none;
+        }
+        
+        .rack-content {
+            flex: 1;
+            position: relative;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent calc(var(--rack-unit-height) - 1px),
+                #e9ecef calc(var(--rack-unit-height) - 1px),
+                #e9ecef var(--rack-unit-height)
+            );
+        }
+        
+        .rack-unit {
+            position: absolute;
+            left: 1px;
+            right: 1px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            border-radius: 3px;
+        }
+        
+        .rack-unit.occupied {
+            border-color: rgba(0,0,0,0.1);
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .rack-unit.available {
+            background-color: white;
+            border: 1px dashed #dee2e6;
+        }
+        
+        .device-info {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 5px;
+            font-size: 0.8rem;
+            overflow: hidden;
+            text-align: center;
+        }
+        
+        .device-name {
+            font-weight: 600;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            margin-bottom: 2px;
+        }
+        
+        .rack-side-panel {
+            width: 300px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .device-list {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .device-item {
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .device-item:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        
+        .device-type-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: white;
+            margin-right: 8px;
+        }
+        
+        .device-type-router { background-color: var(--router-color); }
+        .device-type-switch { background-color: var(--switch-color); }
+        .device-type-server { background-color: var(--server-color); }
+        .device-type-storage { background-color: var(--storage-color); }
+        .device-type-firewall { background-color: var(--firewall-color); }
+        .device-type-other { background-color: var(--other-color); }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        @media (max-width: 992px) {
+            .rack-container {
+                flex-direction: column;
+            }
+            
+            .rack-side-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 机柜头部信息 -->
+        <div class="cabinet-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <h1 class="header-title">
+                        <i class="fas fa-server me-2"></i>{{ cabinet.name }}
+                    </h1>
+                    <div class="header-subtitle">
+                        <i class="fas fa-map-marker-alt me-1"></i> {{ cabinet.location }}
+                        <span class="mx-2">•</span>
+                        <i class="fas fa-ruler-vertical me-1"></i> {{ cabinet.height_u }}U 机柜
+                        <span class="mx-2">•</span>
+                        <i class="fas fa-plug me-1"></i> {{ cabinet.power_capacity or 'N/A' }}W 电源
+                    </div>
+                </div>
+                <div>
+                    <a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="btn btn-outline-primary">
+                        <i class="fas fa-arrow-left me-1"></i> 返回详情
+                    </a>
+                </div>
+            </div>
+            
+            <!-- 统计信息 -->
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ devices|length }}</div>
+                        <div class="stat-label">设备总数</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ used_u }}/{{ total_u }}</div>
+                        <div class="stat-label">已用U位</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ available_u }}</div>
+                        <div class="stat-label">可用U位</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ usage_percent }}%</div>
+                        <div class="stat-label">使用率</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 机柜视图容器 -->
+        <div class="rack-container">
+            <!-- 机柜可视化主视图 -->
+            <div class="rack-view">
+                <h3 class="mb-3"><i class="fas fa-th-large me-2"></i>机柜布局视图</h3>
+                
+                <div class="rack-visual">
+                    <!-- U位编号 -->
+                    <div class="rack-u-numbers">
+                        {% for u in range(cabinet.height_u, 0, -1) %}
+                        <div class="rack-u-number">{{ u }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- 机柜内容区域 -->
+                    <div class="rack-content" id="rack-content">
+                        {% for u in range(cabinet.height_u, 0, -1) %}
+                        {% set device_info = u_slots.get(u) %}
+                        {% if device_info and device_info.height_u %}
+                            {% if device_info.height_u > 1 %}
+                                {% if loop.index0 % device_info.height_u == 0 %}
+                                <div class="rack-unit occupied"
+                                     style="top: {{ (cabinet.height_u - u) * 26 }}px;
+                                            height: {{ device_info.height_u * 26 }}px;
+                                            background-color: {{ get_device_color(device_info.get('device_type', 'other')) }};"
+                                     data-device-id="{{ device_info.id }}">
+                                    <div class="device-info">
+                                        <div class="device-name">{{ device_info.name }}</div>
+                                        <div class="device-details">{{ device_info.height_u }}U</div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% else %}
+                            <div class="rack-unit occupied"
+                                 style="top: {{ (cabinet.height_u - u) * 26 }}px;
+                                        height: 26px;
+                                        background-color: {{ get_device_color(device_info.get('device_type', 'other')) }};"
+                                 data-device-id="{{ device_info.id }}">
+                                <div class="device-info">
+                                    <div class="device-name">{{ device_info.name }}</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                        <div class="rack-unit available"
+                             style="top: {{ (cabinet.height_u - u) * 26 }}px;
+                                    height: 26px;">
+                            <div class="device-info text-muted">
+                                U{{ u }}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- 图例 -->
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--router-color);"></div>
+                        <span class="legend-label">路由器</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--switch-color);"></div>
+                        <span class="legend-label">交换机</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--server-color);"></div>
+                        <span class="legend-label">服务器</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--storage-color);"></div>
+                        <span class="legend-label">存储设备</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--firewall-color);"></div>
+                        <span class="legend-label">防火墙</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧设备信息面板 -->
+            <div class="rack-side-panel">
+                <h3 class="mb-3"><i class="fas fa-list-ul me-2"></i>设备列表</h3>
+                
+                <div class="device-list" id="device-list">
+                    {% if devices %}
+                        {% for device in devices %}
+                        <div class="device-item" data-device-id="{{ device.id }}">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="device-type-badge device-type-{{ device.device_type or 'other' }}">
+                                        {{ device.device_type|upper if device.device_type else 'DEVICE' }}
+                                    </span>
+                                    <strong>{{ device.name }}</strong>
+                                </div>
+                                <div>
+                                    <span class="badge bg-{{ 'success' if device.status == 'online' else 'danger' if device.status == 'offline' else 'warning' }}">
+                                        {{ device.status or 'unknown' }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="text-muted small">
+                                <div><i class="fas fa-microchip me-1"></i> {{ device.model or 'N/A' }}</div>
+                                <div><i class="fas fa-network-wired me-1"></i> {{ device.ip_address or 'N/A' }}</div>
+                                <div><i class="fas fa-ruler-vertical me-1"></i> U{{ device.position_u }} - U{{ device.position_u + device.height_u - 1 }} ({{ device.height_u }}U)</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-inbox fa-2x mb-3"></i>
+                            <p>暂无设备</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化工具提示
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function(el) {
+            new bootstrap.Tooltip(el);
+        });
+
+        // 视图模式切换
+        document.querySelectorAll('.view-mode-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const viewMode = this.dataset.viewMode;
+                document.querySelectorAll('.view-mode-btn').forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.rack-card').forEach(card => {
+                    const detailed = card.querySelector('.detailed-mode');
+                    const compact = card.querySelector('.compact-mode');
+                    if (viewMode === 'detailed') {
+                        detailed.classList.remove('d-none');
+                        compact.classList.add('d-none');
+                    } else {
+                        detailed.classList.add('d-none');
+                        compact.classList.remove('d-none');
+                    }
+                });
+            });
+        });
+
+        // 全局存储当前选中的机柜U位数据（用于冲突检测高亮）
+        let currentUSlots = [];
+
+        // 显示toast提示
+        function showToast(type, message) {
+            const toastId = 'toast-' + Date.now();
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0 position-fixed" 
+                     style="top: 20px; right: 20px; z-index: 1060;" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', toastHtml);
+            const toastEl = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+
+        // 加载可用设备
+        async function loadAvailableDevices(cabinetId) {
+            if (!cabinetId) return;
+            try {
+                const resp = await fetch(`/api/devices/available?cabinet_id=${cabinetId}`);
+                const data = await resp.json();
+                const select = document.getElementById('assignDeviceSelect');
+                select.innerHTML = '<option value="">请选择设备</option>';
+                if (data.success && data.devices.length) {
+                    data.devices.forEach(dev => {
+                        const option = document.createElement('option');
+                        option.value = dev.id;
+                        option.textContent = `${dev.name} (${dev.management_ip})`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    const opt = document.createElement('option');
+                    opt.textContent = '没有可用的设备';
+                    opt.disabled = true;
+                    select.appendChild(opt);
+                }
+            } catch (err) {
+                showToast('danger', '加载设备列表失败');
+            }
+        }
+
+        // 加载机柜U位信息并渲染预览
+        async function loadCabinetUSlots(cabinetId) {
+            try {
+                const resp = await fetch(`/api/cabinets/${cabinetId}/rack-detail`);
+                const data = await resp.json();
+                if (data.success) {
+                    currentUSlots = data.u_slots;
+                    renderUSlotPreview(currentUSlots);
+                    document.getElementById('cabinetUPreview').classList.remove('d-none');
+                } else {
+                    showToast('danger', '加载U位信息失败');
+                }
+            } catch (err) {
+                showToast('danger', '请求U位信息出错');
+            }
+        }
+
+        // 渲染U位预览（小方块）
+        function renderUSlotPreview(uSlots) {
+            const container = document.getElementById('uSlotsPreview');
+            container.innerHTML = '';
+            uSlots.forEach(slot => {
+                const div = document.createElement('div');
+                div.className = `slot-preview ${slot.status}`;
+                div.setAttribute('data-position', slot.position);
+                div.style.cssText = `
+                    width: 40px; height: 30px; border: 1px solid #ccc;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 12px; cursor: pointer; margin: 2px;
+                    background-color: ${slot.status === 'occupied' ? '#28a745' : '#f8f9fa'};
+                    color: ${slot.status === 'occupied' ? 'white' : '#6c757d'};
+                `;
+                div.textContent = slot.position;
+                div.title = slot.device ? `设备: ${slot.device.device_name}` : `U位 ${slot.position}: 可用`;
+                
+                if (slot.status === 'available') {
+                    div.addEventListener('click', () => {
+                        document.getElementById('assignPositionU').value = slot.position;
+                        updateUSlotPreview();
+                    });
+                }
+                container.appendChild(div);
+            });
+            updateUSlotPreview();
+        }
+
+        // 更新U位高亮（根据起始U位+高度）
+        function updateUSlotPreview() {
+            const startU = parseInt(document.getElementById('assignPositionU').value) || 1;
+            const heightU = parseInt(document.getElementById('assignHeightU').value) || 1;
+            const slots = document.querySelectorAll('#uSlotsPreview .slot-preview');
+            slots.forEach(slot => {
+                const pos = parseInt(slot.getAttribute('data-position'));
+                const isInRange = (pos >= startU && pos < startU + heightU);
+                const slotData = currentUSlots.find(s => s.position === pos);
+                if (isInRange) {
+                    if (slotData && slotData.status === 'available') {
+                        slot.style.backgroundColor = '#007bff';
+                        slot.style.color = 'white';
+                    } else {
+                        slot.style.backgroundColor = '#dc3545';
+                        slot.style.color = 'white';
+                    }
+                } else {
+                    slot.style.backgroundColor = slotData.status === 'occupied' ? '#28a745' : '#f8f9fa';
+                    slot.style.color = slotData.status === 'occupied' ? 'white' : '#6c757d';
+                }
+            });
+        }
+
+        // 打开分配模态框并初始化
+        document.querySelectorAll('.assign-device-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const cabinetId = this.dataset.cabinetId;
+                const cabinetName = this.dataset.cabinetName;
+                document.getElementById('assignCabinetSelect').value = cabinetId;
+                await loadAvailableDevices(cabinetId);
+                await loadCabinetUSlots(cabinetId);
+                const modal = new bootstrap.Modal(document.getElementById('assignDeviceModal'));
+                modal.show();
+            });
+        });
+
+        // 监听机柜下拉变化
+        document.getElementById('assignCabinetSelect').addEventListener('change', async function() {
+            if (this.value) {
+                await loadAvailableDevices(this.value);
+                await loadCabinetUSlots(this.value);
+            } else {
+                document.getElementById('cabinetUPreview').classList.add('d-none');
+                document.getElementById('assignDeviceSelect').innerHTML = '<option value="">请选择设备</option>';
+            }
+        });
+
+        // 监听起始U位和高度变化，更新预览高亮
+        document.getElementById('assignPositionU').addEventListener('input', updateUSlotPreview);
+        document.getElementById('assignHeightU').addEventListener('input', updateUSlotPreview);
+
+        // 确认分配设备
+        document.getElementById('confirmAssignBtn').addEventListener('click', async function() {
+            const cabinetId = document.getElementById('assignCabinetSelect').value;
+            const deviceId = document.getElementById('assignDeviceSelect').value;
+            const positionU = document.getElementById('assignPositionU').value;
+            const heightU = document.getElementById('assignHeightU').value;
+
+            if (!cabinetId || !deviceId || !positionU || !heightU) {
+                showToast('warning', '请完整填写分配信息');
+                return;
+            }
+
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分配中...';
+
+            try {
+                const resp = await fetch(`/api/cabinets/${cabinetId}/assign-device`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        position_u: parseInt(positionU),
+                        height_u: parseInt(heightU)
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast('success', data.message);
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('danger', data.message);
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            } catch (err) {
+                showToast('danger', '网络错误，请重试');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        });
+    });
+    </script>
+
+</body>
+</html>

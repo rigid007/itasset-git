@@ -1,0 +1,1296 @@
+{% extends 'base.html' %}
+
+{% block title %}设备列表 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作栏 -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h1 class="h2">设备列表</h1>
+            <p class="text-muted mb-0">
+                共 {{ total_devices }} 台设备，
+                在线 {{ online_devices }} 台，
+                离线 {{ offline_devices }} 台
+            </p>
+        </div>
+        <div class="col-md-6 text-end">
+            <!-- 快速操作按钮组 -->
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-bolt"></i> 快速操作
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" id="quickPingAll"><i class="fas fa-wifi"></i> Ping检测全部设备</a></li>
+                    <li><a class="dropdown-item" href="#" id="quickSnmpAll"><i class="fas fa-sitemap"></i> SNMP检测全部在线设备</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" id="exportSelected"><i class="fas fa-download"></i> 导出选中设备</a></li>
+                    <li><a class="dropdown-item" href="#" id="deleteSelected"><i class="fas fa-trash"></i> 删除选中设备</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" id="cleanupInvalidBtn"><i class="fas fa-broom"></i> 🧹 清理无效设备</a></li>
+                </ul>
+            </div>
+            
+            <!-- 批量操作按钮 -->
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-outline-success btn-sm" id="bulkPingBtn">
+                    <i class="fas fa-wifi"></i> 批量Ping检测
+                </button>
+            </div>
+            
+            <!-- 主要操作按钮 -->
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#importDeviceModal">
+                    <i class="fas fa-file-import"></i> 导入设备
+                </button>
+                <a href="{{ url_for('device.device_export') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-file-export"></i> 导出设备
+                </a>
+                <a href="{{ url_for('device.device_add') }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> 添加设备
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-2">
+                    <label class="form-label">设备状态</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">全部状态</option>
+                        <option value="online" {% if request.args.get('status') == 'online' %}selected{% endif %}>在线</option>
+                        <option value="offline" {% if request.args.get('status') == 'offline' %}selected{% endif %}>离线</option>
+                        <option value="fault" {% if request.args.get('status') == 'fault' %}selected{% endif %}>故障</option>
+                        <option value="unknown" {% if request.args.get('status') == 'unknown' %}selected{% endif %}>未知</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">设备类型</label>
+                    <select name="device_type" class="form-select" onchange="this.form.submit()">
+                        <option value="">全部类型</option>
+                        <option value="router" {% if request.args.get('device_type') == 'router' %}selected{% endif %}>路由器</option>
+                        <option value="switch" {% if request.args.get('device_type') == 'switch' %}selected{% endif %}>交换机</option>
+                        <option value="firewall" {% if request.args.get('device_type') == 'firewall' %}selected{% endif %}>防火墙</option>
+                        <option value="server" {% if request.args.get('device_type') == 'server' %}selected{% endif %}>服务器</option>
+                        <option value="pc" {% if request.args.get('device_type') == 'pc' %}selected{% endif %}>计算机</option>
+                        <option value="ap" {% if request.args.get('device_type') == 'ap' %}selected{% endif %}>无线AP</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">所属位置</label>
+                    <select name="location_id" class="form-select" id="locationSelect">
+                        <option value="">全部位置</option>
+                        {% for location in locations %}
+                        <option value="{{ location.id }}" {% if request.args.get('location_id')|string == location.id|string %}selected{% endif %}>
+                            {{ location.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">所属机柜</label>
+                    <select name="cabinet_id" class="form-select" id="cabinetSelect">
+                        <option value="">全部机柜</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">搜索</label>
+                    <div class="input-group">
+                        <input type="text" name="search" class="form-control" placeholder="设备名/IP/序列号/厂商/型号" value="{{ request.args.get('search', '') }}">
+                        <button class="btn btn-outline-secondary" type="submit">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div class="form-text text-muted small">
+                        <i class="fas fa-info-circle"></i> 支持搜索：设备名称、管理IP、序列号、厂商、型号
+                    </div>
+                </div>
+                <div class="col-md-1 align-self-end">
+                    <button type="button" class="btn btn-outline-secondary w-100" onclick="window.location.href='{{ url_for('device.device_list') }}'">
+                        重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3"><i class="fas fa-server fa-2x"></i></div>
+                        <div>
+                            <h6 class="mb-0">设备总数</h6>
+                            <h3 class="mb-0" id="totalDeviceCount">{{ total_devices }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3"><i class="fas fa-wifi fa-2x"></i></div>
+                        <div>
+                            <h6 class="mb-0">在线设备</h6>
+                            <h3 class="mb-0" id="onlineDeviceCount">{{ online_devices }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3"><i class="fas fa-plug fa-2x"></i></div>
+                        <div>
+                            <h6 class="mb-0">离线设备</h6>
+                            <h3 class="mb-0" id="offlineDeviceCount">{{ offline_devices }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3"><i class="fas fa-clock fa-2x"></i></div>
+                        <div>
+                            <h6 class="mb-0">最后检测</h6>
+                            <span id="globalLastCheckTime">
+                                {{ last_check_time if last_check_time else '从未检测' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设备列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0">设备列表</h5>
+                <small class="text-muted" id="selectedCountText">已选中 <span id="selectedCount">0</span> 个设备</small>
+            </div>
+            <div class="d-flex align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-success me-2" id="checkAllBtn">
+                    <i class="fas fa-check-square"></i> 全选
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="clearSelectionBtn">
+                    <i class="fas fa-times"></i> 清空
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th width="40"><input type="checkbox" id="selectAll"></th>
+                            <th width="60">ID</th>
+                            <th>设备名称</th>
+                            <th>管理IP</th>
+                            <th>设备类型</th>
+                            <th>设备型号</th>
+                            <th>所属机柜</th>
+                            <th>状态</th>
+                            <th>最后检测</th>
+                            <th width="220">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in devices %}
+                        <tr class="device-row" data-device-id="{{ device.id }}" data-device-status="{{ device.status }}">
+                            <td><input type="checkbox" name="device_ids" value="{{ device.id }}" class="device-checkbox"></td>
+                            <td>{{ device.id }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="device-icon me-2">
+                                        {% if device.device_type == 'router' %}
+                                        <i class="fas fa-router text-primary"></i>
+                                        {% elif device.device_type == 'switch' %}
+                                        <i class="fas fa-network-wired text-info"></i>
+                                        {% elif device.device_type == 'firewall' %}
+                                        <i class="fas fa-shield-alt text-warning"></i>
+                                        {% elif device.device_type == 'server' %}
+                                        <i class="fas fa-server text-secondary"></i>
+                                        {% elif device.device_type == 'pc' %}
+                                        <i class="fas fa-desktop text-success"></i>
+                                        {% elif device.device_type == 'ap' %}
+                                        <i class="fas fa-wifi text-danger"></i>
+                                        {% else %}
+                                        <i class="fas fa-cube text-muted"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <strong>{{ device.name }}</strong>
+                                        {% if device.serial_number %}
+                                        <br><small class="text-muted">序列号: {{ device.serial_number }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge bg-light text-dark device-ip">{{ device.management_ip or '-' }}</span></td>
+                            <td><span class="badge bg-light text-dark">{{ device.device_type or '未知' }}</span></td>
+                            <td>{{ device.model or '-' }}</td>
+                            <td>
+                                {% if device.cabinet %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-cube me-1 text-muted"></i>
+                                    <span>{{ device.cabinet.name }}</span>
+                                    {% if device.cabinet.location %}
+                                    <small class="text-muted ms-1">({{ device.cabinet.location.name }})</small>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-{{ get_device_status_color(device.status) }} me-1">{{ device.status }}</span>
+                                    {% if device.status == 'online' %}
+                                    <span class="badge bg-light text-dark">Ping: {{ device.ping_time }}ms</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+
+                            <td>{{ device.last_checked_display }}</td>
+                                    
+                                <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-primary ping-btn" data-device-id="{{ device.id }}" data-device-name="{{ device.name }}" title="Ping检测">
+                                        <i class="fas fa-wifi"></i> Ping
+                                    </button>
+                                    <button class="btn btn-outline-info snmp-btn" data-device-id="{{ device.id }}" data-device-ip="{{ device.management_ip }}" title="SNMP检测">
+                                        <i class="fas fa-sitemap"></i> SNMP
+                                    </button>
+                                    <a href="{{ url_for('device.device_detail', id=device.id) }}" class="btn btn-outline-secondary" title="查看详情">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('device.device_edit', id=device.id) }}" class="btn btn-outline-warning" title="编辑">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn btn-outline-danger delete-btn" data-device-id="{{ device.id }}" data-device-name="{{ device.name }}" title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <button class="btn btn-outline-dark decommission-btn" data-device-id="{{ device.id }}" data-device-name="{{ device.name }}" title="下架">
+                                        <i class="fas fa-box-open"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-4">
+                                <div class="py-5">
+                                    <i class="fas fa-server fa-3x mb-3 text-muted"></i>
+                                    <h5>暂无设备数据</h5>
+                                    <p class="text-muted">点击"添加设备"按钮来添加您的第一台设备</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <div class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                    <label for="per_page_select" class="form-label mb-0 me-2">每页显示：</label>
+                    <select id="per_page_select" class="form-select form-select-sm d-inline-block w-auto">
+                        <option value="20" {% if request.args.get('per_page', 20)|int == 20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if request.args.get('per_page', 20)|int == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if request.args.get('per_page', 20)|int == 100 %}selected{% endif %}>100</option>
+                    </select>
+                </div>
+                {% if pagination.pages > 1 %}
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center mb-0">
+                        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                            {% set args = request.args.to_dict(flat=True) %}
+                            {% set _ = args.update({'page': pagination.prev_num}) %}
+                            <a class="page-link" href="{{ url_for('device.device_list', **args) }}">&laquo;</a>
+                        </li>
+                        {% for page_num in pagination.iter_pages() %}
+                            {% if page_num %}
+                            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                {% set args = request.args.to_dict(flat=True) %}
+                                {% set _ = args.update({'page': page_num}) %}
+                                <a class="page-link" href="{{ url_for('device.device_list', **args) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                            {% set args = request.args.to_dict(flat=True) %}
+                            {% set _ = args.update({'page': pagination.next_num}) %}
+                            <a class="page-link" href="{{ url_for('device.device_list', **args) }}">&raquo;</a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== 模态框 ==================== -->
+
+<!-- 导入设备 -->
+<div class="modal fade" id="importDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-file-import me-2"></i>导入设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="importDeviceForm" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">选择文件 <span class="text-danger">*</span></label>
+                        <input class="form-control" type="file" id="importFile" name="file" accept=".csv,.xlsx,.xls" required>
+                        <div class="form-text">支持CSV、Excel格式，文件大小不超过10MB。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">下载模板</label>
+                        <div>
+                            <a href="{{ url_for('device.download_device_template') }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-download"></i> 下载导入模板
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="submitImportBtn">
+                    <i class="fas fa-file-import"></i> 开始导入
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 进度显示弹窗（通用） -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">
+                    <i class="fas fa-spinner fa-spin me-2" id="progressIcon"></i>
+                    任务进度
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 进度条 -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span id="progressStatus">准备开始...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress" style="height: 30px;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                             role="progressbar" style="width: 0%;">0%</div>
+                    </div>
+                </div>
+                <!-- 统计 -->
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white"><div class="card-body py-2 text-center">
+                            <h6 class="mb-0">总数</h6><h4 id="totalIpCount">0</h4>
+                        </div></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white"><div class="card-body py-2 text-center">
+                            <h6 class="mb-0">✅ 已完成</h6><h4 id="addedCount">0</h4>
+                        </div></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white"><div class="card-body py-2 text-center">
+                            <h6 class="mb-0">⏭ 已跳过</h6><h4 id="skippedCount">0</h4>
+                        </div></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-danger text-white"><div class="card-body py-2 text-center">
+                            <h6 class="mb-0">❌ 失败</h6><h4 id="failedCount">0</h4>
+                        </div></div>
+                    </div>
+                </div>
+                <!-- 当前步骤 -->
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <span id="currentStep">等待开始...</span>
+                </div>
+                <!-- 结果 -->
+                <div id="resultContainer" style="display:none;">
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-striped">
+                            <thead><tr><th>IP</th><th>设备名称</th><th>状态</th><th>SNMP</th><th>结果</th></tr></thead>
+                            <tbody id="resultTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="refreshProgressBtn">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 结果展示 -->
+<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">扫描结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-4">
+                    <div class="col-md-3"><div class="card bg-primary text-white"><div class="card-body py-2 text-center">
+                        <h6 class="mb-0">总IP</h6><h3 id="totalIps">0</h3>
+                    </div></div></div>
+                    <div class="col-md-3"><div class="card bg-success text-white"><div class="card-body py-2 text-center">
+                        <h6 class="mb-0">在线</h6><h3 id="onlineDevices">0</h3>
+                    </div></div></div>
+                    <div class="col-md-3"><div class="card bg-danger text-white"><div class="card-body py-2 text-center">
+                        <h6 class="mb-0">离线</h6><h3 id="offlineDevices">0</h3>
+                    </div></div></div>
+                    <div class="col-md-3"><div class="card bg-warning text-white"><div class="card-body py-2 text-center">
+                        <h6 class="mb-0">已添加</h6><h3 id="addedDevices">0</h3>
+                    </div></div></div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead><tr><th>IP</th><th>设备名称</th><th>状态</th><th>SNMP</th><th>结果</th></tr></thead>
+                        <tbody id="resultTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 设备详情 -->
+<div class="modal fade" id="deviceDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">设备详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="deviceDetailContent"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 加载中 -->
+<div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;"></div>
+                <h5 id="loadingText">处理中，请稍候...</h5>
+                <div class="progress mt-3" style="height:10px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="loadingProgress" style="width:0%"></div>
+                </div>
+                <div class="mt-2"><small class="text-muted" id="loadingStatus">正在初始化...</small></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 确认删除 -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除设备 <strong id="deleteDeviceName"></strong> 吗？</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>此操作不可恢复！</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 确认清理无效设备 -->
+<div class="modal fade" id="confirmCleanupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="fas fa-broom me-2"></i>清理无效设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>注意：</strong> 此操作将删除所有<strong>没有管理IP且没有MAC地址</strong>的设备，且<strong>不可恢复</strong>！
+                </div>
+                
+                <div id="previewContainer">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>待清理设备列表：</span>
+                        <span class="badge bg-danger" id="previewCount">0</span>
+                    </div>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-striped table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>设备名称</th>
+                                    <th>设备类型</th>
+                                    <th>管理IP</th>
+                                    <th>MAC地址</th>
+                                    <th>创建时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-3">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted small mt-2">
+                        <i class="fas fa-info-circle me-1"></i>
+                        这些设备因缺少IP和MAC地址而被判定为无效设备
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmCleanupBtn">
+                    <i class="fas fa-broom"></i> 确认清理
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof $ === 'undefined') { console.error('jQuery未加载'); return; }
+
+    // ==================== 辅助函数 ====================
+    function getCookie(name) {
+        let value = null;
+        if (document.cookie && document.cookie !== '') {
+            for (let c of document.cookie.split(';')) {
+                c = c.trim();
+                if (c.substring(0, name.length + 1) === (name + '=')) {
+                    value = decodeURIComponent(c.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return value;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            if (m === '"') return '&quot;';
+            return m;
+        });
+    }
+
+    function showToast(type, message) {
+        const toastId = 'toast-' + Date.now();
+        $('body').append(`
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0 position-fixed" style="top:20px;right:20px;z-index:1060;min-width:300px;">
+                <div class="d-flex"><div class="toast-body">${escapeHtml(message)}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+            </div>
+        `);
+        const el = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(el, { delay: 5000 });
+        toast.show();
+        el.addEventListener('hidden.bs.toast', () => $(el).remove());
+    }
+
+    function showLoading(text, progress) {
+        $('#loadingText').text(text);
+        $('#loadingProgress').css('width', progress + '%');
+        $('#loadingModal').modal({ backdrop: 'static', keyboard: false });
+    }
+    function hideLoading() {
+        if ($('#loadingModal').hasClass('show')) $('#loadingModal').modal('hide');
+        setTimeout(() => { $('.modal-backdrop').remove(); $('body').removeClass('modal-open'); }, 300);
+    }
+
+    // ==================== 机柜级联 ====================
+    const allCabinets = {{ cabinets | tojson }};
+    const currentLocationId = "{{ request.args.get('location_id', '') }}" || "";
+    const currentCabinetId = "{{ request.args.get('cabinet_id', '') }}" || "";
+
+    function updateCabinetSelect(locationId) {
+        const $cabinetSelect = $('#cabinetSelect');
+        let filtered = allCabinets;
+        if (locationId && locationId !== '') {
+            filtered = allCabinets.filter(c => c.location_id && c.location_id.toString() === locationId);
+        }
+        let options = '<option value="">全部机柜</option>';
+        filtered.forEach(cab => {
+            options += `<option value="${cab.id}">${escapeHtml(cab.name)}</option>`;
+        });
+        $cabinetSelect.html(options);
+        if (currentCabinetId && filtered.some(c => c.id.toString() === currentCabinetId)) {
+            $cabinetSelect.val(currentCabinetId);
+        } else {
+            $cabinetSelect.val('');
+        }
+    }
+    $('#locationSelect').on('change', function() { updateCabinetSelect($(this).val()); });
+    updateCabinetSelect(currentLocationId);
+
+    // ==================== 选择与批量操作 ====================
+    let selectedDevices = new Set();
+    let currentDeleteDeviceId = null;
+    let currentDeleteDeviceName = null;
+
+    function updateSelectedCount() {
+        const count = selectedDevices.size;
+        $('#selectedCount').text(count);
+        $('#selectedCountText').toggle(count > 0);
+    }
+
+    $('#selectAll').click(function() {
+        const checked = $(this).prop('checked');
+        $('.device-checkbox').prop('checked', checked);
+        selectedDevices.clear();
+        if (checked) $('.device-checkbox').each(function() { selectedDevices.add($(this).val()); });
+        updateSelectedCount();
+    });
+
+    $('.device-checkbox').change(function() {
+        const id = $(this).val();
+        if ($(this).prop('checked')) selectedDevices.add(id);
+        else selectedDevices.delete(id);
+        updateSelectedCount();
+    });
+
+    $('#checkAllBtn').click(function() {
+        $('.device-checkbox').prop('checked', true);
+        selectedDevices.clear();
+        $('.device-checkbox').each(function() { selectedDevices.add($(this).val()); });
+        updateSelectedCount();
+    });
+
+    $('#clearSelectionBtn').click(function() {
+        $('.device-checkbox').prop('checked', false);
+        selectedDevices.clear();
+        updateSelectedCount();
+    });
+
+    // ==================== Ping检测 ====================
+    $('.ping-btn').click(function() {
+        const deviceId = $(this).data('device-id');
+        const deviceName = $(this).data('device-name');
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> 检测中');
+        $.ajax({
+            url: `/devices/${deviceId}/ping`,
+            type: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) { showToast('success', `设备 ${deviceName} ${res.message}`); 
+                    setTimeout(() => window.location.reload(), 1500); }
+                else showToast('error', `Ping检测失败：${res.message}`);
+            },
+            error: function(xhr) { showToast('error', `Ping检测失败：${xhr.responseJSON?.message || '请求失败'}`); },
+            complete: function() { $btn.prop('disabled', false).html('<i class="fas fa-wifi"></i> Ping'); }
+        });
+    });
+
+    // ==================== SNMP检测 ====================
+    $('.snmp-btn').click(function() {
+        const deviceId = $(this).data('device-id');
+        const deviceIp = $(this).data('device-ip');
+        const $btn = $(this);
+        if (!deviceIp) { showToast('warning', '该设备未配置管理IP'); return; }
+        
+        const modalHtml = `
+            <div class="modal fade" id="snmpParamsModal" tabindex="-1">
+                <div class="modal-dialog modal-sm">
+                    <div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title">SNMP检测参数</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                        <div class="modal-body">
+                            <div class="mb-3"><label class="form-label">SNMP社区名</label>
+                            <input type="text" class="form-control" id="snmpCommunityInput" value="{{ snmp_community|default('public') }}"></div>
+                            <div class="mb-3"><label class="form-label">SNMP版本</label>
+                            <select class="form-select" id="snmpVersionSelect">
+                                <option value="2c" selected>SNMPv2c</option><option value="1">SNMPv1</option>
+                            </select></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="confirmSnmpCheck">开始检测</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#snmpParamsModal').remove();
+        $('body').append(modalHtml);
+        const snmpModal = new bootstrap.Modal(document.getElementById('snmpParamsModal'));
+        snmpModal.show();
+        $('#confirmSnmpCheck').off('click').on('click', function() {
+            const community = $('#snmpCommunityInput').val() || 'public';
+            const version = $('#snmpVersionSelect').val();
+            snmpModal.hide();
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> 检测中');
+            $.ajax({
+                url: `/devices/${deviceId}/snmp_check`,
+                type: 'POST',
+                data: { snmp_community: community, snmp_version: version },
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                success: function(res) {
+                    if (res.success && res.sysinfo) {
+                        const sysinfo = res.sysinfo;
+                        $('#deviceDetailModalLabel').text('SNMP检测结果');
+                        $('#deviceDetailContent').html(`
+                            <div class="alert alert-success">
+                                <h6>SNMP检测成功</h6>
+                                <p><strong>设备名称：</strong>${escapeHtml(sysinfo.sys_name)}</p>
+                                <p><strong>设备描述：</strong>${escapeHtml(sysinfo.sys_descr)}</p>
+                            </div>
+                            <div class="text-center">
+                                <button class="btn btn-success" onclick="updateDeviceFromSnmp(${deviceId}, '${escapeHtml(sysinfo.sys_name)}', '${escapeHtml(sysinfo.sys_descr)}')">
+                                    更新设备信息
+                                </button>
+                            </div>
+                        `);
+                        new bootstrap.Modal(document.getElementById('deviceDetailModal')).show();
+                    }
+                    setTimeout(() => window.location.reload(), 2000);
+                },
+                error: function(xhr) { showToast('error', `SNMP检测失败：${xhr.responseJSON?.message || '请求失败'}`); },
+                complete: function() { $btn.prop('disabled', false).html('<i class="fas fa-sitemap"></i> SNMP'); }
+            });
+        });
+    });
+
+    window.updateDeviceFromSnmp = function(deviceId, name, desc) {
+        $.ajax({
+            url: `/devices/${deviceId}/update_from_snmp`,
+            type: 'POST',
+            data: { name: name, description: desc },
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    showToast('success', '设备信息更新成功');
+                    bootstrap.Modal.getInstance(document.getElementById('deviceDetailModal')).hide();
+                    setTimeout(() => window.location.reload(), 1500);
+                } else showToast('error', '更新失败');
+            }
+        });
+    };
+
+    // ==================== 批量Ping ====================
+    $('#bulkPingBtn').click(function() {
+        const ids = Array.from(selectedDevices);
+        if (ids.length === 0) { showToast('warning', '请至少选择一个设备'); return; }
+        if (!confirm(`确认对选中的 ${ids.length} 个设备执行批量Ping检测？`)) return;
+        showLoading('批量Ping检测中...', 0);
+        $.ajax({
+            url: '/devices/batch_ping',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ device_ids: ids }),
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    let html = '<div class="alert alert-success">批量Ping完成</div><div class="table-responsive"><table class="table table-sm"><thead><tr><th>设备名称</th><th>IP</th><th>状态</th><th>响应时间</th></tr></thead><tbody>';
+                    res.results.forEach(r => {
+                        html += `<tr><td>${escapeHtml(r.device_name)}</td><td>${escapeHtml(r.ip)}</td><td><span class="badge bg-${r.online?'success':'danger'}">${r.online?'在线':'离线'}</span></td><td>${r.response_time}ms</td></tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    $('#deviceDetailModalLabel').text('批量Ping检测结果');
+                    $('#deviceDetailContent').html(html);
+                    new bootstrap.Modal(document.getElementById('deviceDetailModal')).show();
+                    setTimeout(() => window.location.reload(), 2000);
+                } else showToast('error', res.message);
+                hideLoading();
+            },
+            error: function() { hideLoading(); showToast('error', '请求失败'); }
+        });
+    });
+
+    // ==================== 每页显示数量 ====================
+    $('#per_page_select').change(function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('per_page', $(this).val());
+        url.searchParams.set('page', 1);
+        window.location.href = url.toString();
+    });
+
+    // ==================== 导入设备 ====================
+    $('#submitImportBtn').click(function() {
+        const file = $('#importFile')[0].files[0];
+        if (!file) { showToast('warning', '请选择文件'); return; }
+        const formData = new FormData($('#importDeviceForm')[0]);
+        showLoading('正在导入设备...', 0);
+        $.ajax({
+            url: '{{ url_for("device.device_import") }}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(res) {
+                hideLoading();
+                if (res.success) {
+                    showToast('success', res.message);
+                    bootstrap.Modal.getInstance(document.getElementById('importDeviceModal')).hide();
+                    setTimeout(() => window.location.reload(), 1500);
+                } else showToast('error', res.message || '导入失败');
+            },
+            error: function() { hideLoading(); showToast('error', '请求失败'); }
+        });
+    });
+
+    // ==================== 进度显示通用函数 ====================
+    let progressPollingInterval = null;
+    let currentTaskId = null;
+    let progressModalInstance = null;
+
+    function showProgressModal(taskId, title, type) {
+        currentTaskId = taskId;
+        $('#progressModalLabel').html(title || '<i class="fas fa-spinner fa-spin me-2"></i>任务进度');
+        $('#progressBar').css('width', '0%').text('0%');
+        $('#progressPercent').text('0%');
+        $('#progressStatus').text('⏳ 等待开始');
+        $('#currentStep').text('等待开始...');
+        $('#totalIpCount').text('0');
+        $('#addedCount').text('0');
+        $('#skippedCount').text('0');
+        $('#failedCount').text('0');
+        $('#resultContainer').hide();
+        $('#resultTableBody').empty();
+        $('#refreshProgressBtn').show();
+        $('#progressIcon').removeClass('fa-check-circle fa-times-circle').addClass('fa-spinner fa-spin');
+        $('#progressBar').removeClass('bg-success bg-danger').addClass('bg-primary');
+
+        if (!progressModalInstance) {
+            progressModalInstance = new bootstrap.Modal(document.getElementById('progressModal'), { backdrop: 'static' });
+        }
+        progressModalInstance.show();
+
+        if (progressPollingInterval) clearInterval(progressPollingInterval);
+        fetchProgress(taskId);
+        progressPollingInterval = setInterval(function() { fetchProgress(taskId); }, 1000);
+    }
+
+    function fetchProgress(taskId) {
+        $.ajax({
+            url: `/devices/progress/${taskId}`,
+            type: 'GET',
+            success: function(res) {
+                if (res.success && res.progress) {
+                    updateProgressUI(res.progress);
+                    if (res.progress.status === 'completed' || res.progress.status === 'failed') {
+                        if (progressPollingInterval) {
+                            clearInterval(progressPollingInterval);
+                            progressPollingInterval = null;
+                        }
+                        showCompleteResults(res.progress);
+                    }
+                }
+            },
+            error: function() {}
+        });
+    }
+
+    function updateProgressUI(progress) {
+        const percent = progress.progress || 0;
+        const status = progress.status || 'pending';
+        const statusText = { 'pending': '⏳ 等待开始', 'running': '🔄 执行中', 'completed': '✅ 已完成', 'failed': '❌ 失败' };
+        
+        $('#progressBar').css('width', percent + '%').text(percent + '%');
+        $('#progressPercent').text(percent + '%');
+        $('#progressStatus').text(statusText[status] || status);
+        if (progress.current_step) $('#currentStep').text(progress.current_step);
+        $('#totalIpCount').text(progress.total || 0);
+        $('#addedCount').text(progress.added || 0);
+        $('#skippedCount').text(progress.skipped || 0);
+        $('#failedCount').text(progress.failed || 0);
+
+        const bar = $('#progressBar');
+        if (status === 'completed') {
+            bar.removeClass('bg-primary').addClass('bg-success');
+            $('#progressIcon').removeClass('fa-spinner fa-spin').addClass('fa-check-circle');
+            $('#refreshProgressBtn').hide();
+        } else if (status === 'failed') {
+            bar.removeClass('bg-primary').addClass('bg-danger');
+            $('#progressIcon').removeClass('fa-spinner fa-spin').addClass('fa-times-circle');
+            $('#refreshProgressBtn').hide();
+        } else {
+            bar.removeClass('bg-success bg-danger').addClass('bg-primary');
+            $('#progressIcon').removeClass('fa-check-circle fa-times-circle').addClass('fa-spinner fa-spin');
+            $('#refreshProgressBtn').show();
+        }
+    }
+
+    function showCompleteResults(progress) {
+        if (progress.results && progress.results.length > 0) {
+            $('#resultContainer').show();
+            const tbody = $('#resultTableBody');
+            tbody.empty();
+
+            progress.results.forEach(function(item) {
+                const statusMap = {
+                    'online': '<span class="badge bg-success">在线</span>',
+                    'offline': '<span class="badge bg-danger">离线</span>',
+                    'online_no_snmp': '<span class="badge bg-warning">在线(无SNMP)</span>',
+                    'error': '<span class="badge bg-danger">错误</span>',
+                    'added': '<span class="badge bg-success">✅ 已添加</span>',
+                    'skipped': '<span class="badge bg-warning">⏭ 已跳过</span>',
+                    'failed': '<span class="badge bg-danger">❌ 失败</span>'
+                };
+                const statusHtml = statusMap[item.status] || statusMap[item.added ? 'added' : (item.skipped ? 'skipped' : '')] || item.status;
+                const snmpBadge = item.snmp_status === '支持' ? 
+                    '<span class="badge bg-success">支持</span>' : 
+                    '<span class="badge bg-secondary">不支持</span>';
+                const resultBadge = item.added ? 
+                    '<span class="badge bg-primary">已添加</span>' : 
+                    (item.skipped ? '<span class="badge bg-warning">已存在</span>' : '-');
+
+                tbody.append(`
+                    <tr>
+                        <td><code>${escapeHtml(item.ip)}</code></td>
+                        <td>${escapeHtml(item.device_name || '-')}</td>
+                        <td>${statusHtml}</td>
+                        <td>${snmpBadge}</td>
+                        <td>${resultBadge}</td>
+                    </tr>
+                `);
+            });
+
+            let added = progress.results.filter(i => i.added).length;
+            let skipped = progress.results.filter(i => i.skipped).length;
+            let online = progress.results.filter(i => i.status === 'online').length;
+            let offline = progress.results.filter(i => i.status === 'offline').length;
+            let snmpOk = progress.results.filter(i => i.snmp_status === '支持').length;
+
+            $('#currentStep').html(`
+                <strong>📊 任务完成！</strong><br>
+                总数: <strong>${progress.total || 0}</strong> | 
+                在线: <span class="text-success fw-bold">${online}</span> | 
+                离线: <span class="text-danger fw-bold">${offline}</span> |
+                SNMP设备: <span class="text-info fw-bold">${snmpOk}</span> |
+                已添加: <span class="text-primary fw-bold">${added}</span> |
+                已跳过: <span class="text-warning fw-bold">${skipped}</span>
+            `);
+        } else {
+            $('#currentStep').html(`
+                <strong>📊 任务完成！</strong><br>
+                总数: <strong>${progress.total || 0}</strong> | 
+                已添加: <span class="text-primary fw-bold">${progress.added || 0}</span> |
+                已跳过: <span class="text-warning fw-bold">${progress.skipped || 0}</span>
+            `);
+        }
+    }
+
+    $('#refreshProgressBtn').click(function() {
+        if (currentTaskId) { fetchProgress(currentTaskId); showToast('info', '正在刷新进度...'); }
+    });
+
+    $('#progressModal').on('hidden.bs.modal', function() {
+        if (progressPollingInterval) { clearInterval(progressPollingInterval); progressPollingInterval = null; }
+    });
+
+    // ==================== 删除单个 ====================
+    $('.delete-btn').click(function() {
+        currentDeleteDeviceId = $(this).data('device-id');
+        currentDeleteDeviceName = $(this).data('device-name');
+        $('#deleteDeviceName').text(currentDeleteDeviceName);
+        new bootstrap.Modal(document.getElementById('confirmDeleteModal')).show();
+    });
+
+    $('#confirmDeleteBtn').click(function() {
+        if (!currentDeleteDeviceId) return;
+        $.ajax({
+            url: `/devices/${currentDeleteDeviceId}/delete`,
+            type: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    showToast('success', `设备 ${currentDeleteDeviceName} 删除成功`);
+                    setTimeout(() => window.location.reload(), 1500);
+                } else showToast('error', res.message);
+                bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal')).hide();
+            },
+            error: function() { showToast('error', '请求失败'); }
+        });
+    });
+
+    // ==================== 下架设备 ====================
+    $('.decommission-btn').click(function() {
+        var deviceId = $(this).data('device-id');
+        var deviceName = $(this).data('device-name');
+        if (!confirm('确定要下架设备 "' + deviceName + '" 吗？\n\n下架后设备将从设备列表中移除，可在"已下架设备"中查看和管理。')) return;
+        $.ajax({
+            url: '/devices/' + deviceId + '/decommission',
+            type: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) {
+                    showToast('success', res.message);
+                    setTimeout(function() { window.location.reload(); }, 1000);
+                } else {
+                    showToast('error', res.message);
+                }
+            },
+            error: function() { showToast('error', '下架失败，请重试'); }
+        });
+    });
+
+    // ==================== 批量删除 ====================
+    $('#deleteSelected').click(function() {
+        const ids = Array.from(selectedDevices);
+        if (ids.length === 0) { showToast('warning', '请先选择要删除的设备'); return; }
+        if (!confirm(`确定要删除选中的 ${ids.length} 个设备吗？此操作不可恢复！`)) return;
+        showLoading('批量删除中...', 0);
+        $.ajax({
+            url: '/devices/batch_delete',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ device_ids: ids }),
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                hideLoading();
+                if (res.success) {
+                    showToast('success', res.message);
+                    setTimeout(() => window.location.reload(), 1500);
+                } else showToast('error', res.message);
+            },
+            error: function() { hideLoading(); showToast('error', '删除失败'); }
+        });
+    });
+
+    // ==================== 导出选中 ====================
+    $('#exportSelected').click(function() {
+        const ids = Array.from(selectedDevices);
+        if (ids.length === 0) { showToast('warning', '请先选择要导出的设备'); return; }
+        const params = new URLSearchParams();
+        ids.forEach(id => params.append('ids', id));
+        window.open(`/devices/export?${params.toString()}`, '_blank');
+    });
+
+    // ==================== 快速操作 ====================
+    $('#quickPingAll').click(function() {
+        if (!confirm('确定要对所有设备执行Ping检测吗？')) return;
+        showLoading('正在Ping检测所有设备...', 0);
+        $.ajax({
+            url: '/devices/ping_all',
+            type: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) showToast('success', res.message);
+                else showToast('error', res.message);
+                hideLoading();
+                setTimeout(() => window.location.reload(), 1500);
+            },
+            error: function() { hideLoading(); showToast('error', '请求失败'); }
+        });
+    });
+
+    $('#quickSnmpAll').click(function() {
+        if (!confirm('确定要对所有在线设备执行SNMP检测吗？')) return;
+        showLoading('正在SNMP检测所有在线设备...', 0);
+        $.ajax({
+            url: '/devices/snmp_all',
+            type: 'POST',
+            data: { snmp_community: '{{ snmp_community|default("public") }}', snmp_version: '2c' },
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            success: function(res) {
+                if (res.success) showToast('success', res.message);
+                else showToast('error', res.message);
+                hideLoading();
+                setTimeout(() => window.location.reload(), 1500);
+            },
+            error: function() { hideLoading(); showToast('error', '请求失败'); }
+        });
+    });
+
+    // ==================== 键盘快捷键 ====================
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'f') { e.preventDefault(); $('input[name="search"]').focus(); }
+        if (e.key === 'Escape') { selectedDevices.clear(); $('.device-checkbox').prop('checked', false); updateSelectedCount(); }
+        if (e.ctrlKey && e.key === 'a') { e.preventDefault(); $('#checkAllBtn').click(); }
+        if (e.key === 'Delete' && selectedDevices.size > 0) { e.preventDefault(); $('#deleteSelected').click(); }
+    });
+
+
+    // ==================== 清理无效设备 ====================
+$('#cleanupInvalidBtn').click(function(e) {
+    e.preventDefault();
+    // 加载预览数据
+    $('#previewTableBody').html('<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</td></tr>');
+    $('#previewCount').text('加载中...');
+    
+    $.ajax({
+        url: '/devices/cleanup_invalid_devices_preview',
+        type: 'GET',
+        success: function(res) {
+            if (res.success) {
+                $('#previewCount').text(res.count);
+                const tbody = $('#previewTableBody');
+                tbody.empty();
+                
+                if (res.count === 0) {
+                    tbody.append('<tr><td colspan="6" class="text-center text-success py-3">✅ 没有需要清理的无效设备</td></tr>');
+                    $('#confirmCleanupBtn').prop('disabled', true);
+                } else {
+                    res.devices.forEach(function(dev) {
+                        const typeMap = {
+                            'router': '路由器', 'switch': '交换机', 'firewall': '防火墙',
+                            'server': '服务器', 'pc': '计算机', 'ap': '无线AP'
+                        };
+                        const typeCn = typeMap[dev.device_type] || dev.device_type || '未知';
+                        tbody.append(`
+                            <tr>
+                                <td>${dev.id}</td>
+                                <td><strong>${escapeHtml(dev.name)}</strong></td>
+                                <td><span class="badge bg-secondary">${escapeHtml(typeCn)}</span></td>
+                                <td><code>${escapeHtml(dev.management_ip)}</code></td>
+                                <td><code>${escapeHtml(dev.mac_address)}</code></td>
+                                <td>${escapeHtml(dev.created_at)}</td>
+                            </tr>
+                        `);
+                    });
+                    $('#confirmCleanupBtn').prop('disabled', false);
+                }
+            } else {
+                $('#previewTableBody').html(`<tr><td colspan="6" class="text-center text-danger">加载失败: ${escapeHtml(res.message)}</td></tr>`);
+                $('#confirmCleanupBtn').prop('disabled', true);
+            }
+        },
+        error: function() {
+            $('#previewTableBody').html('<tr><td colspan="6" class="text-center text-danger">加载失败，请检查网络</td></tr>');
+            $('#confirmCleanupBtn').prop('disabled', true);
+        }
+    });
+    
+    $('#confirmCleanupBtn').prop('disabled', true);
+    new bootstrap.Modal(document.getElementById('confirmCleanupModal')).show();
+});
+
+$('#confirmCleanupBtn').click(function() {
+    const $btn = $(this);
+    if ($btn.prop('disabled')) return;
+    
+    if (!confirm('确定要清理所有无效设备吗？此操作不可恢复！')) return;
+    
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>清理中...');
+    showLoading('正在清理无效设备...', 0);
+    
+    $.ajax({
+        url: '/devices/cleanup_invalid_devices',
+        type: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+        success: function(res) {
+            hideLoading();
+            bootstrap.Modal.getInstance(document.getElementById('confirmCleanupModal')).hide();
+            
+            if (res.success) {
+                if (res.deleted_count > 0) {
+                    showToast('success', `✅ ${res.message}`);
+                    // 显示详细信息
+                    let detailHtml = `<div class="alert alert-success">${res.message}</div>`;
+                    if (res.deleted_names && res.deleted_names.length > 0) {
+                        detailHtml += '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>已清理的设备</th></tr></thead><tbody>';
+                        res.deleted_names.forEach(function(name) {
+                            detailHtml += `<tr><td>${escapeHtml(name)}</td></tr>`;
+                        });
+                        if (res.deleted_count > res.deleted_names.length) {
+                            detailHtml += `<tr><td class="text-muted">...还有 ${res.deleted_count - res.deleted_names.length} 个设备</td></tr>`;
+                        }
+                        detailHtml += '</tbody></table></div>';
+                    }
+                    $('#deviceDetailModalLabel').text('清理结果');
+                    $('#deviceDetailContent').html(detailHtml);
+                    new bootstrap.Modal(document.getElementById('deviceDetailModal')).show();
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    showToast('info', '没有需要清理的无效设备');
+                }
+            } else {
+                showToast('error', res.message || '清理失败');
+            }
+        },
+        error: function(xhr) {
+            hideLoading();
+            bootstrap.Modal.getInstance(document.getElementById('confirmCleanupModal')).hide();
+            const msg = xhr.responseJSON?.message || '请求失败';
+            showToast('error', `清理失败: ${msg}`);
+        }
+    });
+});
+
+// 重新打开模态框时重置按钮状态
+$('#confirmCleanupModal').on('show.bs.modal', function() {
+    $('#confirmCleanupBtn').prop('disabled', true);
+});
+
+$('#confirmCleanupModal').on('hidden.bs.modal', function() {
+    $('#confirmCleanupBtn').prop('disabled', false).html('<i class="fas fa-broom"></i> 确认清理');
+});
+ 
+
+    // ==================== 初始化 ====================
+    updateSelectedCount();
+    $('[data-bs-toggle="tooltip"]').each(function() { new bootstrap.Tooltip(this); });
+    $('.device-row').each(function() {
+        const status = $(this).data('device-status');
+        if (status === 'offline') $(this).addClass('table-secondary');
+        else if (status === 'fault') $(this).addClass('table-danger');
+    });
+
+    // 检查URL参数中是否有task_id，自动显示进度
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('task_id');
+    if (taskId) {
+        setTimeout(function() {
+            showProgressModal(taskId, '<i class="fas fa-spinner fa-spin me-2"></i>任务进度');
+        }, 500);
+    }
+});
+</script>
+{% endblock %}

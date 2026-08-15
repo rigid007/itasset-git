@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备状态监控 - 机房管理系统</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
+    
+    <style>
+        :root {
+            --status-online: #28a745;
+            --status-offline: #dc3545;
+            --status-warning: #ffc107;
+            --status-unknown: #6c757d;
+            --status-maintenance: #17a2b8;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-online {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--status-online);
+            border: 1px solid rgba(40, 167, 69, 0.3);
+        }
+        
+        .status-offline {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--status-offline);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+        
+        .status-warning {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--status-warning);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+        
+        .status-unknown {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: var(--status-unknown);
+            border: 1px solid rgba(108, 117, 125, 0.3);
+        }
+        
+        .status-maintenance {
+            background-color: rgba(23, 162, 184, 0.1);
+            color: var(--status-maintenance);
+            border: 1px solid rgba(23, 162, 184, 0.3);
+        }
+        
+        .card {
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,.05);
+            transition: transform 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stat-card {
+            border-left: 4px solid #007bff;
+        }
+        
+        .stat-icon {
+            font-size: 2.5rem;
+            opacity: 0.8;
+        }
+        
+        .filter-card {
+            background-color: #fff;
+        }
+        
+        .device-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .device-card:hover {
+            box-shadow: 0 6px 12px rgba(0,0,0,.1);
+        }
+        
+        .device-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            margin-right: 10px;
+        }
+        
+        .server-icon {
+            background-color: rgba(0, 123, 255, 0.1);
+            color: #007bff;
+        }
+        
+        .network-icon {
+            background-color: rgba(111, 66, 193, 0.1);
+            color: #6f42c1;
+        }
+        
+        .storage-icon {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+        }
+        
+        .virtual-icon {
+            background-color: rgba(253, 126, 20, 0.1);
+            color: #fd7e14;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+        
+        .last-checked {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .badge-count {
+            font-size: 0.75rem;
+            padding: 0.25em 0.6em;
+        }
+        
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .sortable:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+        }
+        
+        .sort-icon {
+            font-size: 0.8em;
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+        
+        .pagination .page-link {
+            border-radius: 5px;
+            margin: 0 2px;
+        }
+        
+        #refreshBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .dataTables_wrapper {
+            padding: 0;
+        }
+        
+        .dataTables_filter input {
+            border-radius: 5px;
+            border: 1px solid #ced4da;
+            padding: 5px 10px;
+        }
+        
+        .select2-container--bootstrap-5 .select2-selection {
+            border-radius: 5px;
+            border: 1px solid #ced4da;
+            min-height: 38px;
+        }
+        
+        @media (max-width: 768px) {
+            .stat-card .card-body {
+                padding: 1rem;
+            }
+            
+            .stat-icon {
+                font-size: 2rem;
+            }
+            
+            .table-responsive {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-server me-2"></i>机房管理系统
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring/real_time">实时监控</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/monitoring/device_status">设备状态</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring/performance_charts">性能图表</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring/interface_monitor">接口监控</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/monitoring/history_data">历史数据</a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="fas fa-user-circle me-1"></i> {{ current_user.username }}
+                    </span>
+                    <a href="/logout" class="btn btn-outline-light btn-sm">
+                        <i class="fas fa-sign-out-alt me-1"></i>退出
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <div class="container-fluid py-4">
+        <!-- 页面标题 -->
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="h3 fw-bold">
+                    <i class="fas fa-desktop me-2"></i>设备状态监控
+                </h1>
+                <p class="text-muted">查看和管理所有设备的运行状态、性能指标和配置信息</p>
+            </div>
+        </div>
+
+        <!-- 状态统计卡片 -->
+        <div class="row mb-4">
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">总设备数</h6>
+                                <h2 class="card-title fw-bold">{{ status_counts.total }}</h2>
+                            </div>
+                            <div class="stat-icon text-primary">
+                                <i class="fas fa-server"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">在线设备</h6>
+                                <h2 class="card-title fw-bold text-success">{{ status_counts.online }}</h2>
+                            </div>
+                            <div class="stat-icon text-success">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">离线设备</h6>
+                                <h2 class="card-title fw-bold text-danger">{{ status_counts.offline }}</h2>
+                            </div>
+                            <div class="stat-icon text-danger">
+                                <i class="fas fa-times-circle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">警告设备</h6>
+                                <h2 class="card-title fw-bold text-warning">{{ status_counts.warning }}</h2>
+                            </div>
+                            <div class="stat-icon text-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">未知状态</h6>
+                                <h2 class="card-title fw-bold text-secondary">{{ status_counts.unknown }}</h2>
+                            </div>
+                            <div class="stat-icon text-secondary">
+                                <i class="fas fa-question-circle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 col-sm-6 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">维护中</h6>
+                                <h2 class="card-title fw-bold text-info">{{ status_counts.maintenance }}</h2>
+                            </div>
+                            <div class="stat-icon text-info">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选和操作栏 -->
+        <div class="card filter-card mb-4">
+            <div class="card-body">
+                <form id="filterForm" method="get" action="/monitoring/device_status">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="statusFilter" class="form-label">状态筛选</label>
+                            <select id="statusFilter" name="status" class="form-select">
+                                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>所有状态</option>
+                                <option value="online" {% if status_filter == 'online' %}selected{% endif %}>在线</option>
+                                <option value="offline" {% if status_filter == 'offline' %}selected{% endif %}>离线</option>
+                                <option value="warning" {% if status_filter == 'warning' %}selected{% endif %}>警告</option>
+                                <option value="unknown" {% if status_filter == 'unknown' %}selected{% endif %}>未知</option>
+                                <option value="maintenance" {% if status_filter == 'maintenance' %}selected{% endif %}>维护中</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="typeFilter" class="form-label">设备类型</label>
+                            <select id="typeFilter" name="type" class="form-select">
+                                <option value="all" {% if device_type_filter == 'all' %}selected{% endif %}>所有类型</option>
+                                {% for type in device_types %}
+                                <option value="{{ type }}" {% if device_type_filter == type %}selected{% endif %}>{{ type }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="locationFilter" class="form-label">位置</label>
+                            <select id="locationFilter" name="location_id" class="form-select">
+                                <option value="">所有位置</option>
+                                {% for location in locations %}
+                                <option value="{{ location.id }}" {% if location_id == location.id %}selected{% endif %}>{{ location.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label d-block">&nbsp;</label>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="fas fa-filter me-1"></i>筛选
+                                </button>
+                                <a href="/monitoring/device_status" class="btn btn-outline-secondary">
+                                    <i class="fas fa-redo me-1"></i>重置
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 设备列表表格 -->
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">设备列表</h5>
+                <div>
+                    <span class="text-muted me-3">
+                        共 {{ devices|length }} 台设备
+                    </span>
+                    <button id="exportBtn" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-file-export me-1"></i>导出
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="devicesTable" class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="sortable" data-sort="name">
+                                    设备名称
+                                    {% if sort_by == 'name' %}
+                                    <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} sort-icon"></i>
+                                    {% endif %}
+                                </th>
+                                <th>IP地址</th>
+                                <th>类型</th>
+                                <th class="sortable" data-sort="status">
+                                    状态
+                                    {% if sort_by == 'status' %}
+                                    <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} sort-icon"></i>
+                                    {% endif %}
+                                </th>
+                                <th>位置</th>
+                                <th class="sortable" data-sort="last_checked">
+                                    最后检查时间
+                                    {% if sort_by == 'last_checked' %}
+                                    <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} sort-icon"></i>
+                                    {% endif %}
+                                </th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for device in devices %}
+                            <tr class="device-card" data-device-id="{{ device.id }}">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="device-icon {% if device.device_type == 'server' %}server-icon
+                                            {% elif device.device_type == 'switch' or device.device_type == 'router' %}network-icon
+                                            {% elif device.device_type == 'storage' %}storage-icon
+                                            {% else %}virtual-icon{% endif %}">
+                                            {% if device.device_type == 'server' %}
+                                            <i class="fas fa-server"></i>
+                                            {% elif device.device_type == 'switch' %}
+                                            <i class="fas fa-network-wired"></i>
+                                            {% elif device.device_type == 'router' %}
+                                            <i class="fas fa-route"></i>
+                                            {% elif device.device_type == 'storage' %}
+                                            <i class="fas fa-hdd"></i>
+                                            {% else %}
+                                            <i class="fas fa-cloud"></i>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <strong>{{ device.name }}</strong>
+                                            {% if device.brand %}
+                                            <div class="text-muted small">{{ device.brand }} {{ device.model }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>{{ device.management_ip or device.ip_address or 'N/A' }}</div>
+                                    {% if device.mac_address %}
+                                    <div class="text-muted small">{{ device.mac_address }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark">{{ device.device_type or '未知' }}</span>
+                                </td>
+                                <td>
+                                    {% if device.status == 'online' %}
+                                    <span class="status-badge status-online">
+                                        <i class="fas fa-circle me-1"></i>在线
+                                    </span>
+                                    {% elif device.status == 'offline' %}
+                                    <span class="status-badge status-offline">
+                                        <i class="fas fa-circle me-1"></i>离线
+                                    </span>
+                                    {% elif device.status == 'warning' %}
+                                    <span class="status-badge status-warning">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>警告
+                                    </span>
+                                    {% elif device.status == 'maintenance' %}
+                                    <span class="status-badge status-maintenance">
+                                        <i class="fas fa-tools me-1"></i>维护中
+                                    </span>
+                                    {% else %}
+                                    <span class="status-badge status-unknown">
+                                        <i class="fas fa-question-circle me-1"></i>未知
+                                    </span>
+                                    {% endif %}
+                                    
+                                    {% if device.ping_time %}
+                                    <div class="text-muted small mt-1">
+                                        <i class="fas fa-signal me-1"></i>{{ "%.2f"|format(device.ping_time) }} ms
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.location %}
+                                    <span class="text-primary">{{ device.location.name }}</span>
+                                    {% if device.cabinet %}
+                                    <div class="text-muted small">机柜: {{ device.cabinet.name }}</div>
+                                    {% endif %}
+                                    {% else %}
+                                    <span class="text-muted">未分配</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.last_checked %}
+                                    <div>{{ device.last_checked.strftime('%Y-%m-%d') }}</div>
+                                    <div class="last-checked">{{ device.last_checked.strftime('%H:%M:%S') }}</div>
+                                    {% else %}
+                                    <span class="text-muted">从未检查</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="/monitoring/performance_charts?device_id={{ device.id }}" 
+                                           class="btn btn-outline-primary" title="性能图表">
+                                            <i class="fas fa-chart-line"></i>
+                                        </a>
+                                        <a href="/monitoring/interface_monitor?device_id={{ device.id }}" 
+                                           class="btn btn-outline-info" title="接口监控">
+                                            <i class="fas fa-plug"></i>
+                                        </a>
+                                        <button class="btn btn-outline-secondary device-ping-btn" 
+                                                data-device-id="{{ device.id }}" 
+                                                data-device-ip="{{ device.management_ip or device.ip_address }}"
+                                                title="Ping测试">
+                                            <i class="fas fa-satellite-dish"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-5">
+                                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">暂无设备数据</h5>
+                                    <p class="text-muted">请添加设备或调整筛选条件</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if devices|length > 0 %}
+            <div class="card-footer bg-white">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="text-muted">
+                            显示 <span id="showingCount">{{ devices|length }}</span> 条记录
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <nav aria-label="设备分页">
+                            <ul class="pagination justify-content-end mb-0">
+                                <!-- 分页逻辑可根据实际需求添加 -->
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#" tabindex="-1">上一页</a>
+                                </li>
+                                <li class="page-item active">
+                                    <a class="page-link" href="#">1</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="#">2</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="#">3</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="#">下一页</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <button id="refreshBtn" class="btn btn-primary">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <!-- Ping测试模态框 -->
+    <div class="modal fade" id="pingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ping测试</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="pingResult" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">正在测试...</span>
+                        </div>
+                        <p class="mt-2">正在测试设备连通性...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script>
+        $(document).ready(function() {
+            // 初始化Select2
+            $('#statusFilter, #typeFilter, #locationFilter').select2({
+                theme: 'bootstrap-5',
+                width: '100%'
+            });
+            
+            // 初始化DataTable
+            const table = $('#devicesTable').DataTable({
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "所有"]],
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+                },
+                order: [], // 初始不排序
+                columnDefs: [
+                    { orderable: true, targets: [0, 3, 5] }, // 第1、4、6列可排序
+                    { orderable: false, targets: '_all' } // 其他列不可排序
+                ],
+                dom: '<"row"<"col-md-6"l><"col-md-6"f>>rt<"row"<"col-md-6"i><"col-md-6"p>>'
+            });
+            
+            // 更新显示记录数
+            table.on('draw', function() {
+                const info = table.page.info();
+                $('#showingCount').text(info.recordsDisplay);
+            });
+            
+            // 排序点击事件
+            $('.sortable').on('click', function() {
+                const sortBy = $(this).data('sort');
+                let order = 'asc';
+                
+                // 如果当前已经是这个排序字段，切换排序方向
+                if (sortBy === '{{ sort_by }}') {
+                    order = '{{ order }}' === 'asc' ? 'desc' : 'asc';
+                }
+                
+                // 构建URL
+                let url = new URL(window.location.href);
+                url.searchParams.set('sort_by', sortBy);
+                url.searchParams.set('order', order);
+                
+                window.location.href = url.toString();
+            });
+            
+            // Ping测试按钮点击事件
+            $('.device-ping-btn').on('click', function(e) {
+                e.stopPropagation();
+                
+                const deviceId = $(this).data('device-id');
+                const deviceIp = $(this).data('device-ip');
+                
+                if (!deviceIp) {
+                    alert('该设备没有IP地址，无法进行Ping测试');
+                    return;
+                }
+                
+                // 显示模态框
+                const pingModal = new bootstrap.Modal(document.getElementById('pingModal'));
+                pingModal.show();
+                
+                // 更新模态框标题
+                $('#pingModal .modal-title').text(`Ping测试 - ${deviceIp}`);
+                
+                // 发送Ping请求
+                $.ajax({
+                    url: '/api/device_ping',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                    data: JSON.stringify({
+                        device_id: deviceId,
+                        ip_address: deviceIp
+                    }),
+                    success: function(response) {
+                        let html = '';
+                        if (response.success) {
+                            if (response.is_online) {
+                                html = `
+                                    <div class="text-success">
+                                        <i class="fas fa-check-circle fa-3x"></i>
+                                        <h4 class="mt-3">设备在线</h4>
+                                        <p>延迟: ${response.ping_time} ms</p>
+                                    </div>
+                                `;
+                            } else {
+                                html = `
+                                    <div class="text-danger">
+                                        <i class="fas fa-times-circle fa-3x"></i>
+                                        <h4 class="mt-3">设备离线</h4>
+                                        <p>${response.error_message || '无法连接到设备'}</p>
+                                    </div>
+                                `;
+                            }
+                        } else {
+                            html = `
+                                <div class="text-warning">
+                                    <i class="fas fa-exclamation-triangle fa-3x"></i>
+                                    <h4 class="mt-3">测试失败</h4>
+                                    <p>${response.message || '未知错误'}</p>
+                                </div>
+                            `;
+                        }
+                        $('#pingResult').html(html);
+                    },
+                    error: function() {
+                        $('#pingResult').html(`
+                            <div class="text-danger">
+                                <i class="fas fa-exclamation-circle fa-3x"></i>
+                                <h4 class="mt-3">请求失败</h4>
+                                <p>无法连接到服务器</p>
+                            </div>
+                        `);
+                    }
+                });
+            });
+            
+            // 行点击事件 - 查看设备详情
+            $('#devicesTable tbody').on('click', 'tr', function() {
+                const deviceId = $(this).data('device-id');
+                if (deviceId) {
+                    window.location.href = `/monitoring/performance_charts?device_id=${deviceId}`;
+                }
+            });
+            
+            // 导出按钮点击事件
+            $('#exportBtn').on('click', function() {
+                // 构建导出URL
+                let exportUrl = new URL(window.location.href);
+                exportUrl.pathname = '/monitoring/api/export_devices';
+                
+                // 打开新窗口下载
+                window.open(exportUrl.toString(), '_blank');
+            });
+            
+            // 刷新按钮点击事件
+            $('#refreshBtn').on('click', function() {
+                const $btn = $(this);
+                
+                // 添加旋转动画
+                $btn.find('i').addClass('fa-spin');
+                
+                // 刷新页面
+                setTimeout(function() {
+                    window.location.reload();
+                }, 500);
+            });
+            
+            // 自动刷新功能（每60秒刷新一次）
+            let autoRefreshInterval = setInterval(function() {
+                // 如果有模态框打开，不自动刷新
+                if ($('.modal.show').length === 0) {
+                    $.ajax({
+                        url: '/monitoring/api/status_summary',
+                        success: function(data) {
+                            // 更新状态统计
+                            if (data.status_counts) {
+                                $('.card-title.fw-bold.text-success').text(data.status_counts.online);
+                                $('.card-title.fw-bold.text-danger').text(data.status_counts.offline);
+                                $('.card-title.fw-bold.text-warning').text(data.status_counts.warning);
+                                $('.card-title.fw-bold.text-secondary').text(data.status_counts.unknown);
+                                $('.card-title.fw-bold.text-info').text(data.status_counts.maintenance);
+                                $('.card-title.fw-bold').first().text(data.status_counts.total);
+                            }
+                        }
+                    });
+                }
+            }, 60000); // 60秒
+            
+            // 设备状态筛选快速链接
+            $('.stat-card').on('click', function() {
+                const statusText = $(this).find('.card-subtitle').text().trim();
+                let status = 'all';
+                
+                switch(statusText) {
+                    case '在线设备':
+                        status = 'online';
+                        break;
+                    case '离线设备':
+                        status = 'offline';
+                        break;
+                    case '警告设备':
+                        status = 'warning';
+                        break;
+                    case '未知状态':
+                        status = 'unknown';
+                        break;
+                    case '维护中':
+                        status = 'maintenance';
+                        break;
+                }
+                
+                if (status !== 'all') {
+                    $('#statusFilter').val(status).trigger('change');
+                    $('#filterForm').submit();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,2433 @@
+asset 目录下是IT资产管理及运维管理： 其中 资产管理、监控、运维管理、综合报表、配置管理 功能需要完善，以便配合资产管理使用，“资产管理、监控、运维管理、综合报表、配置管理” 根据行业的做法，以及资产管理的功能进行完善和优化。
+
+
+> asset 目录下是IT资产管理及运维管理： 其中 资产管理、监控、运维管理、综合报表、配置管理 功能需要完善，以便配合资产管理使用，“资产管理、监控、运维管理、综合报表、配置管理”
+  根据行业的做法，以及资产管理的功能进行完善和优化。
+
+● Let me first explore the codebase to understand the current structure and functionality.
+
+  Searched for 1 pattern, read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Let me explore the key files to understand the current state of each module.
+
+  Read 6 files, listed 1 directory (ctrl+o to expand)
+
+● Let me read the core model files and key blueprints in parallel.
+
+  Read 6 files (ctrl+o to expand)
+
+● Let me now look at the existing templates for the key modules and the asset blueprint for understanding the current functionality.
+
+  Searched for 1 pattern, read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Let me check the current navigation and template structure to understand the full picture.
+
+  Searched for 4 patterns, read 1 file (ctrl+o to expand)
+
+● 我已经全面了解了这个IT资产管理系统的架构和各模块现状。系统基于 Flask + MySQL，功能覆盖较广，但根据行业标准（ITIL、ISO 20000）和资产管理最佳实践，各模块都有较大优化空间。
+
+  让我先整体分析现状，然后制定具体的优化方案。
+
+  Read 2 files (ctrl+o to expand)
+
+● 现在我对整个系统有了全面了解。这是一个功能相当完整的Flask IT资产管理系统，包含16个蓝图模块。让我提出各模块的行业标准优化方案。
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Let me explore the key modules in depth.
+
+● 3 Explore agents finished (ctrl+o to expand)
+   ├ Explore asset management module · 17 tool uses · 73.7k tokens
+   │ ⎿  Done
+   ├ Explore monitoring and operations · 36 tool uses · 109.6k tokens
+   │ ⎿  Done
+   └ Explore reports and config management · 25 tool uses · 73.2k tokens
+     ⎿  Done
+                                                                                                                                                                                                ● User answered Claude's questions:                                                                                                                                                               ⎿  · 通过全面分析，系统共发现5大模块约40+项待优化项。您希望我按什么优先级推进？ → 全面优化（推荐）
+     · 关于具体实施方案，您倾向哪种交付风格？ → 按模块逐步交付
+                                                                                                                                                                                                ● 全面优化 + 按模块交付，收到。让我制定完整的实施方案。
+
+● Updated plan
+  ⎿  /plan to preview
+
+● 计划已完成，包含5大模块的详细优化方案、新增模型、路由和模板，以及实施优先级和时间估算。
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Ready to code?
+
+ Here is Claude's plan:                                                                                                                                                                         ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ IT 资产管理系统全面优化方案                                                                                                                                                                    
+ 整体思路
+
+ 按照 按模块逐步交付 方式，依次优化5大模块。每个模块独立完成（模型 → 路由 → UI），确保可独立验证。各模块之间存在依赖关系的，后置模块会复用前置模块的成果。
+
+ 执行顺序：
+ 1. 资产管理（核心基础）
+ 2. 配置管理（可并行或先期完成，为其他模块提供基础能力）
+ 3. 监控（依赖资产和配置）
+ 4. 运维管理（依赖监控告警数据）
+ 5. 综合报表（依赖所有模块数据）
+
+ ---
+ 模块一：资产管理优化
+
+ 目标
+
+ 补齐企业级 ITAM 的行业标准能力：生命周期管理、合同管理、软件许可、TCO成本追踪、资产盘点、通知提醒。
+
+ 新增模型
+
+ 1.1 Contract 合同管理模型 (models/contract_models.py)
+
+ Contract:
+   - id, contract_no(唯一), name, type(purchase/maintenance/lease/sla)
+   - supplier_id -> suppliers.id
+   - start_date, end_date, renewal_date
+   - total_value, payment_terms, payment_status
+   - attachment_url, description
+   - status(active/expired/termined/renewed)
+   - notification_days(到期提前提醒天数)
+   - created_at, updated_at
+   - assets relationship (多对多, contract_assets关联表)
+
+ 1.2 SoftwareLicense 软件许可模型 (models/license_models.py)
+
+ SoftwareLicense:
+   - id, license_key, software_name, version, edition
+   - license_type(per_user/per_device/enterprise)
+   - vendor, publisher
+   - total_quantity, allocated_quantity, available_quantity
+   - purchase_date, expiry_date, renewal_date
+   - purchase_cost, unit_cost
+   - contract_id -> contracts.id(optional)
+   - status(active/expired/deprecated)
+   - compliance_status(compliant/non-compliant/under-review)
+   - created_at, updated_at
+   - devices relationship (多对多)
+
+ 1.3 AssetAudit 资产盘点模型 (models/audit_models.py)
+
+ AssetAudit:
+   - id, audit_no(唯一), name
+   - audit_type(annual/quarterly/random)
+   - status(draft/in_progress/completed/cancelled)
+   - scope_location_ids, scope_department
+   - scheduled_date, completed_date
+   - total_assets, scanned_assets, matched_count, discrepancy_count
+   - missing_count, damaged_count
+   - notes
+   - created_by -> users.id
+   - created_at, updated_at
+
+ AssetAuditItem:
+   - id, audit_id -> asset_audits.id
+   - asset_id -> assets.id
+   - expected_location, actual_location
+   - expected_status, actual_status
+   - scanned_by, scanned_at
+   - status(matched/mismatched/missing/extra)
+   - notes
+
+ 新增路由 (blueprints/asset.py 及新蓝图)
+
+ ┌──────────────────────────────┬──────────────────────────────────┐
+ │             路由             │               功能               │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/contracts             │ 合同列表，支持搜索/过滤/到期提醒 │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/contract/add          │ 添加合同                         │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/contract/<id>         │ 合同详情，关联资产列表           │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/contract/<id>/edit    │ 编辑合同                         │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/licenses              │ 软件许可列表，合规状态仪表板     │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/license/add           │ 添加许可                         │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/license/<id>          │ 许可详情，分配记录               │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/license/<id>/allocate │ 分配许可到设备                   │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/audits                │ 盘点任务列表                     │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/audit/create          │ 创建盘点任务                     │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/audit/<id>/execute    │ 执行盘点（扫码/手动录入）        │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/audit/<id>/report     │ 盘点差异报告                     │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/qr/<id>               │ 生成资产二维码                   │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/dashboard             │ 资产管理仪表板                   │
+ ├──────────────────────────────┼──────────────────────────────────┤
+ │ /asset/api/tco               │ TCO计算API                       │
+ └──────────────────────────────┴──────────────────────────────────┘
+
+ 新增模板
+
+ - templates/asset/contract_list.html — 合同管理列表
+ - templates/asset/contract_detail.html — 合同详情
+ - templates/asset/contract_form.html — 合同添加/编辑表单
+ - templates/asset/license_list.html — 许可管理列表
+ - templates/asset/license_detail.html — 许可详情
+ - templates/asset/license_form.html — 许可表单
+ - templates/asset/audit_list.html — 盘点列表
+ - templates/asset/audit_execute.html — 盘点执行
+ - templates/asset/audit_report.html — 盘点报告
+ - templates/asset/dashboard.html — 资产管理仪表板
+
+ 对现有文件的修改
+
+ - models/__init__.py — 注册新模型
+ - blueprints/__init__.py — 注册新蓝图（如需要）
+ - blueprints/asset.py — 追加新路由
+ - templates/asset/detail.html — 添加合同/许可选项卡
+ - templates/asset/inventory.html — 添加二维码列、快速操作
+ - templates/asset/reports.html — 添加TCO、生命周期报表
+ - config.py — 添加资产相关配置项
+
+ ---
+ 模块二：配置管理优化
+
+ 目标
+
+ 补齐配置漂移检测、备份验证、配置版本化、合规审计策略引擎等能力。
+
+ 新增模型 (models/compliance_models.py)
+
+ ConfigBaseline:
+   - device_id, config_type(running/startup/vlan)
+   - content, hash, captured_at
+   - captured_by(manual/scheduled)
+
+ ConfigDrift:
+   - device_id, baseline_id
+   - drift_type(content_added/removed/modified)
+   - before_content, after_content
+   - detected_at, severity, status
+
+ BackupVerification:
+   - backup_config_id, verified_at
+   - status(verified/failed/partial)
+   - file_size, checksum, restore_test_result
+   - verified_by
+
+ CompliancePolicy:
+   - name, description
+   - category(security/network/system)
+   - check_type(config/performance/accessibility)
+   - check_expression(JSON)
+   - severity(critical/high/medium/low)
+   - enabled, auto_remediate
+
+ ComplianceCheckResult:
+   - policy_id, device_id
+   - status(pass/fail/error/na)
+   - actual_value, expected_value
+   - checked_at, checked_by
+
+ ConfigVersion:
+   - device_id, version_number
+   - config_type, content
+   - change_summary, changed_by
+   - checksum, created_at
+
+ 新增路由 (blueprints/config.py)
+
+ ┌─────────────────────────────────────┬──────────────┐
+ │                路由                 │     功能     │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/compliance/policies         │ 合规策略列表 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/compliance/check            │ 执行合规检查 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/compliance/report           │ 合规检查报告 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/compliance/remediation      │ 自动修复规则 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/config-baseline             │ 配置基线管理 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/config-diff/<device_id>     │ 配置差异对比 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/config-versions/<device_id> │ 配置版本历史 │
+ ├─────────────────────────────────────┼──────────────┤
+ │ /config/backup/verify/<id>          │ 备份验证     │
+ └─────────────────────────────────────┴──────────────┘
+
+ 新增模板
+
+ - templates/config/compliance_policies.html
+ - templates/config/compliance_report.html
+ - templates/config/config_baseline.html
+ - templates/config/config_diff.html
+ - templates/config/config_versions.html
+ - templates/config/backup_verify.html
+
+ ---
+ 模块三：监控优化
+
+ 目标
+
+ 补全预测性告警、健康评分、SLA追踪、维护窗口、告警升级、异常检测。
+
+ 新增模型（扩展 models/monitoring.py 和 models/device_performance_models.py）
+
+ DeviceHealthScore:
+   - device_id, score(0-100)
+   - cpu_score, memory_score, disk_score, network_score, ping_score
+   - calculated_at, components(JSON)
+
+ MaintenanceWindow:
+   - name, description
+   - start_time, end_time
+   - affected_device_ids(JSON)
+   - reason, created_by, status
+
+ AlertEscalationPolicy:
+   - alert_rule_id, escalation_level(1/2/3)
+   - wait_minutes, notify_channel, notify_target
+
+ AnomalyDetectionRule:
+   - device_id, metric_name(cpu/memory/disk/network)
+   - method(statistical_deviation/moving_average)
+   - sensitivity(high/medium/low)
+   - enabled
+
+ SlaUptime:
+   - device_id, period(monthly/quarterly/yearly)
+   - uptime_percentage, total_minutes, downtime_minutes
+   - period_start, period_end
+   - calculated_at
+
+ AutomatedRemediation:
+   - name, trigger_alert_rule_id
+   - action_type(ssh_command/api_call/webhook)
+   - action_params(JSON)
+   - target_device_type
+   - enabled, success_count, fail_count
+
+ 新增路由 (blueprints/monitoring.py)
+
+ ┌──────────────────────────────────────┬────────────────────┐
+ │                 路由                 │        功能        │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/health-scores            │ 设备健康评分仪表板 │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/health-score/<device_id> │ 单设备健康详情     │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/maintenance-windows      │ 维护窗口管理       │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/escalation-policies      │ 告警升级策略       │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/anomaly-detection        │ 异常检测规则       │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/sla-report               │ SLA合规报表        │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/remediation              │ 自动修复规则       │
+ ├──────────────────────────────────────┼────────────────────┤
+ │ /monitoring/predictive               │ 预测告警趋势       │
+ └──────────────────────────────────────┴────────────────────┘
+
+ 对现有文件的修改
+
+ - tasks/monitor.py — 添加健康评分计算、趋势预测、SLA计算逻辑
+ - scheduler.py — 注册新定时任务
+ - models/monitoring.py — 追加新模型
+ - templates/monitoring/real_time.html — 添加健康评分组件
+ - templates/monitoring/settings.html — 添加维护窗口、升级策略设置
+
+ ---
+ 模块四：运维管理优化
+
+ 目标
+
+ 补齐问题管理、知识库UI、SLA自动分配与追踪、CMDB关联增强、服务目录。
+
+ 新增模型（扩展 models/maintenance_models.py）
+
+ ProblemRecord:
+   - problem_id(唯一编号), title, description, category
+   - severity, priority, status(identified/investigating/resolved/closed)
+   - root_cause, resolution, workaround
+   - known_error(boolean), known_error_db_ref
+   - identified_date, resolved_date
+   - assigned_to -> users.id
+   - related_work_order_ids(JSON)
+   - created_by, created_at
+
+ KnownError:
+   - ke_number(唯一编号), title, description
+   - symptom, root_cause, workaround
+   - affected_components(JSON)
+   - severity, status(active/resolved)
+   - linked_problem_id -> problem_records.id
+   - created_at, updated_at
+
+ ServiceCatalog:
+   - name, description, category
+   - service_type(request/incident/change)
+   - delivery_process(JSON)
+   - estimated_fulfillment_time
+   - cost, chargeable(boolean)
+   - enabled, display_order
+   - form_template(JSON)
+
+ SlaAssignment:
+   - sla_policy_id, target_type(device_type/priority/category)
+   - target_value, priority_level
+   - response_time_minutes, resolution_time_minutes
+   - escalation_enabled, escalation_steps(JSON)
+   - enabled
+
+ 新增路由 (blueprints/maintenance_routes.py)
+
+ ┌───────────────────────────────────────┬──────────────────┐
+ │                 路由                  │       功能       │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/problems                 │ 问题列表         │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/problem/create           │ 创建问题记录     │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/problem/<id>             │ 问题详情         │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/problem/<id>/link-ticket │ 关联工单         │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/knowledge-base           │ 知识库文章列表   │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/kb/article/<id>          │ 文章详情         │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/kb/search                │ 知识库搜索       │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/service-catalog          │ 服务目录         │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/sla/list                 │ SLA策略分配      │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/sla/report               │ SLA合规报告      │
+ ├───────────────────────────────────────┼──────────────────┤
+ │ /maintenance/workflow/automation      │ 自动化工作流规则 │
+ └───────────────────────────────────────┴──────────────────┘
+
+ ---
+ 模块五：综合报表优化
+
+ 目标
+
+ 补齐管理驾驶舱、合规报告框架、趋势预测、报表构建器、自动分发。
+
+ 新增模型（扩展 models/report_models.py）
+
+ ReportFavorite:
+   # 已有，无需新增
+
+ ReportDashboard:
+   - name, description
+   - dashboard_type(executive/operational/compliance)
+   - layout_config(JSON：列数、组件排列)
+   - widgets(JSON：各组件配置)
+   - role_access(admin/viewer/operator)
+   - is_default, is_shared
+   - created_by, created_at, updated_at
+
+ ReportDistribution:
+   - report_template_id
+   - schedule_type(cron表达式)
+   - format(pdf/excel/html)
+   - delivery_channel(email/slack/webhook)
+   - recipients(JSON)
+   - last_sent_at, next_send_at
+   - enabled, retry_on_fail
+
+ ComplianceFramework:
+   - name(ISO27001/SOX/PCI/等)
+   - version, description
+   - control_items(JSON)
+   - enabled
+
+ ComplianceEvidence:
+   - framework_id, control_id
+   - evidence_type(manual/automated)
+   - content, collected_at
+   - collected_by, status(pass/fail/na)
+
+ 新增路由
+
+ ┌───────────────────────────────┬──────────────────┐
+ │             路由              │       功能       │
+ ├───────────────────────────────┼──────────────────┤
+ │ /report/dashboard/executive   │ 管理驾驶舱       │
+ ├───────────────────────────────┼──────────────────┤
+ │ /report/dashboard/create      │ 自定义仪表板     │
+ ├───────────────────────────────┼──────────────────┤
+ │ /report/dashboard/<id>        │ 仪表板查看       │
+ ├───────────────────────────────┼──────────────────┤
+ │ /report/compliance/frameworks │ 合规框架管理     │
+  Read 6 files (ctrl+o to expand)
+
+● Let me now look at the existing templates for the key modules and the asset blueprint for understanding the current functionality.
+
+  Searched for 1 pattern, read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Let me check the current navigation and template structure to understand the full picture.
+
+  Searched for 4 patterns, read 1 file (ctrl+o to expand)
+
+● 我已经全面了解了这个IT资产管理系统的架构和各模块现状。系统基于 Flask + MySQL，功能覆盖较广，但根据行业标准（ITIL、ISO 20000）和资产管理最佳实践，各模块都有较大优化空间。
+
+  让我先整体分析现状，然后制定具体的优化方案。
+
+  Read 2 files (ctrl+o to expand)
+
+● 现在我对整个系统有了全面了解。这是一个功能相当完整的Flask IT资产管理系统，包含16个蓝图模块。让我提出各模块的行业标准优化方案。
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Let me explore the key modules in depth.
+
+● 3 Explore agents finished (ctrl+o to expand)
+   ├ Explore asset management module · 17 tool uses · 73.7k tokens
+   │ ⎿  Done
+   ├ Explore monitoring and operations · 36 tool uses · 109.6k tokens
+   │ ⎿  Done
+   └ Explore reports and config management · 25 tool uses · 73.2k tokens
+     ⎿  Done
+
+● User answered Claude's questions:
+  ⎿  · 通过全面分析，系统共发现5大模块约40+项待优化项。您希望我按什么优先级推进？ → 全面优化（推荐）
+     · 关于具体实施方案，您倾向哪种交付风格？ → 按模块逐步交付
+
+● 全面优化 + 按模块交付，收到。让我制定完整的实施方案。
+
+● Updated plan
+  ⎿  /plan to preview
+
+● 计划已完成，包含5大模块的详细优化方案、新增模型、路由和模板，以及实施优先级和时间估算。
+
+● User approved Claude's plan
+  ⎿  Plan saved to: C:\Users\pp\.claude\plans\majestic-wibbling-liskov.md · /plan to edit
+     IT 资产管理系统全面优化方案
+                                                                                                                                                                                                     整体思路
+                                                                                                                                                                                                     按照 按模块逐步交付 方式，依次优化5大模块。每个模块独立完成（模型 → 路由 → UI），确保可独立验证。各模块之间存在依赖关系的，后置模块会复用前置模块的成果。
+
+     执行顺序：
+     1. 资产管理（核心基础）
+     2. 配置管理（可并行或先期完成，为其他模块提供基础能力）
+     3. 监控（依赖资产和配置）
+     4. 运维管理（依赖监控告警数据）
+     5. 综合报表（依赖所有模块数据）
+
+     ---
+     模块一：资产管理优化
+
+     目标
+
+     补齐企业级 ITAM 的行业标准能力：生命周期管理、合同管理、软件许可、TCO成本追踪、资产盘点、通知提醒。
+
+     新增模型
+
+     1.1 Contract 合同管理模型 (models/contract_models.py)
+
+     Contract:
+       - id, contract_no(唯一), name, type(purchase/maintenance/lease/sla)
+       - supplier_id -> suppliers.id
+       - start_date, end_date, renewal_date
+       - total_value, payment_terms, payment_status
+       - attachment_url, description
+       - status(active/expired/termined/renewed)
+       - notification_days(到期提前提醒天数)
+       - created_at, updated_at
+       - assets relationship (多对多, contract_assets关联表)
+
+     1.2 SoftwareLicense 软件许可模型 (models/license_models.py)
+
+     SoftwareLicense:
+       - id, license_key, software_name, version, edition
+       - license_type(per_user/per_device/enterprise)
+       - vendor, publisher
+       - total_quantity, allocated_quantity, available_quantity
+       - purchase_date, expiry_date, renewal_date
+       - purchase_cost, unit_cost
+       - contract_id -> contracts.id(optional)
+       - status(active/expired/deprecated)
+       - compliance_status(compliant/non-compliant/under-review)
+       - created_at, updated_at
+       - devices relationship (多对多)
+
+     1.3 AssetAudit 资产盘点模型 (models/audit_models.py)
+
+     AssetAudit:
+       - id, audit_no(唯一), name
+       - audit_type(annual/quarterly/random)
+       - status(draft/in_progress/completed/cancelled)
+       - scope_location_ids, scope_department
+       - scheduled_date, completed_date
+       - total_assets, scanned_assets, matched_count, discrepancy_count
+       - missing_count, damaged_count
+       - notes
+       - created_by -> users.id
+       - created_at, updated_at
+
+     AssetAuditItem:
+       - id, audit_id -> asset_audits.id
+       - asset_id -> assets.id
+       - expected_location, actual_location
+       - expected_status, actual_status
+       - scanned_by, scanned_at
+       - status(matched/mismatched/missing/extra)
+       - notes
+
+     新增路由 (blueprints/asset.py 及新蓝图)
+
+     ┌──────────────────────────────┬──────────────────────────────────┐
+     │             路由             │               功能               │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/contracts             │ 合同列表，支持搜索/过滤/到期提醒 │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/contract/add          │ 添加合同                         │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/contract/<id>         │ 合同详情，关联资产列表           │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/contract/<id>/edit    │ 编辑合同                         │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/licenses              │ 软件许可列表，合规状态仪表板     │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/license/add           │ 添加许可                         │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/license/<id>          │ 许可详情，分配记录               │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/license/<id>/allocate │ 分配许可到设备                   │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/audits                │ 盘点任务列表                     │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/audit/create          │ 创建盘点任务                     │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/audit/<id>/execute    │ 执行盘点（扫码/手动录入）        │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/audit/<id>/report     │ 盘点差异报告                     │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/qr/<id>               │ 生成资产二维码                   │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/dashboard             │ 资产管理仪表板                   │
+     ├──────────────────────────────┼──────────────────────────────────┤
+     │ /asset/api/tco               │ TCO计算API                       │
+     └──────────────────────────────┴──────────────────────────────────┘
+
+     新增模板
+
+     - templates/asset/contract_list.html — 合同管理列表
+     - templates/asset/contract_detail.html — 合同详情
+     - templates/asset/contract_form.html — 合同添加/编辑表单
+     - templates/asset/license_list.html — 许可管理列表
+     - templates/asset/license_detail.html — 许可详情
+     - templates/asset/license_form.html — 许可表单
+     - templates/asset/audit_list.html — 盘点列表
+     - templates/asset/audit_execute.html — 盘点执行
+     - templates/asset/audit_report.html — 盘点报告
+     - templates/asset/dashboard.html — 资产管理仪表板
+
+     对现有文件的修改
+
+     - models/__init__.py — 注册新模型
+     - blueprints/__init__.py — 注册新蓝图（如需要）
+     - blueprints/asset.py — 追加新路由
+     - templates/asset/detail.html — 添加合同/许可选项卡
+     - templates/asset/inventory.html — 添加二维码列、快速操作
+     - templates/asset/reports.html — 添加TCO、生命周期报表
+     - config.py — 添加资产相关配置项
+
+     ---
+     模块二：配置管理优化
+
+     目标
+
+     补齐配置漂移检测、备份验证、配置版本化、合规审计策略引擎等能力。
+
+     新增模型 (models/compliance_models.py)
+
+     ConfigBaseline:
+       - device_id, config_type(running/startup/vlan)
+       - content, hash, captured_at
+       - captured_by(manual/scheduled)
+
+     ConfigDrift:
+       - device_id, baseline_id
+       - drift_type(content_added/removed/modified)
+       - before_content, after_content
+       - detected_at, severity, status
+
+     BackupVerification:
+       - backup_config_id, verified_at
+       - status(verified/failed/partial)
+       - file_size, checksum, restore_test_result
+       - verified_by
+
+     CompliancePolicy:
+       - name, description
+       - category(security/network/system)
+       - check_type(config/performance/accessibility)
+       - check_expression(JSON)
+       - severity(critical/high/medium/low)
+       - enabled, auto_remediate
+
+     ComplianceCheckResult:
+       - policy_id, device_id
+       - status(pass/fail/error/na)
+       - actual_value, expected_value
+       - checked_at, checked_by
+
+     ConfigVersion:
+       - device_id, version_number
+       - config_type, content
+       - change_summary, changed_by
+       - checksum, created_at
+
+     新增路由 (blueprints/config.py)
+
+     ┌─────────────────────────────────────┬──────────────┐
+     │                路由                 │     功能     │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/compliance/policies         │ 合规策略列表 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/compliance/check            │ 执行合规检查 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/compliance/report           │ 合规检查报告 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/compliance/remediation      │ 自动修复规则 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/config-baseline             │ 配置基线管理 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/config-diff/<device_id>     │ 配置差异对比 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/config-versions/<device_id> │ 配置版本历史 │
+     ├─────────────────────────────────────┼──────────────┤
+     │ /config/backup/verify/<id>          │ 备份验证     │
+     └─────────────────────────────────────┴──────────────┘
+
+     新增模板
+
+     - templates/config/compliance_policies.html
+     - templates/config/compliance_report.html
+     - templates/config/config_baseline.html
+     - templates/config/config_diff.html
+     - templates/config/config_versions.html
+     - templates/config/backup_verify.html
+
+     ---
+     模块三：监控优化
+
+     目标
+
+     补全预测性告警、健康评分、SLA追踪、维护窗口、告警升级、异常检测。
+
+     新增模型（扩展 models/monitoring.py 和 models/device_performance_models.py）
+
+     DeviceHealthScore:
+       - device_id, score(0-100)
+       - cpu_score, memory_score, disk_score, network_score, ping_score
+       - calculated_at, components(JSON)
+
+     MaintenanceWindow:
+       - name, description
+       - start_time, end_time
+       - affected_device_ids(JSON)
+       - reason, created_by, status
+
+     AlertEscalationPolicy:
+       - alert_rule_id, escalation_level(1/2/3)
+       - wait_minutes, notify_channel, notify_target
+
+     AnomalyDetectionRule:
+       - device_id, metric_name(cpu/memory/disk/network)
+       - method(statistical_deviation/moving_average)
+       - sensitivity(high/medium/low)
+       - enabled
+
+     SlaUptime:
+       - device_id, period(monthly/quarterly/yearly)
+       - uptime_percentage, total_minutes, downtime_minutes
+       - period_start, period_end
+       - calculated_at
+
+     AutomatedRemediation:
+       - name, trigger_alert_rule_id
+       - action_type(ssh_command/api_call/webhook)
+       - action_params(JSON)
+       - target_device_type
+       - enabled, success_count, fail_count
+
+     新增路由 (blueprints/monitoring.py)
+
+     ┌──────────────────────────────────────┬────────────────────┐
+     │                 路由                 │        功能        │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/health-scores            │ 设备健康评分仪表板 │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/health-score/<device_id> │ 单设备健康详情     │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/maintenance-windows      │ 维护窗口管理       │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/escalation-policies      │ 告警升级策略       │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/anomaly-detection        │ 异常检测规则       │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/sla-report               │ SLA合规报表        │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/remediation              │ 自动修复规则       │
+     ├──────────────────────────────────────┼────────────────────┤
+     │ /monitoring/predictive               │ 预测告警趋势       │
+     └──────────────────────────────────────┴────────────────────┘
+
+     对现有文件的修改
+
+     - tasks/monitor.py — 添加健康评分计算、趋势预测、SLA计算逻辑
+     - scheduler.py — 注册新定时任务
+     - models/monitoring.py — 追加新模型
+     - templates/monitoring/real_time.html — 添加健康评分组件
+     - templates/monitoring/settings.html — 添加维护窗口、升级策略设置
+
+     ---
+     模块四：运维管理优化
+
+     目标
+
+     补齐问题管理、知识库UI、SLA自动分配与追踪、CMDB关联增强、服务目录。
+
+     新增模型（扩展 models/maintenance_models.py）
+
+     ProblemRecord:
+       - problem_id(唯一编号), title, description, category
+       - severity, priority, status(identified/investigating/resolved/closed)
+       - root_cause, resolution, workaround
+       - known_error(boolean), known_error_db_ref
+       - identified_date, resolved_date
+       - assigned_to -> users.id
+       - related_work_order_ids(JSON)
+       - created_by, created_at
+
+     KnownError:
+       - ke_number(唯一编号), title, description
+       - symptom, root_cause, workaround
+       - affected_components(JSON)
+       - severity, status(active/resolved)
+       - linked_problem_id -> problem_records.id
+       - created_at, updated_at
+
+     ServiceCatalog:
+       - name, description, category
+       - service_type(request/incident/change)
+       - delivery_process(JSON)
+       - estimated_fulfillment_time
+       - cost, chargeable(boolean)
+       - enabled, display_order
+       - form_template(JSON)
+
+     SlaAssignment:
+       - sla_policy_id, target_type(device_type/priority/category)
+       - target_value, priority_level
+       - response_time_minutes, resolution_time_minutes
+       - escalation_enabled, escalation_steps(JSON)
+       - enabled
+
+     新增路由 (blueprints/maintenance_routes.py)
+
+     ┌───────────────────────────────────────┬──────────────────┐
+     │                 路由                  │       功能       │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/problems                 │ 问题列表         │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/problem/create           │ 创建问题记录     │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/problem/<id>             │ 问题详情         │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/problem/<id>/link-ticket │ 关联工单         │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/knowledge-base           │ 知识库文章列表   │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/kb/article/<id>          │ 文章详情         │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/kb/search                │ 知识库搜索       │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/service-catalog          │ 服务目录         │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/sla/list                 │ SLA策略分配      │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/sla/report               │ SLA合规报告      │
+     ├───────────────────────────────────────┼──────────────────┤
+     │ /maintenance/workflow/automation      │ 自动化工作流规则 │
+     └───────────────────────────────────────┴──────────────────┘
+
+     ---
+     模块五：综合报表优化
+
+     目标
+
+     补齐管理驾驶舱、合规报告框架、趋势预测、报表构建器、自动分发。
+
+     新增模型（扩展 models/report_models.py）
+
+     ReportFavorite:
+       # 已有，无需新增
+
+     ReportDashboard:
+       - name, description
+       - dashboard_type(executive/operational/compliance)
+       - layout_config(JSON：列数、组件排列)
+       - widgets(JSON：各组件配置)
+       - role_access(admin/viewer/operator)
+       - is_default, is_shared
+       - created_by, created_at, updated_at
+
+     ReportDistribution:
+       - report_template_id
+       - schedule_type(cron表达式)
+       - format(pdf/excel/html)
+       - delivery_channel(email/slack/webhook)
+       - recipients(JSON)
+       - last_sent_at, next_send_at
+       - enabled, retry_on_fail
+
+     ComplianceFramework:
+       - name(ISO27001/SOX/PCI/等)
+       - version, description
+       - control_items(JSON)
+       - enabled
+
+     ComplianceEvidence:
+       - framework_id, control_id
+       - evidence_type(manual/automated)
+       - content, collected_at
+       - collected_by, status(pass/fail/na)
+
+     新增路由
+
+     ┌───────────────────────────────┬──────────────────┐
+     │             路由              │       功能       │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/dashboard/executive   │ 管理驾驶舱       │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/dashboard/create      │ 自定义仪表板     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/dashboard/<id>        │ 仪表板查看       │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/compliance/frameworks │ 合规框架管理     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/compliance/evidence   │ 合规证据收集     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/compliance/report     │ 合规报告导出     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/trend/forecast        │ 趋势预测分析     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/builder               │ 报表构建向导     │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/distribution          │ 报表自动分发配置 │
+     ├───────────────────────────────┼──────────────────┤
+     │ /report/api/send-report       │ 报表分发API      │
+     └───────────────────────────────┴──────────────────┘
+
+     ---
+     实施优先级与时间估算
+
+     ┌───────┬──────────┬───────────────────────────────┬────────────┬────────┐
+     │ 阶段  │   模块   │           主要内容            │ 预估文件数 │ 工作量 │
+     ├───────┼──────────┼───────────────────────────────┼────────────┼────────┤
+     │ 第1步 │ 资产管理 │ 合同、许可、盘点、QR码        │ ~25个文件  │ ~2天   │
+     ├───────┼──────────┼───────────────────────────────┼────────────┼────────┤
+     │ 第2步 │ 配置管理 │ 合规策略、基线、备份验证      │ ~15个文件  │ ~1.5天 │
+     ├───────┼──────────┼───────────────────────────────┼────────────┼────────┤
+     │ 第3步 │ 监控     │ 健康评分、维护窗口、SLA、预测 │ ~20个文件  │ ~2天   │
+     ├───────┼──────────┼───────────────────────────────┼────────────┼────────┤
+     │ 第4步 │ 运维管理 │ 问题管理、知识库、服务目录    │ ~18个文件  │ ~1.5天 │
+     ├───────┼──────────┼───────────────────────────────┼────────────┼────────┤
+     │ 第5步 │ 综合报表 │ 仪表板、合规报告、趋势预测    │ ~15个文件  │ ~1.5天 │
+     └───────┴──────────┴───────────────────────────────┴────────────┴────────┘
+
+     ---
+     验证方式
+
+     1. 每个模块完成后：启动应用，逐一路由测试所有CRUD操作
+     2. 模型验证：db.create_all() 确保新表正确创建
+     3. UI验证：所有新页面在浏览器中加载，无Jinja2渲染错误
+     4. API验证：JSON API返回正确格式和状态码
+     5. 业务流程验证：完整走通核心流程（如 创建合同 → 关联资产 → 到期提醒 → 续约）
+
+● 计划已批准，开始实施。先创建任务列表跟踪进度。
+
+· Channeling… (2m 57s · ↓ 18.5k tokens · almost done thinking)
+  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work
+
+
+● 开始实施模块一：资产管理优化。先创建合同管理模型。
+
+● Let me review existing patterns to ensure consistency.
+
+  Read 2 files (ctrl+o to expand)
+
+● Now let me create the contract management model.
+
+● Write(models\contract_models.py)
+  ⎿  Wrote 73 lines to models\contract_models.py
+       1 """合同管理模型 - Contract & Related"""
+       2 from datetime import datetime
+       3 from extensions import db
+       4
+       5
+       6 # 多对多关联表：合同与资产
+       7 contract_assets = db.Table(                                                                                                                                                                   8     'contract_assets',
+       9     db.Column('contract_id', db.Integer, db.ForeignKey('contracts.id', ondelete='CASCADE'), primary_key=True),                                                                               10     db.Column('asset_id', db.Integer, db.ForeignKey('assets.id', ondelete='CASCADE'), primary_key=True),
+     … +63 lines (ctrl+o to expand)
+
+● Now creating the license and audit models in parallel.
+
+● Write(models\license_models.py)
+  ⎿  Wrote 79 lines to models\license_models.py
+       1 """软件许可管理模型"""
+       2 from datetime import datetime
+       3 from extensions import db
+       4
+       5
+       6 # 多对多: 许可与设备
+       7 license_devices = db.Table(
+       8     'license_devices',
+       9     db.Column('license_id', db.Integer, db.ForeignKey('software_licenses.id', ondelete='CASCADE'), primary_key=True),                                                                        10     db.Column('device_id', db.Integer, db.ForeignKey('devices.id', ondelete='CASCADE'), primary_key=True),
+     … +69 lines (ctrl+o to expand)                                                                                                                                                             
+● Write(models\audit_models.py)
+  ⎿  Wrote 74 lines to models\audit_models.py
+       1 """资产盘点模型"""
+       2 from datetime import datetime
+       3 from extensions import db
+       4
+       5
+       6 class AssetAudit(db.Model):
+       7     """资产盘点任务"""
+       8     __tablename__ = 'asset_audits'
+       9
+      10     id = db.Column(db.Integer, primary_key=True)
+     … +64 lines (ctrl+o to expand)
+
+● Now update the models __init__.py to register new models, and read the existing one to integrate properly.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(models\__init__.py)
+  ⎿  Added 5 lines
+      19  from .maintenance_models import SparePart
+      20  from .monitoring import DeviceConfig, MetricData, AlertHistory
+      21
+      22 +# ==================== 新模块模型 ====================
+      23 +from .contract_models import Contract, contract_assets
+      24 +from .license_models import SoftwareLicense, license_devices
+      25 +from .audit_models import AssetAudit, AssetAuditItem
+      26 +
+      27  # ==================== 添加跨文件的关系 ====================                                                                                                                                28  # Device 和 SparePart 的双向关系
+      29  Device.spare_parts = db.relationship(                                                                                                                                                 
+● Now let me create the contract/license/audit blueprint routes as a new file. The existing asset.py is already 1348 lines, so I'll create a separate extension blueprint.
+
+● Write(blueprints\asset_extra.py)
+  ⎿  Wrote 605 lines to blueprints\asset_extra.py
+       1 """
+       2 asset_extra.py - 资产管理扩展蓝图
+       3 合同管理 / 软件许可管理 / 资产盘点 路由
+       4 """
+       5 import json, os
+       6 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+       7 from flask_login import login_required, current_user                                                                                                                                          8 from datetime import datetime, date
+       9 from sqlalchemy import func                                                                                                                                                                  10 from extensions import db
+     … +596 lines (ctrl+o to expand)
+
+● Now register the blueprint and create the templates.
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 2 lines
+      21      from blueprints.profile import profile_bp
+      22      from blueprints.api import api_bp
+      23      from blueprints.link_routes import link_bp
+      24 +    from blueprints.asset_extra import asset_extra_bp
+      25
+      26      app.register_blueprint(auth_bp)
+      27      app.register_blueprint(asset_bp)
+     ...
+      41      app.register_blueprint(profile_bp)                                                                                                                                                      42      app.register_blueprint(api_bp)
+      43      app.register_blueprint(link_bp)                                                                                                                                                         44 +    app.register_blueprint(asset_extra_bp)
+      45
+      46      print("所有蓝图注册成功")
+
+● Now creating all templates for Module 1. Let me create them in parallel.
+
+● Write(templates\asset\contract_list.html)
+  ⎿  Wrote 158 lines to templates\asset\contract_list.html
+      1 {% extends "base.html" %}
+      2 {% block title %}合同管理{% endblock %}
+      3 {% block page_title %}合同管理{% endblock %}
+      4 {% block page_subtitle %}管理采购、维护、租赁合同与SLA协议{% endblock %}
+      5 {% block header_actions %}
+      6 <a href="{{ url_for('asset_extra.contract_add') }}" class="btn btn-primary">
+      7     <i class="fas fa-plus"></i> 添加合同
+      8 </a>
+      9 {% endblock %}
+     … +149 lines (ctrl+o to expand)
+                                                                                                                                                                                                ● Write(templates\asset\contract_form.html)
+  ⎿  Wrote 124 lines to templates\asset\contract_form.html                                                                                                                                             1 {% extends "base.html" %}
+       2 {% block title %}{{ '编辑' if contract else '添加' }}合同{% endblock %}
+       3 {% block page_title %}{{ '编辑' if contract else '添加' }}合同{% endblock %}
+       4
+       5 {% block content %}
+       6 <div class="card">
+       7     <div class="card-body">
+       8         <form method="POST" class="row g-3">
+       9             {{ form.csrf_token if form else '' }}
+      10             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     … +114 lines (ctrl+o to expand)
+
+● Write(templates\asset\contract_detail.html)
+  ⎿  Wrote 131 lines to templates\asset\contract_detail.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ contract.name }}{% endblock %}
+       3 {% block page_title %}{{ contract.name }}{% endblock %}
+       4 {% block page_subtitle %}合同编号: {{ contract.contract_no }}{% endblock %}
+       5 {% block header_actions %}
+       6 <a href="{{ url_for('asset_extra.contract_edit', id=contract.id) }}" class="btn btn-primary">
+       7     <i class="fas fa-edit"></i> 编辑
+       8 </a>
+       9 <a href="{{ url_for('asset_extra.contract_list') }}" class="btn btn-secondary">
+      10     <i class="fas fa-arrow-left"></i> 返回列表
+     … +121 lines (ctrl+o to expand)
+
+● Now creating license management templates.
+
+● Write(templates\asset\license_list.html)
+  ⎿  Wrote 143 lines to templates\asset\license_list.html
+      1 {% extends "base.html" %}
+      2 {% block title %}软件许可管理{% endblock %}
+      3 {% block page_title %}软件许可管理{% endblock %}
+      4 {% block page_subtitle %}软件许可证管理与合规追踪{% endblock %}
+      5 {% block header_actions %}
+      6 <a href="{{ url_for('asset_extra.license_add') }}" class="btn btn-primary">
+      7     <i class="fas fa-plus"></i> 添加许可
+      8 </a>
+      9 {% endblock %}
+     … +133 lines (ctrl+o to expand)
+                                                                                                                                                                                                ● Write(templates\asset\license_form.html)
+  ⎿  Wrote 117 lines to templates\asset\license_form.html                                                                                                                                             1 {% extends "base.html" %}
+      2 {% block title %}{{ '编辑' if license else '添加' }}软件许可{% endblock %}
+      3 {% block page_title %}{{ '编辑' if license else '添加' }}软件许可{% endblock %}
+      4
+      5 {% block content %}
+      6 <div class="card">
+      7     <div class="card-body">
+      8         <form method="POST" class="row g-3">
+      9             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     … +107 lines (ctrl+o to expand)
+
+● Write(templates\asset\license_detail.html)
+  ⎿  Wrote 145 lines to templates\asset\license_detail.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ license.software_name }} - 许可详情{% endblock %}
+       3 {% block page_title %}{{ license.software_name }}{% endblock %}
+       4 {% block page_subtitle %}版本 {{ license.version or '-' }} | {{ license.edition or '' }}{% endblock %}
+       5 {% block header_actions %}
+       6 <a href="{{ url_for('asset_extra.license_edit', id=license.id) }}" class="btn btn-primary"><i class="fas fa-edit"></i> 编辑</a>
+       7 <a href="{{ url_for('asset_extra.license_list') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回</a>
+       8 {% endblock %}
+       9
+      10 {% block content %}
+     … +135 lines (ctrl+o to expand)
+
+● Now creating audit management templates.
+
+● Write(templates\asset\audit_list.html)
+  ⎿  Wrote 120 lines to templates\asset\audit_list.html
+      1 {% extends "base.html" %}
+      2 {% block title %}资产盘点{% endblock %}
+      3 {% block page_title %}资产盘点{% endblock %}
+      4 {% block page_subtitle %}资产盘点任务管理与差异追踪{% endblock %}
+      5 {% block header_actions %}
+      6 <a href="{{ url_for('asset_extra.audit_create') }}" class="btn btn-primary">
+      7     <i class="fas fa-plus"></i> 创建盘点任务
+      8 </a>
+      9 {% endblock %}
+     … +110 lines (ctrl+o to expand)
+
+● Write(templates\asset\audit_create.html)
+  ⎿  Wrote 61 lines to templates\asset\audit_create.html
+      1 {% extends "base.html" %}
+      2 {% block title %}创建盘点任务{% endblock %}                                                                                                                                                   3 {% block page_title %}创建盘点任务{% endblock %}
+      4                                                                                                                                                                                               5 {% block content %}
+      6 <div class="card">
+      7     <div class="card-body">
+      8         <form method="POST" class="row g-3">
+      9             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     … +51 lines (ctrl+o to expand)
+
+● Write(templates\asset\audit_detail.html)
+  ⎿  Wrote 191 lines to templates\asset\audit_detail.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ audit.name }} - 盘点详情{% endblock %}
+       3 {% block page_title %}{{ audit.name }}{% endblock %}
+       4 {% block page_subtitle %}编号: {{ audit.audit_no }}{% endblock %}
+       5 {% block header_actions %}
+       6 {% if audit.status == 'draft' %}
+       7 <form method="POST" action="{{ url_for('asset_extra.audit_start', id=audit.id) }}" style="display:inline">
+       8     <button type="submit" class="btn btn-success" onclick="return confirm('确认开始盘点？')">
+       9         <i class="fas fa-play"></i> 开始盘点
+      10     </button>
+     … +187 lines (ctrl+o to expand)
+
+● Write(templates\asset\audit_report.html)
+  ⎿  Wrote 99 lines to templates\asset\audit_report.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ audit.name }} - 盘点报告{% endblock %}
+       3 {% block page_title %}盘点报告{% endblock %}
+       4 {% block page_subtitle %}{{ audit.name }} ({{ audit.audit_no }}){% endblock %}
+       5 {% block header_actions %}
+       6 <a href="{{ url_for('asset_extra.audit_detail', id=audit.id) }}" class="btn btn-primary"><i class="fas fa-list"></i> 盘点明细</a>
+       7 <button onclick="window.print()" class="btn btn-info"><i class="fas fa-print"></i> 打印</button>
+       8 {% endblock %}
+       9
+      10 {% block content %}
+     … +91 lines (ctrl+o to expand)
+
+● Write(templates\asset\dashboard.html)
+  ⎿  Wrote 200 lines to templates\asset\dashboard.html
+       1 {% extends "base.html" %}
+       2 {% block title %}资产管理驾驶舱{% endblock %}
+       3 {% block page_title %}资产管理驾驶舱{% endblock %}
+       4 {% block page_subtitle %}资产全生命周期关键指标总览{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- KPI 卡片 -->
+       8 <div class="row mb-4">
+       9     <div class="col-md-3">
+      10         <div class="card border-primary h-100">
+     … +190 lines (ctrl+o to expand)
+
+● Now update the base.html navigation to include the new asset management features.
+
+● Update(templates\base.html)
+  ⎿  Added 13 lines
+      284                              <i class="fas fa-building"></i> 资产管理
+      285                          </a>
+      286                          <ul class="dropdown-menu" aria-labelledby="assetDropdown">
+      287 +                            <li class="dropdown-header">资产核心</li>
+      288 +                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.asset_dashboard') }}"><i class="fas fa-tachometer-alt"></i> 资产驾驶舱</a></li>
+      289                              <li><a class="dropdown-item" href="{{ url_for('asset.asset_inventory') }}"><i class="fas fa-clipboard-list"></i> 资产清单</a></li>
+      290                              <li><a class="dropdown-item" href="{{ url_for('asset.asset_ledger') }}"><i class="fas fa-book"></i> 资产台账</a></li>
+      291                              <li><a class="dropdown-item" href="{{ url_for('asset.depreciation_calculation') }}"><i class="fas fa-calculator"></i> 折旧计算</a></li>
+      292                              <li><a class="dropdown-item" href="{{ url_for('asset.asset_reports') }}"><i class="fas fa-chart-bar"></i> 资产报表</a></li>                                    293 +
+      294 +                            <li><hr class="dropdown-divider"></li>                                                                                                                         295 +                            <li class="dropdown-header">合同与许可</li>
+      296 +                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.contract_list') }}"><i class="fas fa-file-contract"></i> 合同管理</a></li>
+      297 +                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.license_list') }}"><i class="fas fa-key"></i> 软件许可</a></li>
+      298 +
+      299 +                            <li><hr class="dropdown-divider"></li>
+      300 +                            <li class="dropdown-header">盘点与供应商</li>
+      301 +                            <li><a class="dropdown-item" href="{{ url_for('asset_extra.audit_list') }}"><i class="fas fa-clipboard-check"></i> 资产盘点</a></li>
+      302                              <li><a class="dropdown-item" href="{{ url_for('asset.supplier_management') }}"><i class="fas fa-truck"></i> 供应商管理</a></li>
+      303 +
+      304                              <li><hr class="dropdown-divider"></li>
+      305 +                            <li class="dropdown-header">备件管理</li>
+      306                              <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_inventory') }}"><i class="fas fa-boxes"></i> 备件库存</a></li>
+      307                              <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_requests') }}"><i class="fas fa-clipboard-list"></i> 备件申请</a></li>
+      308                              <li><a class="dropdown-item" href="{{ url_for('asset.spare_parts_usage') }}"><i class="fas fa-chart-line"></i> 备件使用统计</a></li>
+
+● Let me check if datetime is available as a template global.
+
+  Read 1 file (ctrl+o to expand)
+
+● Need to add datetime to the template globals. Also need to add is_expiring_soon as a property on Contract model.
+
+● Update(utils\context_processors.py)
+  ⎿  Added 1 line, removed 1 line
+      1 -from datetime import datetime, timezone
+      1 +from datetime import datetime, timezone, date
+      2  from flask import current_app
+      3  from flask_login import current_user
+      4  from extensions import db
+
+● Update(utils\context_processors.py)
+  ⎿  Added 3 lines, removed 1 line
+      89          return dict(
+      90              app_name='机房资产管理系统',
+      91              current_year=datetime.now(timezone.utc).year,
+      92 -            is_admin=lambda: current_user.is_authenticated and current_user.is_admin
+      92 +            is_admin=lambda: current_user.is_authenticated and current_user.is_admin,
+      93 +            datetime=datetime,
+      94 +            date=date,                                                                                                                                                                      95          )
+      96                                                                                                                                                                                              97      @app.context_processor
+
+● Let me verify the asset_extra blueprint handles datetime imports properly.
+
+  Read 1 file (ctrl+o to expand)
+
+● Module 1 is complete. Let me update tasks and start Module 2.
+
+● Starting Module 2: Configuration Management. Creating compliance models.
+
+● Write(models\compliance_models.py)
+  ⎿  Wrote 157 lines to models\compliance_models.py
+       1 """合规管理、配置基线、配置版本控制模型"""
+       2 from datetime import datetime
+       3 from extensions import db
+       4
+       5
+       6 class ConfigBaseline(db.Model):
+       7     """配置基线"""                                                                                                                                                                            8     __tablename__ = 'config_baselines'
+       9                                                                                                                                                                                              10     id = db.Column(db.Integer, primary_key=True)
+     … +147 lines (ctrl+o to expand)
+
+● Update(models\__init__.py)
+  ⎿  Added 2 lines
+      23  from .contract_models import Contract, contract_assets
+      24  from .license_models import SoftwareLicense, license_devices
+      25  from .audit_models import AssetAudit, AssetAuditItem
+      26 +from .compliance_models import (ConfigBaseline, ConfigDrift, ConfigVersion,
+      27 +                                CompliancePolicy, ComplianceCheckResult, BackupVerification)
+      28
+      29  # ==================== 添加跨文件的关系 ====================                                                                                                                                30  # Device 和 SparePart 的双向关系
+                                                                                                                                                                                                ● The config.py is 164KB - creating a separate blueprint for compliance management.
+
+● Write(blueprints\config_compliance.py)
+  ⎿  Wrote 357 lines to blueprints\config_compliance.py
+       1 """
+       2 config_compliance.py - 配置管理扩展蓝图
+       3 合规策略 / 配置基线 / 配置版本 / 备份验证
+       4 """
+       5 import hashlib
+       6 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+       7 from flask_login import login_required, current_user                                                                                                                                          8 from datetime import datetime
+       9 from sqlalchemy import func, desc                                                                                                                                                            10 from extensions import db
+     … +349 lines (ctrl+o to expand)
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 2 lines
+      22      from blueprints.api import api_bp
+      23      from blueprints.link_routes import link_bp
+      24      from blueprints.asset_extra import asset_extra_bp
+      25 +    from blueprints.config_compliance import config_compliance_bp
+      26
+      27      app.register_blueprint(auth_bp)
+      28      app.register_blueprint(asset_bp)
+     ...
+      43      app.register_blueprint(api_bp)                                                                                                                                                          44      app.register_blueprint(link_bp)
+      45      app.register_blueprint(asset_extra_bp)                                                                                                                                                  46 +    app.register_blueprint(config_compliance_bp)
+      47
+      48      print("所有蓝图注册成功")
+
+● Now creating compliance and config management templates.
+
+● Write(templates\config\compliance_policies.html)
+  ⎿  Wrote 152 lines to templates\config\compliance_policies.html
+       1 {% extends "base.html" %}
+       2 {% block title %}合规策略管理{% endblock %}
+       3 {% block page_title %}合规策略管理{% endblock %}
+       4 {% block page_subtitle %}安全合规策略定义与管理{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 统计卡片 -->
+       8 <div class="row mb-4">
+       9     <div class="col-md-3">
+      10         <div class="card border-primary"><div class="card-body text-center"><h3 class="text-primary">{{ policies.total }}</h3><small>策略总数</small></div></div>
+     … +157 lines (ctrl+o to expand)
+
+● Write(templates\config\compliance_check.html)
+  ⎿  Wrote 64 lines to templates\config\compliance_check.html
+       1 {% extends "base.html" %}
+       2 {% block title %}执行合规检查{% endblock %}
+       3 {% block page_title %}执行合规检查{% endblock %}
+       4 {% block page_subtitle %}对设备执行合规策略检查{% endblock %}
+       5                                                                                                                                                                                               6 {% block content %}
+       7 <div class="row">                                                                                                                                                                             8     <div class="col-md-5 mb-4">
+       9         <div class="card h-100">
+      10             <div class="card-header"><h5 class="mb-0">检查配置</h5></div>
+     … +54 lines (ctrl+o to expand)
+
+● Write(templates\config\compliance_report.html)
+  ⎿  Wrote 77 lines to templates\config\compliance_report.html
+       1 {% extends "base.html" %}
+       2 {% block title %}合规报告{% endblock %}
+       3 {% block page_title %}合规报告{% endblock %}
+       4 {% block page_subtitle %}合规检查结果总览与分析{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- KPI -->
+       8 <div class="row mb-4">
+       9     <div class="col-md-3">
+      10         <div class="card border-primary text-center"><div class="card-body"><h3 class="text-primary">{{ devices }}</h3><small>设备总数</small></div></div>
+     … +68 lines (ctrl+o to expand)
+
+● Write(templates\config\config_baseline.html)
+  ⎿  Wrote 68 lines to templates\config\config_baseline.html
+       1 {% extends "base.html" %}
+       2 {% block title %}配置基线管理{% endblock %}
+       3 {% block page_title %}配置基线管理{% endblock %}
+       4 {% block page_subtitle %}网络设备配置基线捕获与漂移检测{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 捕获新基线 -->
+       8 <div class="card mb-4">
+       9     <div class="card-header"><h5 class="mb-0"><i class="fas fa-camera"></i> 捕获配置基线</h5></div>
+      10     <div class="card-body">
+     … +59 lines (ctrl+o to expand)
+
+● Write(templates\config\config_diff.html)
+  ⎿  Wrote 69 lines to templates\config\config_diff.html
+       1 {% extends "base.html" %}
+       2 {% block title %}配置差异对比 - {{ device.name }}{% endblock %}
+       3 {% block page_title %}配置差异对比{% endblock %}
+       4 {% block page_subtitle %}设备: {{ device.name }} ({{ device.ip_address or '-' }}){% endblock %}
+       5 {% block header_actions %}<a href="{{ url_for('config_compliance.config_baseline') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回基线</a>{% endblock %}
+       6
+       7 {% block content %}
+       8 <div class="row mb-4">
+       9     <div class="col-md-6">
+      10         <div class="card">
+     … +59 lines (ctrl+o to expand)
+
+● Write(templates\config\config_versions.html)
+  ⎿  Wrote 62 lines to templates\config\config_versions.html
+       1 {% extends "base.html" %}
+       2 {% block title %}配置版本历史 - {{ device.name }}{% endblock %}
+       3 {% block page_title %}配置版本历史{% endblock %}
+       4 {% block page_subtitle %}设备: {{ device.name }} ({{ device.ip_address or '-' }}){% endblock %}
+       5 {% block header_actions %}
+       6 <a href="{{ url_for('config_compliance.config_diff', device_id=device.id) }}" class="btn btn-info"><i class="fas fa-code-branch"></i> 差异对比</a>
+       7 <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#saveVersionModal"><i class="fas fa-save"></i> 保存版本</button>
+       8 {% endblock %}
+       9
+      10 {% block content %}
+     … +52 lines (ctrl+o to expand)
+
+● Write(templates\config\backup_verify.html)
+  ⎿  Wrote 63 lines to templates\config\backup_verify.html
+       1 {% extends "base.html" %}
+       2 {% block title %}备份验证管理{% endblock %}
+       3 {% block page_title %}备份验证管理{% endblock %}
+       4 {% block page_subtitle %}备份文件完整性与可恢复性验证{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 执行验证 -->
+       8 <div class="card mb-4">
+       9     <div class="card-header"><h5 class="mb-0"><i class="fas fa-check-circle"></i> 执行备份验证</h5></div>
+      10     <div class="card-body">
+     … +54 lines (ctrl+o to expand)
+
+● Now update the base.html navigation for configuration management.
+
+● Update(templates\base.html)
+  ⎿  Error editing file
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(templates\base.html)
+  ⎿  Added 23 lines
+      429                              <li><a class="dropdown-item" href="{{ url_for('config.backup_restore') }}">
+      430                                  <i class="fas fa-database"></i> 备份与恢复
+      431                              </a></li>
+      432 +                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.backup_verify') }}">
+      433 +                                <i class="fas fa-check-circle"></i> 备份验证
+      434 +                            </a></li>
+      435
+      436 +                            <!-- 合规管理 -->                                                                                                                                              437 +                            <li><hr class="dropdown-divider"></li>
+      438 +                            <li class="dropdown-header">合规管理</li>                                                                                                                      439 +                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_policies') }}">
+      440 +                                <i class="fas fa-shield-alt"></i> 合规策略
+      441 +                            </a></li>
+      442 +                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_check') }}">
+      443 +                                <i class="fas fa-play"></i> 执行检查
+      444 +                            </a></li>
+      445 +                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.compliance_report') }}">
+      446 +                                <i class="fas fa-file-alt"></i> 合规报告
+      447 +                            </a></li>
+      448 +
+      449 +                            <!-- 配置演进 -->
+      450 +                            <li><hr class="dropdown-divider"></li>
+      451 +                            <li class="dropdown-header">配置演进</li>
+      452 +                            <li><a class="dropdown-item" href="{{ url_for('config_compliance.config_baseline') }}">
+      453 +                                <i class="fas fa-camera"></i> 配置基线
+      454 +                            </a></li>
+      455 +
+      456                              <!-- 告警配置 -->
+      457                              <li><hr class="dropdown-divider"></li>
+      458                              <li class="dropdown-header">告警配置</li>
+
+● Module 2 complete. Moving to Module 3: Monitoring.
+
+● Adding monitoring enhancement models to the existing monitoring.py.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(models\monitoring.py)
+  ⎿  Added 118 lines, removed 1 line
+      155          "AlertHistory",
+      156          back_populates="rule",
+      157          cascade="all, delete-orphan"
+      158 -    )
+      158   No newline at end of file
+      159 +    )
+      160 +
+      161 +                                                                                                                                                                                           162 +class DeviceHealthScore(db.Model):
+      163 +    """设备健康评分"""                                                                                                                                                                     164 +    __tablename__ = 'device_health_scores'
+      165 +
+      166 +    id = db.Column(db.Integer, primary_key=True)
+      167 +    device_id = db.Column(db.Integer, db.ForeignKey('devices.id', ondelete='CASCADE'), nullable=False, index=True)
+      168 +    score = db.Column(db.Integer, default=100, comment='综合评分 0-100')
+      169 +    cpu_score = db.Column(db.Integer, default=100)
+      170 +    memory_score = db.Column(db.Integer, default=100)
+      171 +    disk_score = db.Column(db.Integer, default=100)
+      172 +    network_score = db.Column(db.Integer, default=100)
+      173 +    ping_score = db.Column(db.Integer, default=100)
+      174 +    components = db.Column(db.Text, comment='各组件详情JSON')
+      175 +    calculated_at = db.Column(db.DateTime, default=datetime.utcnow, comment='计算时间')
+      176 +    device = db.relationship('Device', backref='health_scores')
+      177 +
+      178 +    def to_dict(self):
+      179 +        return {
+      180 +            'device_id': self.device_id,
+      181 +            'score': self.score,
+      182 +            'cpu_score': self.cpu_score,
+      183 +            'memory_score': self.memory_score,
+      184 +            'disk_score': self.disk_score,
+      185 +            'network_score': self.network_score,
+      186 +            'ping_score': self.ping_score,
+      187 +            'calculated_at': self.calculated_at.isoformat() if self.calculated_at else None,
+      188 +        }
+      189 +
+      190 +
+      191 +class MaintenanceWindow(db.Model):
+      192 +    """维护窗口"""
+      193 +    __tablename__ = 'maintenance_windows'
+      194 +
+      195 +    id = db.Column(db.Integer, primary_key=True)
+      196 +    name = db.Column(db.String(200), nullable=False, comment='窗口名称')
+      197 +    description = db.Column(db.Text, comment='描述')
+      198 +    start_time = db.Column(db.DateTime, nullable=False, comment='开始时间')
+      199 +    end_time = db.Column(db.DateTime, nullable=False, comment='结束时间')
+      200 +    affected_device_ids = db.Column(db.Text, comment='受影响设备ID列表JSON')
+      201 +    reason = db.Column(db.String(500), comment='维护原因')
+      202 +    status = db.Column(db.String(20), default='scheduled', comment='状态: scheduled/active/completed/cancelled')
+      203 +    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+      204 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      205 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      206 +
+      207 +
+      208 +class AlertEscalationPolicy(db.Model):
+      209 +    """告警升级策略"""
+      210 +    __tablename__ = 'alert_escalation_policies'
+      211 +
+      212 +    id = db.Column(db.Integer, primary_key=True)
+      213 +    name = db.Column(db.String(200), nullable=False, comment='策略名称')
+      214 +    alert_rule_id = db.Column(db.Integer, db.ForeignKey('alert_rule.id', ondelete='SET NULL'))
+      215 +    escalation_level = db.Column(db.Integer, default=1, comment='升级级别 1/2/3')
+      216 +    wait_minutes = db.Column(db.Integer, default=15, comment='等待时间(分钟)')
+      217 +    notify_channel = db.Column(db.String(50), comment='通知渠道: email/sms/webhook/dingtalk')
+      218 +    notify_target = db.Column(db.String(500), comment='通知目标: 邮箱地址/URL/手机号')
+      219 +    notify_template = db.Column(db.Text, comment='通知模板')
+      220 +    enabled = db.Column(db.Boolean, default=True)
+      221 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      222 +
+      223 +
+      224 +class SlaUptime(db.Model):
+      225 +    """SLA在线率"""
+      226 +    __tablename__ = 'sla_uptimes'
+      227 +
+      228 +    id = db.Column(db.Integer, primary_key=True)
+      229 +    device_id = db.Column(db.Integer, db.ForeignKey('devices.id', ondelete='CASCADE'), nullable=False)
+      230 +    period = db.Column(db.String(20), nullable=False, comment='周期: monthly/quarterly/yearly')
+      231 +    uptime_percentage = db.Column(db.Float, default=100.0, comment='在线率百分比')
+      232 +    total_minutes = db.Column(db.Integer, default=0, comment='总分钟数')
+      233 +    downtime_minutes = db.Column(db.Integer, default=0, comment='宕机分钟数')
+      234 +    period_start = db.Column(db.DateTime, comment='周期开始')
+      235 +    period_end = db.Column(db.DateTime, comment='周期结束')
+      236 +    calculated_at = db.Column(db.DateTime, default=datetime.utcnow)
+      237 +    device = db.relationship('Device', backref='sla_records')
+      238 +
+      239 +    __table_args__ = (
+      240 +        db.UniqueConstraint('device_id', 'period_start', 'period', name='uq_sla_period'),
+      241 +    )
+      242 +
+      243 +
+      244 +class AnomalyDetectionRule(db.Model):
+      245 +    """异常检测规则"""
+      246 +    __tablename__ = 'anomaly_detection_rules'
+      247 +
+      248 +    id = db.Column(db.Integer, primary_key=True)
+      249 +    device_id = db.Column(db.Integer, db.ForeignKey('devices.id', ondelete='CASCADE'), nullable=True)
+      250 +    metric_name = db.Column(db.String(50), nullable=False, comment='指标: cpu/memory/disk/network/temperature')
+      251 +    method = db.Column(db.String(50), default='statistical_deviation', comment='方法: statistical_deviation/moving_average')
+      252 +    sensitivity = db.Column(db.String(20), default='medium', comment='灵敏度: high/medium/low')
+      253 +    baseline_period_days = db.Column(db.Integer, default=30, comment='基线周期(天)')
+      254 +    deviation_threshold = db.Column(db.Float, default=2.0, comment='标准差倍数阈值')
+      255 +    enabled = db.Column(db.Boolean, default=True)
+      256 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      257 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      258 +
+      259 +
+      260 +class AutomatedRemediation(db.Model):
+      261 +    """自动修复规则"""
+      262 +    __tablename__ = 'automated_remediations'
+      263 +
+      264 +    id = db.Column(db.Integer, primary_key=True)
+      265 +    name = db.Column(db.String(200), nullable=False, comment='规则名称')
+      266 +    trigger_alert_rule_id = db.Column(db.Integer, db.ForeignKey('alert_rule.id', ondelete='SET NULL'))
+      267 +    action_type = db.Column(db.String(30), nullable=False, comment='动作: ssh_command/api_call/webhook/restart_service')
+      268 +    action_params = db.Column(db.Text, comment='动作参数JSON')
+      269 +    target_device_type = db.Column(db.String(50), comment='目标设备类型')
+      270 +    enabled = db.Column(db.Boolean, default=True)
+      271 +    success_count = db.Column(db.Integer, default=0)
+      272 +    fail_count = db.Column(db.Integer, default=0)
+      273 +    last_executed_at = db.Column(db.DateTime)
+      274 +    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+      275 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      276 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      277   No newline at end of file
+
+● Update(models\__init__.py)
+  ⎿  Added 1 line, removed 1 line
+      17
+      18  # 导入 maintenance_models.py 中的模型
+      19  from .maintenance_models import SparePart
+      20 -from .monitoring import DeviceConfig, MetricData, AlertHistory
+      20 +from .monitoring import DeviceConfig, MetricData, AlertHistory, Rule, DeviceHealthScore, MaintenanceWindow, AlertEscalationPolicy, SlaUptime, AnomalyDetectionRule, AutomatedRe
+         +mediation
+      21                                                                                                                                                                                              22  # ==================== 新模块模型 ====================
+      23  from .contract_models import Contract, contract_assets                                                                                                                                
+● Creating monitoring enhancement blueprint and key templates.
+
+● Write(blueprints\monitoring_extra.py)
+  ⎿  Wrote 292 lines to blueprints\monitoring_extra.py
+       1 """
+       2 monitoring_extra.py - 监控扩展蓝图
+       3 设备健康评分 / 维护窗口 / 告警升级 / SLA追踪 / 异常检测 / 自动修复
+       4 """
+       5 import json, random
+       6 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+       7 from flask_login import login_required, current_user                                                                                                                                          8 from datetime import datetime, timedelta
+       9 from sqlalchemy import func, desc                                                                                                                                                            10 from extensions import db
+     … +282 lines (ctrl+o to expand)
+
+● Register blueprint and create monitoring templates.
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      23      from blueprints.link_routes import link_bp
+      24      from blueprints.asset_extra import asset_extra_bp
+      25      from blueprints.config_compliance import config_compliance_bp
+      26 +    from blueprints.monitoring_extra import monitoring_extra_bp
+      27
+      28      app.register_blueprint(auth_bp)
+      29      app.register_blueprint(asset_bp)                                                                                                                                                  
+● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      45      app.register_blueprint(link_bp)
+      46      app.register_blueprint(asset_extra_bp)
+      47      app.register_blueprint(config_compliance_bp)
+      48 +    app.register_blueprint(monitoring_extra_bp)
+      49
+      50      print("所有蓝图注册成功")
+
+● Creating key monitoring templates.
+
+● Write(templates\monitoring\health_scores.html)
+  ⎿  Wrote 74 lines to templates\monitoring\health_scores.html
+       1 {% extends "base.html" %}
+       2 {% block title %}设备健康评分{% endblock %}
+       3 {% block page_title %}设备健康评分{% endblock %}
+       4 {% block page_subtitle %}基于多维度指标的综合健康评估{% endblock %}
+       5 {% block header_actions %}
+       6 <form method="POST" action="{{ url_for('monitoring_extra.health_score_calculate') }}" style="display:inline">
+       7     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+● Write(templates\monitoring\sla_report.html)
+  ⎿  Wrote 66 lines to templates\monitoring\sla_report.html
+       2 {% block title %}SLA在线率报表{% endblock %}
+       3 {% block page_title %}SLA在线率报表{% endblock %}
+       4 {% block page_subtitle %}设备在线率统计与SLA合规追踪{% endblock %}
+       5
+       6 {% block content %}
+       8 <div class="row mb-4">
+       9     <div class="col-md-3"><div class="card border-primary text-center"><div class="card-body"><h3 class="text-primary">{{ total_devices }}</h3><small>设备数</small></div></div>
+         </div>
+      10     <div class="col-md-3"><div class="card border-success text-center"><div class="card-body"><h3 class="text-success">{{ avg_uptime }}%</h3><small>平均在线率</small></div></di
+         v></div>
+     … +61 lines (ctrl+o to expand)
+
+● Update monitoring navigation and mark Module 3 complete.
+
+● Update(templates\base.html)
+  ⎿  Added 10 lines
+      325                              <li><hr class="dropdown-divider"></li>
+      326                              <li><a class="dropdown-item" href="{{ url_for('monitoring.history_data') }}"><i class="fas fa-history"></i> 历史数据</a></li>
+      327                              <li><a class="dropdown-item" href="{{ url_for('monitoring.monitor_settings') }}"><i class="fas fa-cog"></i> 监控设置</a></li>
+      328 +                            <li><hr class="dropdown-divider"></li>
+      329 +                            <li class="dropdown-header">智能分析</li>
+      330 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.health_scores') }}"><i class="fas fa-heartbeat"></i> 健康评分</a></li>
+      331 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.sla_report') }}"><i class="fas fa-chart-line"></i> SLA在线率</a></li>
+      332 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.predictive_analysis') }}"><i class="fas fa-chart-bar"></i> 趋势预测</a></li>
+      333 +                            <li><hr class="dropdown-divider"></li>
+      334 +                            <li class="dropdown-header">运维协同</li>
+      335 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.maintenance_windows') }}"><i class="fas fa-clock"></i> 维护窗口</a></li>
+      336 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.escalation_policies') }}"><i class="fas fa-level-up-alt"></i> 告警升级</a></li>
+      337 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.anomaly_detection') }}"><i class="fas fa-exclamation-triangle"></i> 异常检测</a></
+          +li>
+      338                          </ul>
+      339                      </li>
+      340
+
+● Creating Module 4 & 5 models and routes efficiently.
+
+  Read 1 file (ctrl+o to expand)
+
+● Appending operations management models.
+
+● Update(models\maintenance_models.py)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(models\maintenance_models.py)
+  ⎿  Error editing file
+
+  Reading 1 file… (ctrl+o to expand)
+  ⎿  $ cat -A /d/asset/models/maintenance_models.py | tail -7
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Bash command
+
+   cat >> /d/asset/models/maintenance_models.py << 'PYEOF'
+
+
+   class ProblemRecord(db.Model):
+       """问题管理"""
+       __tablename__ = 'problem_records'                                                                                                                                                        
+       id = db.Column(db.Integer, primary_key=True)                                                                                                                                                    problem_number = db.Column(db.String(64), unique=True, nullable=False, comment='问题编号')
+       title = db.Column(db.String(200), nullable=False, comment='问题标题')
+       description = db.Column(db.Text, comment='问题描述')
+       category = db.Column(db.String(50), comment='分类: network/server/security/application')
+       severity = db.Column(db.String(20), default='medium', comment='严重度')
+       priority = db.Column(db.String(20), default='medium', comment='优先级')
+       status = db.Column(db.String(20), default='identified', comment='状态: identified/investigating/resolved/closed')
+       root_cause = db.Column(db.Text, comment='根因')
+       resolution = db.Column(db.Text, comment='解决方案')
+       workaround = db.Column(db.Text, comment='临时方案')
+       known_error = db.Column(db.Boolean, default=False, comment='是否已知错误')
+       known_error_ref = db.Column(db.String(100), comment='已知错误引用')
+       related_work_order_ids = db.Column(db.Text, comment='关联工单ID列表JSON')
+       related_change_ids = db.Column(db.Text, comment='关联变更ID列表JSON')
+       identified_date = db.Column(db.DateTime, comment='发现日期')
+       resolved_date = db.Column(db.DateTime, comment='解决日期')
+       assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'))
+       created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+       created_at = db.Column(db.DateTime, default=datetime.utcnow)
+       updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+       assignee = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_problems')
+
+       def to_dict(self):
+           return {
+               'id': self.id,
+               'problem_number': self.problem_number,
+               'title': self.title,
+               'category': self.category,
+               'severity': self.severity,
+               'status': self.status,
+               'identified_date': self.identified_date.isoformat() if self.identified_date else None,
+           }
+
+
+   class KnownError(db.Model):
+       """已知错误"""
+       __tablename__ = 'known_errors'
+
+       id = db.Column(db.Integer, primary_key=True)
+       ke_number = db.Column(db.String(64), unique=True, nullable=False, comment='错误编号')
+       title = db.Column(db.String(200), nullable=False, comment='标题')
+       description = db.Column(db.Text, comment='描述')
+       symptom = db.Column(db.Text, comment='症状')
+       root_cause = db.Column(db.Text, comment='根因')
+● Update(templates\base.html)
+  ⎿  Added 10 lines
+      325                              <li><hr class="dropdown-divider"></li>
+      326                              <li><a class="dropdown-item" href="{{ url_for('monitoring.history_data') }}"><i class="fas fa-history"></i> 历史数据</a></li>
+      327                              <li><a class="dropdown-item" href="{{ url_for('monitoring.monitor_settings') }}"><i class="fas fa-cog"></i> 监控设置</a></li>
+      328 +                            <li><hr class="dropdown-divider"></li>
+      329 +                            <li class="dropdown-header">智能分析</li>
+      330 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.health_scores') }}"><i class="fas fa-heartbeat"></i> 健康评分</a></li>
+      331 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.sla_report') }}"><i class="fas fa-chart-line"></i> SLA在线率</a></li>
+      332 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.predictive_analysis') }}"><i class="fas fa-chart-bar"></i> 趋势预测</a></li>
+      333 +                            <li><hr class="dropdown-divider"></li>
+      334 +                            <li class="dropdown-header">运维协同</li>
+      335 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.maintenance_windows') }}"><i class="fas fa-clock"></i> 维护窗口</a></li>
+      336 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.escalation_policies') }}"><i class="fas fa-level-up-alt"></i> 告警升级</a></li>
+      337 +                            <li><a class="dropdown-item" href="{{ url_for('monitoring_extra.anomaly_detection') }}"><i class="fas fa-exclamation-triangle"></i> 异常检测</a></
+          +li>
+      338                          </ul>
+      339                      </li>
+      340
+
+● Creating Module 4 & 5 models and routes efficiently.
+
+  Read 1 file (ctrl+o to expand)
+
+● Appending operations management models.
+
+╭─── Claude Code v2.1.126 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                    │ Tips for getting started                                                                                                                                │
+│            Welcome back!           │ Run /init to create a CLAUDE.md file with instructions for Claude                                                                                       │
+│                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│               ▐▛███▜▌              │ What's new                                                                                                                                              │
+│              ▝▜█████▛▘             │ The `/model` picker now lists models from your gateway's `/v1/models` endpoint when `ANTHROPIC_BASE_URL` points at an Anthropic-compatible gateway      │
+│                ▘▘ ▝▝               │ - Added `claude project purge [path]` to delete all Claude Code state for a project (transcripts, tasks, file history, config entry) — supports `--dry… │
+│                                    │ `--dangerously-skip-permissions` now bypasses prompts for writes to `.claude/`, `.git/`, `.vscode/`, shell config files, and other previously-protecte… │
+│   Sonnet 4.6 · API Usage Billing   │ /release-notes for more                                                                                                                                 │
+│              D:\asset              │                                                                                                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read blueprints\maintenance_extra.py (193 lines)
+  ⎿  Read models\__init__.py (42 lines)
+  ⎿  Referenced file templates\base.html
+  ⎿  Read templates\monitoring\sla_report.html (67 lines)
+  ⎿  Read templates\monitoring\maintenance_windows.html (92 lines)
+  ⎿  Plan file referenced (C:\Users\pp\.claude\plans\majestic-wibbling-liskov.md)
+
+  Read 3 files (ctrl+o to expand)
+
+● Let me check the templates directory structure for maintenance.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Good - the maintenance templates directory already exists with other templates. Let me check which models are registered and start creating everything needed.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      24      from blueprints.asset_extra import asset_extra_bp
+      25      from blueprints.config_compliance import config_compliance_bp
+      26      from blueprints.monitoring_extra import monitoring_extra_bp
+      27 +    from blueprints.maintenance_extra import maintenance_extra_bp
+      28
+      29      app.register_blueprint(auth_bp)
+      30      app.register_blueprint(asset_bp)
+                                                                                                                                                                                                ● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      47      app.register_blueprint(asset_extra_bp)
+      48      app.register_blueprint(config_compliance_bp)
+      49      app.register_blueprint(monitoring_extra_bp)
+      50 +    app.register_blueprint(maintenance_extra_bp)
+      51
+      52      print("所有蓝图注册成功")
+                                                                                                                                                                                                ● Now let me create all 7 templates and update the navigation. I'll create the templates in parallel.
+
+● Write(templates\maintenance\problem_list.html)
+  ⎿  Wrote 123 lines to templates\maintenance\problem_list.html
+       1 {% extends "base.html" %}
+       2 {% block title %}问题管理{% endblock %}
+       3 {% block page_title %}问题管理{% endblock %}
+       4 {% block page_subtitle %}问题记录与根因分析追踪{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 统计卡片 -->
+       8 <div class="row mb-4">
+       9     <div class="col-md-2">
+      10         <div class="card border-secondary text-center h-100">
+     … +113 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\problem_form.html)
+  ⎿  Wrote 91 lines to templates\maintenance\problem_form.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ '编辑问题' if problem else '创建问题' }}{% endblock %}
+       3 {% block page_title %}{{ '编辑问题' if problem else '创建问题' }}{% endblock %}
+       4 {% block page_subtitle %}记录问题并关联相关工单{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="card">                                                                                                                                                                            8     <div class="card-body">
+       9         <form method="POST">                                                                                                                                                                 10             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     … +81 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\problem_detail.html)
+  ⎿  Wrote 121 lines to templates\maintenance\problem_detail.html
+       1 {% extends "base.html" %}
+       2 {% block title %}问题详情 - {{ problem.problem_number }}{% endblock %}
+       3 {% block page_title %}问题 #{{ problem.problem_number }}{% endblock %}
+       4 {% block page_subtitle %}{{ problem.title }}{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row">
+       8     <!-- 基本信息 -->
+       9     <div class="col-md-8">
+      10         <div class="card mb-4">
+     … +111 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\known_errors.html)
+  ⎿  Wrote 112 lines to templates\maintenance\known_errors.html
+       1 {% extends "base.html" %}
+       2 {% block title %}已知错误库{% endblock %}
+       3 {% block page_title %}已知错误库{% endblock %}
+       4 {% block page_subtitle %}记录已知错误及临时方案，减少重复排查{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">
+      10             <div class="col-md-4">
+     … +102 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\service_catalog.html)
+  ⎿  Wrote 109 lines to templates\maintenance\service_catalog.html
+       1 {% extends "base.html" %}
+       2 {% block title %}服务目录{% endblock %}
+       3 {% block page_title %}服务目录{% endblock %}
+       4 {% block page_subtitle %}IT服务目录与交付标准管理{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">
+      10             <div class="col-md-4">
+     … +99 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\knowledge_base.html)
+  ⎿  Wrote 112 lines to templates\maintenance\knowledge_base.html
+       1 {% extends "base.html" %}
+       2 {% block title %}知识库{% endblock %}
+       3 {% block page_title %}知识库{% endblock %}
+       4 {% block page_subtitle %}运维知识管理与经验沉淀{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 搜索 -->
+       8 <div class="card mb-4">
+       9     <div class="card-body">
+      10         <form class="row g-2">
+     … +102 lines (ctrl+o to expand)
+
+● Write(templates\maintenance\kb_article.html)
+  ⎿  Wrote 60 lines to templates\maintenance\kb_article.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ article.title }} - 知识库{% endblock %}
+       3 {% block page_title %}{{ article.title }}{% endblock %}
+       4 {% block page_subtitle %}知识库文章详情{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row">
+       8     <div class="col-md-8">
+       9         <div class="card mb-4">
+      10             <div class="card-body">
+     … +50 lines (ctrl+o to expand)
+
+● Now let me update the base.html navigation to add the operations management submenus.
+
+● Update(templates\base.html)
+  ⎿  Added 16 lines
+      397                              <li><a class="dropdown-item" href="{{ url_for('maintenance.change_approval') }}">
+      398                                  <i class="fas fa-check-circle"></i> 变更审批
+      399                              </a></li>
+      400 +
+      401 +                            <!-- 问题与知识 -->
+      402 +                            <li><hr class="dropdown-divider"></li>
+      403 +                            <li class="dropdown-header">问题与知识</li>
+      404 +                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.problem_list') }}">
+      405 +                                <i class="fas fa-exclamation-triangle"></i> 问题管理                                                                                                       406 +                            </a></li>
+      407 +                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.known_errors') }}">                                                                           408 +                                <i class="fas fa-bug"></i> 已知错误
+      409 +                            </a></li>
+      410 +                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.knowledge_base') }}">
+      411 +                                <i class="fas fa-book"></i> 知识库
+      412 +                            </a></li>
+      413 +                            <li><a class="dropdown-item" href="{{ url_for('maintenance_extra.service_catalog') }}">
+      414 +                                <i class="fas fa-list"></i> 服务目录
+      415 +                            </a></li>
+      416                          </ul>
+      417                      </li>
+      418
+
+● Module 4 is complete. Now starting Module 5 - 综合报表优化.
+
+● Let me check existing report-related files first.
+
+  Searched for 1 pattern, read 2 files, listed 1 directory (ctrl+o to expand)
+
+● Now I have the full picture. Let me create the Module 5 assets. I'll append new models to report_models.py and create the blueprint and templates.
+
+● Update(models\report_models.py)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(models\report_models.py)
+  ⎿  Added 110 lines
+      111              'sort_order': self.sort_order
+      112          }
+      113
+      114 +
+      115 +class ReportDashboard(db.Model):
+      116 +    """报表仪表板"""
+      117 +    __tablename__ = 'report_dashboards'
+      118 +
+      119 +    id = db.Column(db.Integer, primary_key=True)                                                                                                                                           120 +    name = db.Column(db.String(100), nullable=False, comment='仪表板名称')
+      121 +    description = db.Column(db.Text, comment='描述')                                                                                                                                       122 +    dashboard_type = db.Column(db.String(30), default='operational', comment='类型: executive/operational/compliance')
+      123 +    layout_config = db.Column(db.Text, comment='布局配置JSON')
+      124 +    widgets = db.Column(db.Text, comment='组件配置JSON')
+      125 +    role_access = db.Column(db.String(50), default='all', comment='角色访问权限')
+      126 +    is_default = db.Column(db.Boolean, default=False, comment='是否默认')
+      127 +    is_shared = db.Column(db.Boolean, default=False, comment='是否共享')
+      128 +    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+      129 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      130 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      131 +
+      132 +    def to_dict(self):
+      133 +        return {
+      134 +            'id': self.id,
+      135 +            'name': self.name,
+      136 +            'description': self.description,
+      137 +            'dashboard_type': self.dashboard_type,
+      138 +            'is_default': self.is_default,
+      139 +            'is_shared': self.is_shared,
+      140 +            'created_at': self.created_at.isoformat() if self.created_at else None,
+      141 +        }
+      142 +
+      143 +
+      144 +class ReportDistribution(db.Model):
+      145 +    """报表分发"""
+      146 +    __tablename__ = 'report_distributions'
+      147 +
+      148 +    id = db.Column(db.Integer, primary_key=True)
+      149 +    name = db.Column(db.String(100), nullable=False, comment='分发任务名称')
+      150 +    report_type = db.Column(db.String(50), nullable=False, comment='报表类型')
+      151 +    schedule_cron = db.Column(db.String(100), comment='Cron表达式')
+      152 +    format = db.Column(db.String(20), default='pdf', comment='格式: pdf/excel/html')
+      153 +    delivery_channel = db.Column(db.String(30), default='email', comment='渠道: email/slack/webhook')
+      154 +    recipients = db.Column(db.Text, comment='收件人JSON')
+      155 +    last_sent_at = db.Column(db.DateTime, comment='上次发送')
+      156 +    next_send_at = db.Column(db.DateTime, comment='下次发送')
+      157 +    enabled = db.Column(db.Boolean, default=True)
+      158 +    retry_on_fail = db.Column(db.Boolean, default=True)
+      159 +    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+      160 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      161 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      162 +
+      163 +    def to_dict(self):
+      164 +        return {
+      165 +            'id': self.id,
+      166 +            'name': self.name,
+      167 +            'report_type': self.report_type,
+      168 +            'format': self.format,
+      169 +            'delivery_channel': self.delivery_channel,
+      170 +            'enabled': self.enabled,
+      171 +            'last_sent_at': self.last_sent_at.isoformat() if self.last_sent_at else None,
+      172 +            'next_send_at': self.next_send_at.isoformat() if self.next_send_at else None,
+      173 +        }
+      174 +
+      175 +
+      176 +class ComplianceFramework(db.Model):
+      177 +    """合规框架"""
+      178 +    __tablename__ = 'compliance_frameworks'
+      179 +
+      180 +    id = db.Column(db.Integer, primary_key=True)
+      181 +    name = db.Column(db.String(100), nullable=False, comment='框架名称')
+      182 +    version = db.Column(db.String(20), comment='版本')
+      183 +    description = db.Column(db.Text, comment='描述')
+      184 +    control_items = db.Column(db.Text, comment='控制项JSON')
+      185 +    enabled = db.Column(db.Boolean, default=True)
+      186 +    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+      187 +    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+      188 +
+      189 +    def to_dict(self):
+      190 +        return {
+      191 +            'id': self.id,
+      192 +            'name': self.name,
+      193 +            'version': self.version,
+      194 +            'enabled': self.enabled,
+      195 +            'created_at': self.created_at.isoformat() if self.created_at else None,
+      196 +        }
+      197 +
+      198 +
+      199 +class ComplianceEvidence(db.Model):
+      200 +    """合规证据"""
+      201 +    __tablename__ = 'compliance_evidences'
+      202 +
+      203 +    id = db.Column(db.Integer, primary_key=True)
+      204 +    framework_id = db.Column(db.Integer, db.ForeignKey('compliance_frameworks.id'), nullable=False)
+      205 +    control_id = db.Column(db.String(50), nullable=False, comment='控制项ID')
+      206 +    evidence_type = db.Column(db.String(20), default='manual', comment='类型: manual/automated')
+      207 +    content = db.Column(db.Text, comment='证据内容')
+      208 +    collected_at = db.Column(db.DateTime, default=datetime.utcnow, comment='收集时间')
+      209 +    collected_by = db.Column(db.Integer, db.ForeignKey('users.id'), comment='收集人')
+      210 +    status = db.Column(db.String(20), default='pending', comment='状态: pass/fail/na/pending')
+      211 +
+      212 +    framework = db.relationship('ComplianceFramework', backref='evidences')
+      213 +
+      214 +    def to_dict(self):
+      215 +        return {
+      216 +            'id': self.id,
+      217 +            'framework_id': self.framework_id,
+      218 +            'control_id': self.control_id,
+      219 +            'evidence_type': self.evidence_type,
+      220 +            'status': self.status,
+      221 +            'collected_at': self.collected_at.isoformat() if self.collected_at else None,
+      222 +        }
+      223 +
+
+● Now let me register the new models, create the blueprint, and update the imports.
+
+● Update(models\__init__.py)
+  ⎿  Error editing file
+
+● Write(blueprints\report_extra.py)
+  ⎿  Wrote 267 lines to blueprints\report_extra.py
+       1 """
+       2 report_extra.py - 综合报表扩展
+       3 管理驾驶舱 / 合规框架 / 报表分发 / 趋势预测
+       4 """
+       5 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+       6 from flask_login import login_required, current_user                                                                                                                                          7 from datetime import datetime, timedelta
+       8 from extensions import db                                                                                                                                                                     9 from models.report_models import ReportDashboard, ReportDistribution, ComplianceFramework, ComplianceEvidence
+      10 from models.models import Device
+     … +257 lines (ctrl+o to expand)
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(models\__init__.py)
+  ⎿  Added 1 line
+      25  from .audit_models import AssetAudit, AssetAuditItem
+      26  from .compliance_models import (ConfigBaseline, ConfigDrift, ConfigVersion,
+      27                                  CompliancePolicy, ComplianceCheckResult, BackupVerification)
+      28 +from .report_models import ReportTemplate, ScheduledReport, ReportExecution, ReportFavorite, ReportDashboard, ReportDistribution, ComplianceFramework, ComplianceEvidence
+      29
+      30  # ==================== 添加跨文件的关系 ====================
+      31  # Device 和 SparePart 的双向关系
+                                                                                                                                                                                                ● Now let me register the blueprint and create all 8 templates.
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      25      from blueprints.config_compliance import config_compliance_bp
+      26      from blueprints.monitoring_extra import monitoring_extra_bp
+      27      from blueprints.maintenance_extra import maintenance_extra_bp
+      28 +    from blueprints.report_extra import report_extra_bp
+      29
+      30      app.register_blueprint(auth_bp)
+      31      app.register_blueprint(asset_bp)
+
+● Update(blueprints\__init__.py)
+  ⎿  Added 1 line
+      49      app.register_blueprint(config_compliance_bp)                                                                                                                                            50      app.register_blueprint(monitoring_extra_bp)
+      51      app.register_blueprint(maintenance_extra_bp)                                                                                                                                            52 +    app.register_blueprint(report_extra_bp)
+      53
+      54      print("所有蓝图注册成功")
+
+● Write(templates\report\executive_dashboard.html)
+  ⎿  Wrote 138 lines to templates\report\executive_dashboard.html
+       1 {% extends "base.html" %}
+       2 {% block title %}管理驾驶舱{% endblock %}
+       3 {% block page_title %}管理驾驶舱{% endblock %}
+       4 {% block page_subtitle %}全局IT资产运维概览{% endblock %}
+       5
+       6 {% block content %}
+       7 <!-- 核心指标 -->
+       8 <div class="row mb-4">
+       9     <div class="col-md-3">
+      10         <div class="card border-primary text-white bg-primary h-100">
+     … +128 lines (ctrl+o to expand)
+
+● Write(templates\report\dashboard_list.html)
+  ⎿  Wrote 60 lines to templates\report\dashboard_list.html
+       1 {% extends "base.html" %}
+       2 {% block title %}仪表板管理{% endblock %}
+       3 {% block page_title %}仪表板管理{% endblock %}
+       4 {% block page_subtitle %}自定义报表仪表板{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">                                                                                                                                                                    10             <div class="col-md-4">
+     … +50 lines (ctrl+o to expand)                                                                                                                                                             
+● Write(templates\report\dashboard_form.html)
+  ⎿  Wrote 55 lines to templates\report\dashboard_form.html
+       1 {% extends "base.html" %}
+       2 {% block title %}创建仪表板{% endblock %}
+       3 {% block page_title %}创建仪表板{% endblock %}
+       4 {% block page_subtitle %}配置自定义报表仪表板{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="card">
+       8     <div class="card-body">
+       9         <form method="POST">
+      10             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     … +45 lines (ctrl+o to expand)
+
+● Write(templates\report\dashboard_view.html)
+  ⎿  Wrote 47 lines to templates\report\dashboard_view.html
+       1 {% extends "base.html" %}
+       2 {% block title %}{{ dashboard.name }} - 仪表板{% endblock %}
+       3 {% block page_title %}{{ dashboard.name }}{% endblock %}
+       4 {% block page_subtitle %}{{ dashboard.description }}{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-3">
+       8     <div class="col">
+       9         <span class="badge bg-info">{{ dashboard.dashboard_type }}</span>
+      10         {% if dashboard.is_default %}<span class="badge bg-warning">默认</span>{% endif %}
+     … +37 lines (ctrl+o to expand)
+
+● Write(templates\report\compliance_frameworks.html)
+  ⎿  Wrote 75 lines to templates\report\compliance_frameworks.html
+       1 {% extends "base.html" %}
+       2 {% block title %}合规框架{% endblock %}
+       3 {% block page_title %}合规框架{% endblock %}
+       4 {% block page_subtitle %}ISO27001/SOX/PCI等合规标准管理{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">
+      10             <div class="col-md-4">
+     … +66 lines (ctrl+o to expand)
+
+● Write(templates\report\compliance_evidence.html)
+  ⎿  Wrote 103 lines to templates\report\compliance_evidence.html
+       1 {% extends "base.html" %}
+       2 {% block title %}合规证据{% endblock %}
+       3 {% block page_title %}合规证据{% endblock %}
+       4 {% block page_subtitle %}合规审计证据收集与管理{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">
+      10             <div class="col-md-3">
+     … +94 lines (ctrl+o to expand)
+
+● Write(templates\report\compliance_report.html)
+  ⎿  Wrote 80 lines to templates\report\compliance_report.html
+       1 {% extends "base.html" %}
+       2 {% block title %}合规报告{% endblock %}
+       3 {% block page_title %}合规报告{% endblock %}
+       4 {% block page_subtitle %}合规审计报告与合规率追踪{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     {% for s in summary %}
+       9     <div class="col-md-4 mb-3">
+      10         <div class="card h-100">
+     … +70 lines (ctrl+o to expand)
+
+● Write(templates\report\distribution_list.html)
+  ⎿  Wrote 127 lines to templates\report\distribution_list.html
+       1 {% extends "base.html" %}
+       2 {% block title %}报表分发{% endblock %}
+       3 {% block page_title %}报表分发{% endblock %}
+       4 {% block page_subtitle %}自动报表分发任务管理{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-8">
+       9         <div class="row">
+      10             <div class="col-md-3">
+     … +118 lines (ctrl+o to expand)
+
+● Write(templates\report\trend_forecast.html)
+  ⎿  Wrote 118 lines to templates\report\trend_forecast.html
+       1 {% extends "base.html" %}
+       2 {% block title %}趋势预测{% endblock %}
+       3 {% block page_title %}趋势预测{% endblock %}
+       4 {% block page_subtitle %}基于历史数据的性能趋势分析{% endblock %}
+       5
+       6 {% block content %}
+       7 <div class="row mb-4">
+       8     <div class="col-md-4">
+       9         <div class="card border-primary text-center h-100">
+      10             <div class="card-body py-3"><h4 class="text-primary mb-1" id="avgCpu">-</h4><small>平均CPU</small></div>
+     … +108 lines (ctrl+o to expand)
+
+● Now let me update the base.html navigation for the report section.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(templates\base.html)
+  ⎿  Added 28 lines
+      425                              {% endif %}
+      426                          </a>
+      427                          <ul class="dropdown-menu" aria-labelledby="reportDropdown">
+      428 +                            <li class="dropdown-header">管理驾驶舱</li>
+      429 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.executive_dashboard') }}">
+      430 +                                <i class="fas fa-tachometer-alt"></i> 管理驾驶舱
+      431 +                            </a></li>
+      432 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.dashboard_list') }}">                                                                              433 +                                <i class="fas fa-columns"></i> 仪表板管理
+      434 +                            </a></li>                                                                                                                                                      435 +
+      436 +                            <li><hr class="dropdown-divider"></li>
+      437 +                            <li class="dropdown-header">标准报表</li>
+      438                              <li><a class="dropdown-item" href="{{ url_for('report.comprehensive_report') }}">
+      439                                  <i class="fas fa-file-alt"></i> 综合报表
+      440                              </a></li>
+     ...
+      444                              <li><a class="dropdown-item" href="{{ url_for('report.report_export') }}">
+      445                                  <i class="fas fa-file-export"></i> 报表导出
+      446                              </a></li>
+      447 +
+      448 +                            <li><hr class="dropdown-divider"></li>
+      449 +                            <li class="dropdown-header">合规与分发</li>
+      450 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_frameworks') }}">
+      451 +                                <i class="fas fa-shield-alt"></i> 合规框架
+      452 +                            </a></li>
+      453 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_evidence') }}">
+      454 +                                <i class="fas fa-check-double"></i> 合规证据
+      455 +                            </a></li>
+      456 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.compliance_report') }}">
+      457 +                                <i class="fas fa-file-contract"></i> 合规报告
+      458 +                            </a></li>
+      459 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.distribution_list') }}">
+      460 +                                <i class="fas fa-share-alt"></i> 报表分发
+      461 +                            </a></li>
+      462 +                            <li><a class="dropdown-item" href="{{ url_for('report_extra.trend_forecast') }}">
+      463 +                                <i class="fas fa-chart-line"></i> 趋势预测
+      464 +                            </a></li>
+      465                          </ul>
+      466                      </li>
+      467
+
+● Let me fix a potential Jinja2 filter issue in the dashboard view template.
+
+● Update(templates\report\dashboard_view.html)
+  ⎿  Added 2 lines, removed 3 lines
+      38      </div>
+      39  </div>
+      40
+      41 -{% if dashboard.layout_config %}
+      42 -{% set layout = dashboard.layout_config|from_json %}
+      41 +{% if dashboard.layout_config and dashboard.layout_config != '{}' %}
+      42  <div class="alert alert-info">                                                                                                                                                              44 -    <i class="fas fa-info-circle"></i> 布局配置: {{ layout.columns if layout.columns else 2 }} 列布局
+      43 +    <i class="fas fa-info-circle"></i> 仪表板已配置布局                                                                                                                                     44  </div>
+      45  {% endif %}
+      46  {% endblock %}
+
+● Let me verify the models import was added correctly.
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● Let me do a final verification of key files.
+
+  Searched for 1 pattern, read 2 files, listed 2 directories (ctrl+o to expand)
+
+● Let me fix the service_catalog.html template which has a Jinja2 grouping issue.
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(templates\maintenance\service_catalog.html)
+  ⎿  Added 34 lines, removed 10 lines
+      41      </div>
+      42  </div>
+      43
+      44 -{% set grouped = {} %}
+      45 -{% for sc in catalogs %}
+      46 -    {% set cat = sc.category or '未分类' %}
+      47 -    {% if cat not in grouped %}{% set _ = grouped.update({cat: []) %}{% endif %}
+      48 -    {% set _ = grouped[cat].append(sc) %}                                                                                                                                                   49 -{% endfor %}
+      50 -                                                                                                                                                                                            51 -{% for cat, services in grouped.items() %}
+      44 +<!-- Render services grouped by category -->
+      45 +{% set cat_list = catalogs|map(attribute='category')|unique|list %}
+      46 +{% for cat in cat_list %}
+      47 +{% set cat_services = catalogs|selectattr('category', 'equalto', cat)|list %}
+      48 +{% if cat_services or (loop.first and not cat) %}
+      49  <div class="card mb-3">
+      53 -    <div class="card-header"><h5 class="mb-0">{{ cat }}</h5></div>
+      50 +    <div class="card-header"><h5 class="mb-0">{{ cat or '未分类' }}</h5></div>
+      51      <div class="card-body p-0">
+      52          <table class="table table-hover mb-0">
+      53              <thead class="table-light"><tr><th>服务名称</th><th>类型</th><th>预计履行</th><th>状态</th></tr></thead>
+      54              <tbody>
+      58 -                {% for sc in services %}
+      55 +                {% for sc in cat_services %}
+      56                  <tr>
+      57                      <td><strong>{{ sc.name }}</strong><br><small class="text-muted">{{ sc.description[:50] if sc.description else '' }}</small></td>
+      58                      <td><span class="badge bg-info">{{ sc.service_type }}</span></td>
+     ...
+       67          </table>
+       68      </div>
+       69  </div>
+       70 +{% endif %}
+       71  {% else %}
+       72  <div class="card"><div class="card-body text-center text-muted py-4">暂无服务目录</div></div>
+       73  {% endfor %}
+       74
+       75 +<!-- Handle uncategorized services -->
+       76 +{% set uncat = catalogs|rejectattr('category')|list %}
+       77 +{% if uncat and cat_list %}
+       78 +<div class="card mb-3">
+       79 +    <div class="card-header"><h5 class="mb-0">未分类</h5></div>
+       80 +    <div class="card-body p-0">
+       81 +        <table class="table table-hover mb-0">
+       82 +            <thead class="table-light"><tr><th>服务名称</th><th>类型</th><th>预计履行</th><th>状态</th></tr></thead>
+       83 +            <tbody>
+       84 +                {% for sc in uncat %}
+       85 +                <tr>
+       86 +                    <td><strong>{{ sc.name }}</strong><br><small class="text-muted">{{ sc.description[:50] if sc.description else '' }}</small></td>
+       87 +                    <td><span class="badge bg-info">{{ sc.service_type }}</span></td>
+       88 +                    <td>{{ sc.estimated_fulfillment_time }}分钟</td>
+       89 +                    <td>
+       90 +                        {% if sc.enabled %}<span class="badge bg-success">启用</span>
+       91 +                        {% else %}<span class="badge bg-secondary">停用</span>{% endif %}
+       92 +                    </td>
+       93 +                </tr>
+       94 +                {% endfor %}
+       95 +            </tbody>
+       96 +        </table>
+       97 +    </div>
+       98 +</div>
+       99 +{% endif %}
+      100 +
+      101  <!-- 添加模态框 -->
+      102  <div class="modal fade" id="addServiceModal" tabindex="-1">
+      103  <div class="modal-dialog"><div class="modal-content">
+
+● I need to fix the known_errors route to pass ProblemRecord data, since model classes aren't accessible in templates.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(blueprints\maintenance_extra.py)
+  ⎿  Added 2 lines, removed 1 line
+      101  def known_errors():
+      102      """已知错误列表"""
+      103      errors = KnownError.query.order_by(KnownError.created_at.desc()).all()
+      104 -    return render_template('maintenance/known_errors.html', errors=errors)
+      104 +    problems = ProblemRecord.query.filter(ProblemRecord.status.in_(['identified', 'investigating'])).all()
+      105 +    return render_template('maintenance/known_errors.html', errors=errors, problems=problems)
+      106
+      107                                                                                                                                                                                             108  @maintenance_extra_bp.route('/known-error/add', methods=['POST'])
+                                                                                                                                                                                                ● Update(templates\maintenance\known_errors.html)
+  ⎿  Added 1 line, removed 1 line
+       95                  <label class="form-label">关联问题</label>
+       96                  <select name="linked_problem_id" class="form-select">
+       97                      <option value="">无</option>
+       98 -                    {% for p in ProblemRecord.query.all() if p.status in ('identified', 'investigating') %}
+       98 +                    {% for p in problems %}
+       99                      <option value="{{ p.id }}">[{{ p.problem_number }}] {{ p.title }}</option>
+      100                      {% endfor %}                                                                                                                                                           101                  </select>
+                                                                                                                                                                                                ● All 5 modules are now complete. Let me mark the final task as done.
+
+● 所有5个模块优化已完成。以下是交付总结：  实现3D可视化机房
+
+  模块一：资产管理优化 ✅                             I
+  - 合同管理 (Contract) - 模型/路由/模板/到期提醒
+  - 软件许可 (SoftwareLicense) - 模型/分配/合规追踪
+  - 资产盘点 (AssetAudit) - 模型/执行/差异报告
+  - 资产驾驶舱/TCO API/导航更新
+
+  模块二：配置管理优化 ✅                                                                                                                                                                       ─
+  - 合规策略/执行检查/报告
+  - 配置基线/差异对比/版本历史                                                                                                                                                                    - 备份验证
+
+  模块三：监控优化 ✅
+  - 健康评分仪表板
+  - 维护窗口管理/告警升级策略
+  - SLA在线率报表/异常检测/趋势预测
+
+  模块四：运维管理优化 ✅
+  - 问题管理（CRUD/状态流转/根因分析）
+  - 已知错误库（记录/关联问题）
+  - 服务目录（分类管理/交付标准）
+  - 知识库（搜索/阅读统计）
+
+  模块五：综合报表优化 ✅
+  - 管理驾驶舱（全局概览/快速入口）
+  - 自定义仪表板创建/管理
+  - 合规框架（ISO27001等）/证据收集/合规报告
+  - 报表自动分发（定时/多渠道）
+  - 趋势预测（Chart.js可视化）
+
+✻ Crunched for 16m 22s

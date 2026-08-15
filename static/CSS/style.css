@@ -1,0 +1,144 @@
+/* 网络资产管理系统样式 */
+
+/* 全局样式 */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* 导航栏调整 */
+.navbar-brand {
+    font-weight: 600;
+}
+
+/* 卡片样式 */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+}
+
+/* 表格样式 */
+.table th {
+    font-weight: 600;
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0,123,255,0.05);
+}
+
+/* 状态标签 */
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 500;
+}
+
+/* 表单样式 */
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+/* 按钮样式 */
+.btn {
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* 仪表板卡片 */
+.card.bg-primary, .card.bg-success, .card.bg-danger, .card.bg-info {
+    border: none;
+    border-radius: 8px;
+}
+
+.card.bg-primary {
+    background: linear-gradient(45deg, #007bff, #0056b3);
+}
+
+.card.bg-success {
+    background: linear-gradient(45deg, #28a745, #1e7e34);
+}
+
+.card.bg-danger {
+    background: linear-gradient(45deg, #dc3545, #bd2130);
+}
+
+.card.bg-info {
+    background: linear-gradient(45deg, #17a2b8, #117a8b);
+}
+
+/* 设备状态颜色 */
+.status-online {
+    color: #28a745;
+}
+
+.status-offline {
+    color: #dc3545;
+}
+
+.status-fault {
+    color: #ffc107;
+}
+
+.status-unknown {
+    color: #6c757d;
+}
+
+/* 拓扑图容器 */
+#topology-container {
+    width: 100%;
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+/* 页脚样式 */
+.footer {
+    border-top: 1px solid #dee2e6;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn-group {
+        flex-wrap: wrap;
+    }
+    
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+}
+
+/* 加载动画 */
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: text-bottom;
+    border: 0.2em solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spinner-border .75s linear infinite;
+}
+
+@keyframes spinner-border {
+    to { transform: rotate(360deg); }
+}

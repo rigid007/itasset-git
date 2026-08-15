@@ -1,0 +1,247 @@
+# app.py 新增核心功能接口
+# 1. 单个设备Ping检测
+@app.route('/devices/<int:device_id>/ping', methods=['POST'])
+@login_required
+def device_ping(device_id):
+    """单个设备Ping检测"""
+    try:
+        device = Device.query.get_or_404(device_id)
+        if not device.management_ip:
+            return jsonify({
+                'success': False,
+                'message': '设备未配置管理IP'
+            }), 400
+        
+        # 执行Ping检测
+        success, response_time = check_device_status(device)
+        
+        # 返回结果
+        return jsonify({
+            'success': True,
+            'online': success,
+            'response_time': response_time,
+            'status': device.status,
+            'message': f'设备{"在线" if success else "离线"}，响应时间: {response_time}ms'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Ping检测失败: {str(e)}'
+        }), 500
+
+# 2. 单个设备SNMP检测
+@app.route('/devices/<int:device_id>/snmp_check', methods=['POST'])
+@login_required
+def device_snmp_check(device_id):
+    """单个设备SNMP检测"""
+    try:
+        device = Device.query.get_or_404(device_id)
+        if not device.management_ip:
+            return jsonify({
+                'success': False,
+                'message': '设备未配置管理IP'
+            }), 400
+        
+        # 获取SNMP参数（优先用设备自定义的，无则用系统默认）
+        community = request.form.get('snmp_community') or device.snmp_community or SystemConfig.query.filter_by(key='snmp_community').first().value
+        version = request.form.get('snmp_version') or device.snmp_version or '2c'
+        
+        # 执行SNMP查询
+        success, sysinfo = snmp_get_sysinfo(device.management_ip, community, version)
+        
+        if success:
+            # 更新设备信息
+            device.snmp_community = community
+            device.snmp_version = version
+            device.device_model = sysinfo.get('sys_descr', '')[:200]  # 截取避免过长
+            device.status = 'online'
+            device.last_seen = datetime.utcnow()
+            db.session.commit()
+            
+            # 记录操作日志
+            log_operation(
+                'snmp_check', 'device', device.id, device.name,
+                f'SNMP检测成功：设备名={sysinfo["sys_name"]}, 描述={sysinfo["sys_descr"][:100]}'
+            )
+            
+            return jsonify({
+                'success': True,
+                'online': True,
+                'sysinfo': sysinfo,
+                'message': 'SNMP检测成功'
+            })
+        else:
+            log_operation(
+                'snmp_check', 'device', device.id, device.name,
+                'SNMP检测失败：设备无响应'
+            )
+            return jsonify({
+                'success': False,
+                'online': False,
+                'message': 'SNMP检测失败：设备无响应'
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'SNMP检测失败: {str(e)}'
+        }), 500
+
+# 3. 批量Ping检测
+@app.route('/devices/batch_ping', methods=['POST'])
+@login_required
+def device_batch_ping():
+    """批量Ping检测"""
+    try:
+        data = request.get_json()
+        device_ids = data.get('device_ids', [])
+        
+        if not device_ids:
+            return jsonify({
+                'success': False,
+                'message': '请选择要检测的设备'
+            }), 400
+        
+        # 批量检测
+        results = []
+        for device_id in device_ids:
+            device = Device.query.get(device_id)
+            if not device or not device.management_ip:
+                results.append({
+                    'device_id': device_id,
+                    'success': False,
+                    'message': '设备不存在或无管理IP'
+                })
+                continue
+            
+            # 执行Ping
+            success, response_time = ping_device(device.management_ip)
+            device.status = 'online' if success else 'offline'
+            device.last_checked = datetime.utcnow()
+            if success:
+                device.last_seen = datetime.utcnow()
+            
+            results.append({
+                'device_id': device_id,
+                'device_name': device.name,
+                'online': success,
+                'response_time': response_time,
+                'status': device.status
+            })
+        
+        # 批量提交更新
+        db.session.commit()
+        
+        # 统计结果
+        online_count = sum(1 for r in results if r['online'])
+        offline_count = len(results) - online_count
+        
+        # 记录日志
+        log_operation(
+            'batch_ping', 'device', None, None,
+            f'批量Ping检测{len(results)}个设备，在线{online_count}个，离线{offline_count}个'
+        )
+        
+        return jsonify({
+            'success': True,
+            'online_count': online_count,
+            'offline_count': offline_count,
+            'results': results,
+            'message': f'批量检测完成：在线{online_count}个，离线{offline_count}个'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'批量Ping检测失败: {str(e)}'
+        }), 500
+
+# 4. IP段SNMP扫描
+@app.route('/devices/ip_scan', methods=['POST'])
+@login_required
+def device_ip_scan():
+    """IP段SNMP扫描"""
+    try:
+        # 获取扫描参数
+        ip_range = request.form.get('ip_range')
+        snmp_community = request.form.get('snmp_community') or SystemConfig.query.filter_by(key='snmp_community').first().value
+        snmp_version = request.form.get('snmp_version') or '2c'
+        auto_add = request.form.get('auto_add', 'false').lower() == 'true'
+        
+        if not ip_range:
+            return jsonify({
+                'success': False,
+                'message': '请输入IP段'
+            }), 400
+        
+        # 解析IP段
+        ip_generator = parse_ip_range(ip_range)
+        if not ip_generator:
+            return jsonify({
+                'success': False,
+                'message': 'IP段格式错误（支持 192.168.1.1-255 或 192.168.1.0/24）'
+            }), 400
+        
+        # 执行扫描
+        scanned_count = 0
+        found_count = 0
+        added_count = 0
+        found_devices = []
+        
+        for ip in ip_generator:
+            scanned_count += 1
+            # 跳过已存在的设备
+            existing = Device.query.filter_by(management_ip=ip).first()
+            if existing:
+                continue
+            
+            # SNMP检测
+            success, sysinfo = snmp_get_sysinfo(ip, snmp_community, snmp_version)
+            if success:
+                found_count += 1
+                found_devices.append(sysinfo)
+                
+                # 自动添加到数据库（如果开启）
+                if auto_add:
+                    new_device = Device(
+                        name=sysinfo.get('sys_name', f'未知设备_{ip}'),
+                        management_ip=ip,
+                        device_model=sysinfo.get('sys_descr', '')[:200],
+                        snmp_community=snmp_community,
+                        snmp_version=snmp_version,
+                        status='online',
+                        last_checked=datetime.utcnow(),
+                        last_seen=datetime.utcnow(),
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    db.session.add(new_device)
+                    added_count += 1
+            
+            # 限制扫描数量（避免超时/性能问题）
+            if scanned_count >= 254:
+                break
+        
+        # 提交新增设备
+        if auto_add and added_count > 0:
+            db.session.commit()
+        
+        # 记录操作日志
+        log_operation(
+            'ip_scan', 'device', None, None,
+            f'SNMP扫描IP段 {ip_range}：扫描{scanned_count}个IP，发现{found_count}个新设备，自动添加{added_count}个'
+        )
+        
+        return jsonify({
+            'success': True,
+            'scanned_count': scanned_count,
+            'found_count': found_count,
+            'added_count': added_count,
+            'found_devices': found_devices[:10],  # 只返回前10个避免数据过大
+            'message': f'扫描完成：共扫描{scanned_count}个IP，发现{found_count}个SNMP设备，自动添加{added_count}个到数据库'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'SNMP扫描失败: {str(e)}'
+        }), 500

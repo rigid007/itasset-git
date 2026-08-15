@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+
+{% block title %}数据备份 - 系统设置{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和导航 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="bi bi-database me-2"></i>数据备份
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('settings.settings') }}">系统设置</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">数据备份</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{{ url_for('settings.settings') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+        </div>
+    </div>
+
+    <!-- 消息提示 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show mb-4" role="alert">
+                    {% if category == 'success' %}
+                        <i class="bi bi-check-circle me-2"></i>
+                    {% elif category == 'warning' %}
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                    {% elif category == 'error' or category == 'danger' %}
+                        <i class="bi bi-exclamation-circle me-2"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle me-2"></i>
+                    {% endif %}
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- 警告提示 -->
+    <div class="alert alert-warning mb-4">
+        <h5 class="alert-heading">
+            <i class="bi bi-exclamation-triangle me-2"></i>重要提醒
+        </h5>
+        <p class="mb-0">
+            数据备份是确保系统数据安全的重要措施。建议定期执行备份，并将备份文件存储在安全的位置。
+            恢复数据时请谨慎操作，避免覆盖现有数据。
+        </p>
+    </div>
+
+    <div class="row">
+        <!-- 左侧：备份操作 -->
+        <div class="col-md-8">
+            <!-- 手动备份卡片 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-download me-2"></i>手动备份
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="manualBackupForm">
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">备份类型</label>
+                                <select class="form-select" name="backup_type" required>
+                                    <option value="full">完整备份</option>
+                                    <option value="incremental">增量备份</option>
+                                    <option value="data_only">仅数据</option>
+                                    <option value="schema_only">仅结构</option>
+                                </select>
+                                <div class="form-text">
+                                    <ul class="small mb-0 mt-2">
+                                        <li><strong>完整备份</strong>: 备份所有数据和结构</li>
+                                        <li><strong>增量备份</strong>: 仅备份上次备份后的变化</li>
+                                        <li><strong>仅数据</strong>: 只备份数据，不包含表结构</li>
+                                        <li><strong>仅结构</strong>: 只备份数据库表结构</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label class="form-label">备份格式</label>
+                                <select class="form-select" name="backup_format" required>
+                                    <option value="sql">SQL文件 (.sql)</option>
+                                    <option value="json">JSON文件 (.json)</option>
+                                    <option value="csv">CSV文件 (.csv)</option>
+                                    <option value="excel">Excel文件 (.xlsx)</option>
+                                </select>
+                                <div class="form-text">选择备份文件的输出格式</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label">包含的数据表</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="users" checked>
+                                        <label class="form-check-label">用户表</label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="locations" checked>
+                                        <label class="form-check-label">位置表</label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="cabinets" checked>
+                                        <label class="form-check-label">机柜表</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="devices" checked>
+                                        <label class="form-check-label">设备表</label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="configs" checked>
+                                        <label class="form-check-label">配置表</label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tables[]" value="logs" checked>
+                                        <label class="form-check-label">日志表</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label">压缩选项</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="compress" id="compressBackup" checked>
+                                <label class="form-check-label" for="compressBackup">
+                                    压缩备份文件（推荐）
+                                </label>
+                                <div class="form-text">启用压缩可以减小备份文件大小，节省存储空间</div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-block">
+                            <button type="submit" class="btn btn-primary" id="startBackupBtn">
+                                <i class="bi bi-download me-1"></i> 开始备份
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="scheduleBackupBtn">
+                                <i class="bi bi-clock me-1"></i> 计划备份
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 备份历史记录 -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history me-2"></i>备份历史记录
+                    </h5>
+                    <button class="btn btn-sm btn-outline-secondary" id="refreshHistoryBtn">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="backupHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th width="160">备份时间</th>
+                                    <th width="120">备份类型</th>
+                                    <th width="100">格式</th>
+                                    <th>文件大小</th>
+                                    <th width="100">状态</th>
+                                    <th width="120">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="backupHistoryBody">
+                                <!-- 备份历史记录将通过JavaScript动态加载 -->
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                        正在加载备份历史...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- 分页 -->
+                    <nav aria-label="备份历史分页" class="mt-3" id="backupHistoryPagination" style="display: none;">
+                        <ul class="pagination justify-content-center mb-0">
+                            <!-- 分页将通过JavaScript动态生成 -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：备份信息和工具 -->
+        <div class="col-md-4">
+            <!-- 备份统计信息 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">备份统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">存储空间使用</span>
+                            <span id="storageUsagePercent">0%</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar" id="storageUsageBar" style="width: 0%;"></div>
+                        </div>
+                        <div class="small text-muted mt-1" id="storageUsageText">正在加载...</div>
+                    </div>
+                    
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>总备份次数</span>
+                            <span class="badge bg-primary rounded-pill" id="totalBackups">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>成功备份</span>
+                            <span class="badge bg-success rounded-pill" id="successBackups">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>失败备份</span>
+                            <span class="badge bg-danger rounded-pill" id="failedBackups">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>最近备份</span>
+                            <span class="text-muted small" id="lastBackupTime">从未备份</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>备份目录</span>
+                            <span class="text-muted small" id="backupDir">/backups</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 备份设置 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">备份设置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="backupSettingsForm">
+                        <div class="mb-3">
+                            <label class="form-label">自动备份频率</label>
+                            <select class="form-select" name="auto_backup_frequency">
+                                <option value="disabled">禁用自动备份</option>
+                                <option value="daily">每天</option>
+                                <option value="weekly">每周</option>
+                                <option value="monthly">每月</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">保留备份天数</label>
+                            <input type="number" class="form-control" name="retention_days" value="30" min="1" max="365">
+                            <div class="form-text">自动删除超过指定天数的旧备份</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">最大备份数量</label>
+                            <input type="number" class="form-control" name="max_backup_count" value="50" min="1" max="1000">
+                            <div class="form-text">保留的最大备份文件数量</div>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="bi bi-save me-1"></i> 保存设置
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 快速操作 -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">快速操作</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-outline-success" id="quickFullBackupBtn">
+                            <i class="bi bi-lightning me-1"></i> 快速完整备份
+                        </button>
+                        <button type="button" class="btn btn-outline-warning" id="cleanOldBackupsBtn">
+                            <i class="bi bi-trash me-1"></i> 清理旧备份
+                        </button>
+                        <button type="button" class="btn btn-outline-info" id="testBackupBtn">
+                            <i class="bi bi-gear me-1"></i> 测试备份配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 备份进度模态框 -->
+<div class="modal fade" id="backupProgressModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">备份进度</h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">备份中...</span>
+                    </div>
+                    <h5 id="backupStep">正在准备备份...</h5>
+                    <p class="text-muted mb-0" id="backupDetail">请稍候，备份过程可能需要几分钟时间</p>
+                </div>
+                
+                <div class="progress mb-3" style="height: 10px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         id="backupProgressBar" style="width: 0%;"></div>
+                </div>
+                
+                <div class="text-center small text-muted" id="backupProgressText">
+                    进度: <span id="backupProgressPercent">0</span>%
+                </div>
+                
+                <div class="mt-3" id="backupLogs" style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                    <!-- 备份日志将在这里显示 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 计划备份模态框 -->
+<div class="modal fade" id="scheduleBackupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">计划备份</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scheduleBackupForm">
+                    <div class="mb-3">
+                        <label class="form-label">计划名称</label>
+                        <input type="text" class="form-control" name="schedule_name" placeholder="例如：每周完整备份" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">备份类型</label>
+                        <select class="form-select" name="schedule_type" required>
+                            <option value="full">完整备份</option>
+                            <option value="incremental">增量备份</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">执行频率</label>
+                        <select class="form-select" name="schedule_frequency" required>
+                            <option value="daily">每天</option>
+                            <option value="weekly">每周</option>
+                            <option value="monthly">每月</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="weeklyOptions" style="display: none;">
+                        <label class="form-label">选择星期几</label>
+                        <select class="form-select" name="schedule_day_of_week">
+                            <option value="0">星期日</option>
+                            <option value="1">星期一</option>
+                            <option value="2">星期二</option>
+                            <option value="3">星期三</option>
+                            <option value="4">星期四</option>
+                            <option value="5">星期五</option>
+                            <option value="6">星期六</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">执行时间</label>
+                        <input type="time" class="form-control" name="schedule_time" value="02:00" required>
+                        <div class="form-text">建议在系统使用率低的时间段执行备份</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">启用计划</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="schedule_enabled" id="scheduleEnabled" checked>
+                            <label class="form-check-label" for="scheduleEnabled">
+                                启用此备份计划
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveScheduleBtn">保存计划</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 全局变量
+    let backupInterval = null;
+    let currentBackupId = null;
+    
+    // 获取备份统计信息
+    function loadBackupStats() {
+        fetch('{{ url_for("settings.get_backup_stats") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('storageUsagePercent').textContent = data.storage_usage_percent + '%';
+                document.getElementById('storageUsageBar').style.width = data.storage_usage_percent + '%';
+                document.getElementById('storageUsageText').textContent = data.storage_usage_text;
+                document.getElementById('totalBackups').textContent = data.total_backups;
+                document.getElementById('successBackups').textContent = data.success_backups;
+                document.getElementById('failedBackups').textContent = data.failed_backups;
+                document.getElementById('lastBackupTime').textContent = data.last_backup_time;
+                document.getElementById('backupDir').textContent = data.backup_dir;
+                
+                // 根据使用率设置进度条颜色
+                const usagePercent = parseInt(data.storage_usage_percent);
+                const progressBar = document.getElementById('storageUsageBar');
+                if (usagePercent < 70) {
+                    progressBar.className = 'progress-bar bg-success';
+                } else if (usagePercent < 90) {
+                    progressBar.className = 'progress-bar bg-warning';
+                } else {
+                    progressBar.className = 'progress-bar bg-danger';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('获取备份统计失败:', error);
+        });
+    }
+    
+    // 加载备份历史记录
+    function loadBackupHistory(page = 1) {
+        fetch(`{{ url_for("settings.get_backup_history") }}?page=${page}`)
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('backupHistoryBody');
+            const pagination = document.getElementById('backupHistoryPagination');
+            
+            if (data.success && data.history.length > 0) {
+                // 清空现有内容
+                tbody.innerHTML = '';
+                
+                // 添加历史记录行
+                data.history.forEach(backup => {
+                    const row = document.createElement('tr');
+                    
+                    // 格式化文件大小
+                    let fileSize = '-';
+                    if (backup.file_size) {
+                        const sizeInKB = backup.file_size / 1024;
+                        if (sizeInKB < 1024) {
+                            fileSize = sizeInKB.toFixed(2) + ' KB';
+                        } else {
+                            const sizeInMB = sizeInKB / 1024;
+                            fileSize = sizeInMB.toFixed(2) + ' MB';
+                        }
+                    }
+                    
+                    // 状态徽章
+                    let statusBadge = '';
+                    if (backup.status === 'success') {
+                        statusBadge = '<span class="badge bg-success">成功</span>';
+                    } else if (backup.status === 'failed') {
+                        statusBadge = '<span class="badge bg-danger">失败</span>';
+                    } else if (backup.status === 'running') {
+                        statusBadge = '<span class="badge bg-warning">进行中</span>';
+                    } else {
+                        statusBadge = '<span class="badge bg-secondary">未知</span>';
+                    }
+                    
+                    // 操作按钮
+                    let actions = '';
+                    if (backup.status === 'success' && backup.file_path) {
+                        actions = `
+                            <button class="btn btn-sm btn-outline-primary download-backup" data-id="${backup.id}">
+                                <i class="bi bi-download"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-backup" data-id="${backup.id}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        `;
+                    }
+                    
+                    row.innerHTML = `
+                        <td>
+                            <div class="small text-muted">${backup.created_at_date || ''}</div>
+                            <div class="small">${backup.created_at_time || ''}</div>
+                        </td>
+                        <td>${backup.backup_type || '-'}</td>
+                        <td>${backup.format || '-'}</td>
+                        <td>${fileSize}</td>
+                        <td>${statusBadge}</td>
+                        <td>${actions}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+                
+                // 显示分页
+                if (data.total_pages > 1) {
+                    pagination.style.display = 'block';
+                    const paginationUl = pagination.querySelector('ul');
+                    paginationUl.innerHTML = '';
+                    
+                    // 上一页按钮
+                    const prevLi = document.createElement('li');
+                    prevLi.className = `page-item ${data.current_page === 1 ? 'disabled' : ''}`;
+                    prevLi.innerHTML = `<a class="page-link" href="#" data-page="${data.current_page - 1}">上一页</a>`;
+                    paginationUl.appendChild(prevLi);
+                    
+                    // 页码按钮
+                    for (let i = 1; i <= data.total_pages; i++) {
+                        const pageLi = document.createElement('li');
+                        pageLi.className = `page-item ${data.current_page === i ? 'active' : ''}`;
+                        pageLi.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                        paginationUl.appendChild(pageLi);
+                    }
+                    
+                    // 下一页按钮
+                    const nextLi = document.createElement('li');
+                    nextLi.className = `page-item ${data.current_page === data.total_pages ? 'disabled' : ''}`;
+                    nextLi.innerHTML = `<a class="page-link" href="#" data-page="${data.current_page + 1}">下一页</a>`;
+                    paginationUl.appendChild(nextLi);
+                    
+                    // 添加分页点击事件
+                    paginationUl.querySelectorAll('.page-link').forEach(link => {
+                        link.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            const pageNum = parseInt(this.getAttribute('data-page'));
+                            if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= data.total_pages) {
+                                loadBackupHistory(pageNum);
+                            }
+                        });
+                    });
+                } else {
+                    pagination.style.display = 'none';
+                }
+            } else {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <i class="bi bi-database-x display-6 text-muted mb-3"></i>
+                            <h5>暂无备份历史</h5>
+                            <p class="text-muted">还没有执行过任何备份操作</p>
+                        </td>
+                    </tr>
+                `;
+                pagination.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('加载备份历史失败:', error);
+            document.getElementById('backupHistoryBody').innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            加载失败: ${error.message}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    
+    // 开始手动备份
+    document.getElementById('manualBackupForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const backupData = {};
+        formData.forEach((value, key) => {
+            if (key === 'tables[]') {
+                if (!backupData.tables) backupData.tables = [];
+                backupData.tables.push(value);
+            } else {
+                backupData[key] = value;
+            }
+        });
+        
+        // 显示备份进度模态框
+        const progressModal = new bootstrap.Modal(document.getElementById('backupProgressModal'));
+        progressModal.show();
+        
+        // 开始备份
+        startBackup(backupData);
+    });
+    
+    // 开始备份函数
+    function startBackup(backupData) {
+        fetch('{{ url_for("settings.perform_backup") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(backupData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentBackupId = data.backup_id;
+                
+                // 更新进度信息
+                document.getElementById('backupStep').textContent = '备份已开始';
+                document.getElementById('backupDetail').textContent = '备份ID: ' + data.backup_id;
+                
+                // 开始轮询备份进度
+                checkBackupProgress();
+                backupInterval = setInterval(checkBackupProgress, 2000);
+            } else {
+                document.getElementById('backupStep').textContent = '备份启动失败';
+                document.getElementById('backupDetail').textContent = data.message;
+                document.getElementById('backupProgressBar').style.width = '0%';
+                document.getElementById('backupProgressPercent').textContent = '0';
+            }
+        })
+        .catch(error => {
+            console.error('启动备份失败:', error);
+            document.getElementById('backupStep').textContent = '备份启动失败';
+            document.getElementById('backupDetail').textContent = error.message;
+        });
+    }
+    
+    // 检查备份进度
+    function checkBackupProgress() {
+        if (!currentBackupId) return;
+        
+        fetch(`{{ url_for("settings.check_backup_progress") }}?backup_id=${currentBackupId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 更新进度条
+                const progressPercent = data.progress || 0;
+                document.getElementById('backupProgressBar').style.width = progressPercent + '%';
+                document.getElementById('backupProgressPercent').textContent = progressPercent;
+                
+                // 更新步骤信息
+                if (data.step) {
+                    document.getElementById('backupStep').textContent = data.step;
+                }
+                if (data.detail) {
+                    document.getElementById('backupDetail').textContent = data.detail;
+                }
+                
+                // 更新日志
+                if (data.logs) {
+                    const logsDiv = document.getElementById('backupLogs');
+                    logsDiv.innerHTML = '';
+                    data.logs.forEach(log => {
+                        const logDiv = document.createElement('div');
+                        logDiv.className = 'small mb-1';
+                        logDiv.textContent = log;
+                        logsDiv.appendChild(logDiv);
+                    });
+                    logsDiv.scrollTop = logsDiv.scrollHeight;
+                }
+                
+                // 检查备份是否完成
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(backupInterval);
+                    
+                    if (data.status === 'completed') {
+                        document.getElementById('backupStep').textContent = '备份完成';
+                        document.getElementById('backupDetail').textContent = '备份成功完成';
+                        document.getElementById('backupProgressBar').className = 'progress-bar bg-success';
+                        
+                        // 3秒后关闭模态框并刷新数据
+                        setTimeout(() => {
+                            bootstrap.Modal.getInstance(document.getElementById('backupProgressModal')).hide();
+                            loadBackupStats();
+                            loadBackupHistory();
+                        }, 3000);
+                    } else {
+                        document.getElementById('backupStep').textContent = '备份失败';
+                        document.getElementById('backupDetail').textContent = data.error_message || '备份过程中出现错误';
+                        document.getElementById('backupProgressBar').className = 'progress-bar bg-danger';
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('检查备份进度失败:', error);
+        });
+    }
+    
+    // 计划备份按钮点击事件
+    document.getElementById('scheduleBackupBtn').addEventListener('click', function() {
+        const scheduleModal = new bootstrap.Modal(document.getElementById('scheduleBackupModal'));
+        scheduleModal.show();
+    });
+    
+    // 执行频率变更时显示/隐藏星期选项
+    document.querySelector('select[name="schedule_frequency"]').addEventListener('change', function() {
+        const weeklyOptions = document.getElementById('weeklyOptions');
+        if (this.value === 'weekly') {
+            weeklyOptions.style.display = 'block';
+        } else {
+            weeklyOptions.style.display = 'none';
+        }
+    });
+    
+    // 保存计划备份
+    document.getElementById('saveScheduleBtn').addEventListener('click', function() {
+        const form = document.getElementById('scheduleBackupForm');
+        const formData = new FormData(form);
+        const scheduleData = {};
+        formData.forEach((value, key) => {
+            scheduleData[key] = value;
+        });
+        
+        fetch('{{ url_for("settings.save_backup_schedule") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(scheduleData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('备份计划保存成功');
+                bootstrap.Modal.getInstance(document.getElementById('scheduleBackupModal')).hide();
+                form.reset();
+            } else {
+                alert('保存失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('保存备份计划失败:', error);
+            alert('保存失败: ' + error.message);
+        });
+    });
+    
+    // 快速完整备份
+    document.getElementById('quickFullBackupBtn').addEventListener('click', function() {
+        if (confirm('确定要执行快速完整备份吗？')) {
+            const backupData = {
+                backup_type: 'full',
+                backup_format: 'sql',
+                compress: true,
+                tables: ['users', 'locations', 'cabinets', 'devices', 'configs', 'logs']
+            };
+            
+            const progressModal = new bootstrap.Modal(document.getElementById('backupProgressModal'));
+            progressModal.show();
+            
+            startBackup(backupData);
+        }
+    });
+    
+    // 刷新历史记录按钮
+    document.getElementById('refreshHistoryBtn').addEventListener('click', function() {
+        loadBackupHistory();
+        loadBackupStats();
+    });
+    
+    // 初始加载
+    loadBackupStats();
+    loadBackupHistory();
+    
+    // 清理旧备份
+    document.getElementById('cleanOldBackupsBtn').addEventListener('click', function() {
+        if (confirm('确定要清理旧的备份文件吗？此操作不可恢复。')) {
+            fetch('{{ url_for("settings.clean_old_backups") }}', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`成功清理了 ${data.deleted_count} 个旧备份文件，释放了 ${data.freed_space} 空间`);
+                    loadBackupStats();
+                    loadBackupHistory();
+                } else {
+                    alert('清理失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('清理旧备份失败:', error);
+                alert('清理失败: ' + error.message);
+            });
+        }
+    });
+    
+    // 测试备份配置
+    document.getElementById('testBackupBtn').addEventListener('click', function() {
+        fetch('{{ url_for("settings.test_backup_config") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('备份配置测试通过: ' + data.message);
+            } else {
+                alert('备份配置测试失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('测试备份配置失败:', error);
+            alert('测试失败: ' + error.message);
+        });
+    });
+    
+    // 保存备份设置
+    document.getElementById('backupSettingsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const settingsData = {};
+        formData.forEach((value, key) => {
+            settingsData[key] = value;
+        });
+        
+        fetch('{{ url_for("settings.save_backup_settings") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(settingsData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('备份设置保存成功');
+            } else {
+                alert('保存失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('保存备份设置失败:', error);
+            alert('保存失败: ' + error.message);
+        });
+    });
+    
+    // 监听备份历史表格中的按钮点击（事件委托）
+    document.getElementById('backupHistoryBody').addEventListener('click', function(e) {
+        const target = e.target;
+        const button = target.closest('button');
+        
+        if (!button) return;
+        
+        const backupId = button.getAttribute('data-id');
+        
+        if (button.classList.contains('download-backup')) {
+            // 下载备份文件
+            window.location.href = `{{ url_for("settings.download_backup") }}?backup_id=${backupId}`;
+        } else if (button.classList.contains('delete-backup')) {
+            // 删除备份文件
+            if (confirm('确定要删除这个备份文件吗？此操作不可恢复。')) {
+                fetch(`{{ url_for("settings.delete_backup") }}?backup_id=${backupId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('备份文件删除成功');
+                        loadBackupStats();
+                        loadBackupHistory();
+                    } else {
+                        alert('删除失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('删除备份文件失败:', error);
+                    alert('删除失败: ' + error.message);
+                });
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

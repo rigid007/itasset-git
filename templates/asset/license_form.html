@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑' if license else '添加' }}软件许可{% endblock %}
+{% block page_title %}{{ '编辑' if license else '添加' }}软件许可{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="POST" class="row g-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="col-md-6">
+                <label class="form-label">软件名称 <span class="text-danger">*</span></label>
+                <input type="text" name="software_name" class="form-control" required
+                       value="{{ license.software_name if license else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">版本号</label>
+                <input type="text" name="version" class="form-control"
+                       value="{{ license.version if license else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">版本类型</label>
+                <select name="edition" class="form-select">
+                    <option value="">--</option>
+                    <option value="Standard" {% if license and license.edition == 'Standard' %}selected{% endif %}>Standard</option>
+                    <option value="Enterprise" {% if license and license.edition == 'Enterprise' %}selected{% endif %}>Enterprise</option>
+                    <option value="Ultimate" {% if license and license.edition == 'Ultimate' %}selected{% endif %}>Ultimate</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">许可类型</label>
+                <select name="license_type" class="form-select" required>
+                    <option value="per_device" {% if license and license.license_type == 'per_device' %}selected{% endif %}>按设备</option>
+                    <option value="per_user" {% if license and license.license_type == 'per_user' %}selected{% endif %}>按用户</option>
+                    <option value="enterprise" {% if license and license.license_type == 'enterprise' %}selected{% endif %}>企业版</option>
+                    <option value="subscription" {% if license and license.license_type == 'subscription' %}selected{% endif %}>订阅</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">总数量</label>
+                <input type="number" name="total_quantity" class="form-control" value="{{ license.total_quantity if license else 1 }}" min="1">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">许可密钥</label>
+                <input type="text" name="license_key" class="form-control"
+                       value="{{ license.license_key if license else '' }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">厂商</label>
+                <input type="text" name="vendor" class="form-control"
+                       value="{{ license.vendor if license else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">购买成本 (¥)</label>
+                <input type="number" step="0.01" name="purchase_cost" class="form-control"
+                       value="{{ license.purchase_cost if license else 0 }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">单价 (¥)</label>
+                <input type="number" step="0.01" name="unit_cost" class="form-control"
+                       value="{{ license.unit_cost if license else 0 }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">购买日期</label>
+                <input type="date" name="purchase_date" class="form-control"
+                       value="{{ license.purchase_date.isoformat() if license and license.purchase_date else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">过期日期</label>
+                <input type="date" name="expiry_date" class="form-control"
+                       value="{{ license.expiry_date.isoformat() if license and license.expiry_date else '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">关联合同</label>
+                <select name="contract_id" class="form-select">
+                    <option value="">-- 无 --</option>
+                    {% for c in contracts %}
+                    <option value="{{ c.id }}" {% if license and license.contract_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if license %}
+            <div class="col-md-4">
+                <label class="form-label">状态</label>
+                <select name="status" class="form-select">
+                    <option value="active" {% if license.status == 'active' %}selected{% endif %}>有效</option>
+                    <option value="expired" {% if license.status == 'expired' %}selected{% endif %}>已过期</option>
+                    <option value="deprecated" {% if license.status == 'deprecated' %}selected{% endif %}>已废弃</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">合规状态</label>
+                <select name="compliance_status" class="form-select">
+                    <option value="compliant" {% if license.compliance_status == 'compliant' %}selected{% endif %}>合规</option>
+                    <option value="non-compliant" {% if license.compliance_status == 'non-compliant' %}selected{% endif %}>不合规</option>
+                    <option value="under-review" {% if license.compliance_status == 'under-review' %}selected{% endif %}>待审查</option>
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="col-12">
+                <label class="form-label">备注</label>
+                <textarea name="description" class="form-control" rows="2">{{ license.description if license else '' }}</textarea>
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ '保存修改' if license else '添加许可' }}</button>
+                <a href="{{ url_for('asset_extra.license_list') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

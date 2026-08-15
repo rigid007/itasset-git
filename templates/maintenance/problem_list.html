@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}问题管理{% endblock %}
+{% block page_title %}问题管理{% endblock %}
+{% block page_subtitle %}问题记录与根因分析追踪{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card border-secondary text-center h-100">
+            <div class="card-body py-3">
+                <h5 class="text-secondary mb-1">{{ counts.identified }}</h5>
+                <small>已识别</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-warning text-center h-100">
+            <div class="card-body py-3">
+                <h5 class="text-warning mb-1">{{ counts.investigating }}</h5>
+                <small>调查中</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-success text-center h-100">
+            <div class="card-body py-3">
+                <h5 class="text-success mb-1">{{ counts.resolved }}</h5>
+                <small>已解决</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-info text-center h-100">
+            <div class="card-body py-3">
+                <h5 class="text-info mb-1">{{ counts.closed }}</h5>
+                <small>已关闭</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <a href="{{ url_for('maintenance_extra.problem_create') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> 创建问题
+        </a>
+    </div>
+</div>
+
+<!-- 过滤 -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <form class="row g-2 align-items-center">
+            <div class="col-auto"><label class="form-label fw-bold mb-0">状态:</label></div>
+            <div class="col-auto">
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    <option value="identified" {% if status == 'identified' %}selected{% endif %}>已识别</option>
+                    <option value="investigating" {% if status == 'investigating' %}selected{% endif %}>调查中</option>
+                    <option value="resolved" {% if status == 'resolved' %}selected{% endif %}>已解决</option>
+                    <option value="closed" {% if status == 'closed' %}selected{% endif %}>已关闭</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>编号</th>
+                    <th>标题</th>
+                    <th>分类</th>
+                    <th>严重度</th>
+                    <th>状态</th>
+                    <th>发现时间</th>
+                    <th>处理人</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in problems.items %}
+                <tr>
+                    <td><code>{{ p.problem_number }}</code></td>
+                    <td><a href="{{ url_for('maintenance_extra.problem_detail', id=p.id) }}">{{ p.title }}</a></td>
+                    <td><span class="badge bg-info">{{ p.category or '-' }}</span></td>
+                    <td>
+                        {% if p.severity == 'critical' %}<span class="badge bg-danger">严重</span>
+                        {% elif p.severity == 'high' %}<span class="badge bg-warning">高</span>
+                        {% elif p.severity == 'medium' %}<span class="badge bg-primary">中</span>
+                        {% else %}<span class="badge bg-secondary">低</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if p.status == 'identified' %}<span class="badge bg-secondary">已识别</span>
+                        {% elif p.status == 'investigating' %}<span class="badge bg-warning">调查中</span>
+                        {% elif p.status == 'resolved' %}<span class="badge bg-success">已解决</span>
+                        {% elif p.status == 'closed' %}<span class="badge bg-info">已关闭</span>{% endif %}
+                    </td>
+                    <td>{{ p.identified_date.strftime('%Y-%m-%d %H:%M') if p.identified_date else '-' }}</td>
+                    <td>{{ p.assignee.username if p.assignee else '-' }}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('maintenance_extra.problem_detail', id=p.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i></a>
+                            {% if has_permission(current_user, 'maintenance:edit') %}
+                            <a href="{{ url_for('maintenance_extra.problem_edit', id=p.id) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-edit"></i></a>
+                            <form method="POST" action="{{ url_for('maintenance_extra.problem_delete', id=p.id) }}" style="display:inline"
+                                  onsubmit="return confirm('确定要删除问题「{{ p.title }}」吗？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">暂无问题记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if problems.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in range(1, problems.pages + 1) %}
+    <li class="page-item {% if p == problems.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('maintenance_extra.problem_list', page=p, status=status) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}

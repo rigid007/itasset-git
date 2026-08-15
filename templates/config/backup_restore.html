@@ -1,0 +1,459 @@
+<!-- templates/config/backup_restore.html -->
+{% extends "base.html" %}
+
+{% block head %}
+{{ super() }}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+    .badge-enabled {
+        background-color: #28a745;
+        color: white;
+    }
+    .badge-disabled {
+        background-color: #6c757d;
+        color: white;
+    }
+    .badge-success {
+        background-color: #28a745;
+    }
+    .badge-danger {
+        background-color: #dc3545;
+    }
+    .badge-warning {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    .table-actions .btn {
+        margin-right: 5px;
+    }
+    .table-actions .btn:last-child {
+        margin-right: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">备份与恢复</h1>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#backupConfigModal" onclick="newBackup()">
+            <i class="fas fa-plus"></i> 新建备份配置
+        </button>
+    </div>
+
+    <!-- 备份配置列表 -->
+    <div class="card shadow">
+        <div class="card-header bg-white">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h5 class="mb-0">备份配置</h5>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>调度</th>
+                            <th>保留天数</th>
+                            <th>存储路径</th>
+                            <th>最后备份</th>
+                            <th>状态</th>
+                            <th>启用</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for backup in backups %}
+                        <tr>
+                            <td>{{ backup.id }}</td>
+                            <td>{{ backup.name }}</td>
+                            <td>
+                                {% if backup.backup_type == 'full' %}
+                                    <span class="badge bg-primary">全量</span>
+                                {% elif backup.backup_type == 'incremental' %}
+                                    <span class="badge bg-info">增量</span>
+                                {% elif backup.backup_type == 'differential' %}
+                                    <span class="badge bg-secondary">差异</span>
+                                {% else %}
+                                    {{ backup.backup_type }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if backup.schedule_type == 'daily' %}
+                                    每天
+                                {% elif backup.schedule_type == 'weekly' %}
+                                    每周
+                                {% elif backup.schedule_type == 'monthly' %}
+                                    每月
+                                {% elif backup.schedule_type == 'manual' %}
+                                    手动
+                                {% else %}
+                                    {{ backup.schedule_type }}
+                                {% endif %}
+                            </td>
+                            <td>{{ backup.retention_days }}天</td>
+                            <td>{{ backup.storage_path | truncate(30) }}</td>
+                            <td>
+                                {% if backup.last_backup_at %}
+                                    {{ backup.last_backup_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    <span class="text-muted">未备份</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if backup.last_backup_status == 'success' %}
+                                    <span class="badge badge-success">成功</span>
+                                {% elif backup.last_backup_status == 'failed' %}
+                                    <span class="badge badge-danger">失败</span>
+                                {% elif backup.last_backup_status == 'running' %}
+                                    <span class="badge badge-warning">运行中</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if backup.enabled %}
+                                    <span class="badge badge-enabled">已启用</span>
+                                {% else %}
+                                    <span class="badge badge-disabled">已禁用</span>
+                                {% endif %}
+                            </td>
+                            <td class="table-actions">
+                                <button class="btn btn-sm btn-success" title="立即备份" onclick="runBackup({{ backup.id }})">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button class="btn btn-sm btn-warning" title="恢复" onclick="restoreBackup({{ backup.id }})">
+                                    <i class="fas fa-undo-alt"></i>
+                                </button>
+                                <button class="btn btn-sm btn-info" title="编辑" onclick="editBackup({{ backup.id }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" title="删除" onclick="deleteBackup({{ backup.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center py-4 text-muted">
+                                暂无备份配置，请点击"新建备份配置"添加。
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 备份配置模态框（新建/编辑共用） -->
+<div class="modal fade" id="backupConfigModal" tabindex="-1" aria-labelledby="backupConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="backupConfigModalLabel">新建备份配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="backupConfigForm">
+                    <input type="hidden" id="configId" name="id">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">配置名称</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="backup_type" class="form-label">备份类型</label>
+                            <select class="form-select" id="backup_type" name="backup_type" required>
+                                <option value="full">全量备份</option>
+                                <option value="incremental">增量备份</option>
+                                <option value="differential">差异备份</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="schedule_type" class="form-label">调度类型</label>
+                            <select class="form-select" id="schedule_type" name="schedule_type" required>
+                                <option value="daily">每天</option>
+                                <option value="weekly">每周</option>
+                                <option value="monthly">每月</option>
+                                <option value="manual">手动</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="retention_days" class="form-label">保留天数</label>
+                            <input type="number" class="form-control" id="retention_days" name="retention_days" value="30" min="1" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="include_database" name="include_database" checked>
+                                <label class="form-check-label" for="include_database">
+                                    包含数据库
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="include_files" name="include_files">
+                                <label class="form-check-label" for="include_files">
+                                    包含文件
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="include_logs" name="include_logs">
+                                <label class="form-check-label" for="include_logs">
+                                    包含日志
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="storage_path" class="form-label">存储路径</label>
+                            <input type="text" class="form-control" id="storage_path" name="storage_path" placeholder="/backup/mysql" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="storage_type" class="form-label">存储类型</label>
+                            <select class="form-select" id="storage_type" name="storage_type" required>
+                                <option value="local">本地存储</option>
+                                <option value="ftp">FTP</option>
+                                <option value="s3">S3对象存储</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="schedule_config" class="form-label">调度配置 (JSON格式)</label>
+                        <textarea class="form-control" id="schedule_config" name="schedule_config" rows="2" placeholder='{"hour": 2, "minute": 0}'>{"hour": 2, "minute": 0}</textarea>
+                        <div class="form-text">例如: {"hour": 2, "minute": 0} 表示每天凌晨2:00</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="storage_config" class="form-label">存储配置 (JSON格式)</label>
+                        <textarea class="form-control" id="storage_config" name="storage_config" rows="2" placeholder='{}'></textarea>
+                        <div class="form-text">对于FTP/S3等需要额外配置，例如: {"host": "ftp.example.com", "username": "user", "password": "pass"}</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" checked>
+                            <label class="form-check-label" for="enabled">
+                                启用此配置
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveBackupConfig()">保存配置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast 通知容器 -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 获取CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    // 显示toast消息
+    function showToast(message, type = 'success') {
+        const toastContainer = document.querySelector('.toast-container');
+        const toastEl = document.createElement('div');
+        toastEl.classList.add('toast', 'align-items-center', 'text-white', `bg-${type}`, 'border-0');
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'assertive');
+        toastEl.setAttribute('aria-atomic', 'true');
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        `;
+        toastContainer.appendChild(toastEl);
+        const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+        toast.show();
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+
+    // 新建配置：清空表单，重置标题
+    function newBackup() {
+        document.getElementById('backupConfigForm').reset();
+        document.getElementById('configId').value = '';
+        document.getElementById('backupConfigModalLabel').innerText = '新建备份配置';
+        // 恢复默认值
+        document.getElementById('schedule_config').value = '{"hour": 2, "minute": 0}';
+        document.getElementById('storage_config').value = '{}';
+    }
+
+    // 编辑配置：从API加载数据并填充表单
+    function editBackup(id) {
+        fetch(`/api/backup-configs/${id}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('获取配置失败');
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('configId').value = data.id;
+            document.getElementById('name').value = data.name;
+            document.getElementById('backup_type').value = data.backup_type;
+            document.getElementById('schedule_type').value = data.schedule_type;
+            document.getElementById('retention_days').value = data.retention_days;
+            document.getElementById('include_database').checked = data.include_database;
+            document.getElementById('include_files').checked = data.include_files;
+            document.getElementById('include_logs').checked = data.include_logs;
+            document.getElementById('storage_path').value = data.storage_path;
+            document.getElementById('storage_type').value = data.storage_type;
+            document.getElementById('schedule_config').value = JSON.stringify(data.schedule_config, null, 2);
+            document.getElementById('storage_config').value = JSON.stringify(data.storage_config, null, 2);
+            document.getElementById('enabled').checked = data.enabled;
+            document.getElementById('backupConfigModalLabel').innerText = '编辑备份配置';
+            new bootstrap.Modal(document.getElementById('backupConfigModal')).show();
+        })
+        .catch(error => {
+            console.error(error);
+            showToast(error.message, 'danger');
+        });
+    }
+
+    // 保存配置（新建或更新）
+    function saveBackupConfig() {
+        const form = document.getElementById('backupConfigForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        // 处理复选框（未勾选时不会出现在formData中）
+        data.include_database = formData.has('include_database');
+        data.include_files = formData.has('include_files');
+        data.include_logs = formData.has('include_logs');
+        data.enabled = formData.has('enabled');
+        // 解析JSON字段
+        try {
+            data.schedule_config = JSON.parse(data.schedule_config);
+        } catch (e) {
+            showToast('调度配置不是有效的JSON格式', 'warning');
+            return;
+        }
+        try {
+            data.storage_config = JSON.parse(data.storage_config);
+        } catch (e) {
+            showToast('存储配置不是有效的JSON格式', 'warning');
+            return;
+        }
+
+        const configId = data.id;
+        let url = '/api/backup-configs';
+        let method = 'POST';
+        if (configId) {
+            url = `/api/backup-configs/${configId}`;
+            method = 'PUT';
+        }
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('保存失败');
+            return response.json();
+        })
+        .then(result => {
+            bootstrap.Modal.getInstance(document.getElementById('backupConfigModal')).hide();
+            showToast('配置保存成功', 'success');
+            // 刷新页面以显示最新列表
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(error => {
+            console.error(error);
+            showToast(error.message, 'danger');
+        });
+    }
+
+    // 立即备份
+    function runBackup(id) {
+        if (!confirm('确定立即执行备份吗？')) return;
+        fetch(`/api/backup-configs/${id}/run`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('触发备份失败');
+            showToast('备份任务已启动', 'success');
+            // 可选：稍后刷新页面更新状态
+            setTimeout(() => window.location.reload(), 2000);
+        })
+        .catch(error => {
+            console.error(error);
+            showToast(error.message, 'danger');
+        });
+    }
+
+    // 恢复备份
+    function restoreBackup(id) {
+        if (!confirm('恢复操作将覆盖当前数据库，确定继续吗？')) return;
+        fetch(`/api/backup-configs/${id}/restore`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('恢复失败');
+            showToast('恢复任务已启动', 'success');
+        })
+        .catch(error => {
+            console.error(error);
+            showToast(error.message, 'danger');
+        });
+    }
+
+    // 删除配置
+    function deleteBackup(id) {
+        if (!confirm('确定要删除此备份配置吗？此操作不可恢复。')) return;
+        fetch(`/api/backup-configs/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('删除失败');
+            showToast('配置已删除', 'success');
+            // 刷新列表
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(error => {
+            console.error(error);
+            showToast(error.message, 'danger');
+        });
+    }
+</script>
+{% endblock %}

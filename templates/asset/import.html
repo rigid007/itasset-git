@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}导入资产 - 资产管理{% endblock %}
+
+{% block page_title %}导入资产{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">通过 Excel 或 CSV 文件批量导入资产信息，带 <span class="text-danger">*</span> 为必填字段</p>
+{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group" role="group">
+    <a href="{{ url_for('asset.download_asset_template') }}" class="btn btn-success">
+        <i class="fas fa-download"></i> 下载模板
+    </a>
+    <a href="{{ url_for('asset.asset_inventory') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> 返回列表
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <!-- 导入卡片 -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <ul class="nav nav-tabs card-header-tabs" id="importTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
+                            <i class="fas fa-upload"></i> 上传文件
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="fields-tab" data-bs-toggle="tab" data-bs-target="#fields" type="button" role="tab">
+                            <i class="fas fa-list"></i> 字段说明
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content" id="importTabsContent">
+                    <!-- 上传标签页 -->
+                    <div class="tab-pane fade show active" id="upload" role="tabpanel">
+                        <form method="POST" action="{{ url_for('asset.asset_import') }}" enctype="multipart/form-data" id="importForm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <!-- 拖拽上传区域 -->
+                            <div class="mb-4">
+                                <div class="upload-area border border-2 border-dashed rounded-3 p-5 text-center" id="dropArea">
+                                    <i class="fas fa-cloud-upload-alt fa-4x text-primary mb-3"></i>
+                                    <h5>拖拽文件到此处或点击上传</h5>
+                                    <p class="text-muted">支持 .xlsx, .xls, .csv 格式，最大 10MB</p>
+                                    <input type="file" class="form-control d-none" id="fileInput" name="file" accept=".xlsx,.xls,.csv" required>
+                                    <button type="button" class="btn btn-primary" id="selectFileBtn">
+                                        <i class="fas fa-folder-open me-1"></i> 选择文件
+                                    </button>
+                                </div>
+                                <div class="mt-2 text-muted small" id="selectedFileName"></div>
+                            </div>
+
+                            <!-- 导入选项 -->
+                            <div class="mb-4">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="update_mode" id="insertOnly" value="insert" checked>
+                                    <label class="form-check-label" for="insertOnly">仅新增（忽略重复资产编号）</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="update_mode" id="updateIfExist" value="update">
+                                    <label class="form-check-label" for="updateIfExist">存在则更新（根据资产编号）</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="firstRowHeader" name="first_row_header" value="1" checked>
+                                    <label class="form-check-label" for="firstRowHeader">
+                                        文件第一行为列标题
+                                    </label>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="text-warning">
+                                    <i class="fas fa-exclamation-triangle me-1"></i> 请先下载模板并按照格式填写。
+                                </div>
+                                <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
+                                    <i class="fas fa-upload"></i> 开始导入
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 字段说明标签页 -->
+                    <div class="tab-pane fade" id="fields" role="tabpanel">
+                        <h6 class="mb-3">必填字段 <span class="text-danger">*</span></h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>字段名</th>
+                                        <th>说明</th>
+                                        <th>示例</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>asset_number</code> <span class="text-danger">*</span></td>
+                                        <td>资产编号，唯一标识</td>
+                                        <td>AST-2024001</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>asset_name</code> <span class="text-danger">*</span></td>
+                                        <td>资产名称</td>
+                                        <td>核心交换机</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>asset_type</code> <span class="text-danger">*</span></td>
+                                        <td>资产类型（服务器/网络设备/存储设备/安全设备/软件/办公设备/其他）</td>
+                                        <td>网络设备</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>status</code> <span class="text-danger">*</span></td>
+                                        <td>状态（active/inactive/maintenance/retired/lost）</td>
+                                        <td>active</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h6 class="mb-3 mt-4">常用字段（推荐填写）</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>字段名</th>
+                                        <th>说明</th>
+                                        <th>示例</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td><code>asset_subtype</code></td><td>子类型</td><td>核心层交换机</td></tr>
+                                    <tr><td><code>brand</code></td><td>品牌</td><td>华为</td></tr>
+                                    <tr><td><code>model</code></td><td>型号</td><td>S12700</td></tr>
+                                    <tr><td><code>serial_number</code></td><td>序列号</td><td>SN12345678</td></tr>
+                                    <tr><td><code>condition</code></td><td>状况（excellent/good/fair/poor）</td><td>good</td></tr>
+                                    <tr><td><code>purchase_date</code></td><td>购买日期 (YYYY-MM-DD)</td><td>2023-01-15</td></tr>
+                                    <tr><td><code>purchase_price</code></td><td>购买价格（数字）</td><td>35000.00</td></tr>
+                                    <tr><td><code>warranty_expiry</code></td><td>保修到期日 (YYYY-MM-DD)</td><td>2026-01-14</td></tr>
+                                    <tr><td><code>depreciation_rate</code></td><td>年折旧率 (%)</td><td>10</td></tr>
+                                    <tr><td><code>owner_department</code></td><td>所属部门</td><td>IT部</td></tr>
+                                    <tr><td><code>owner_person</code></td><td>责任人</td><td>张三</td></tr>
+                                    <tr><td><code>owner_contact</code></td><td>责任人联系方式</td><td>13800138000</td></tr>
+                                    <tr><td><code>supplier_name</code></td><td>供应商名称</td><td>XX科技</td></tr>
+                                    <tr><td><code>supplier_contact</code></td><td>供应商联系方式</td><td>010-12345678</td></tr>
+                                    <tr><td><code>location_id</code></td><td>位置ID（若系统中已存在）</td><td>3</td></tr>
+                                    <tr><td><code>cabinet_id</code></td><td>机柜ID（若系统中已存在）</td><td>5</td></tr>
+                                    <tr><td><code>position</code></td><td>具体位置描述</td><td>机房A-01机柜-10U</td></tr>
+                                    <tr><td><code>device_id</code></td><td>关联设备ID</td><td>12</td></tr>
+                                    <tr><td><code>tags</code></td><td>标签（用逗号分隔）</td><td>核心,生产环境</td></tr>
+                                    <tr><td><code>notes</code></td><td>备注</td><td>需定期检查</td></tr>
+                                    <tr><td><code>usage_description</code></td><td>使用说明</td><td>承载核心业务</td></tr>
+                                    <tr><td><code>in_use</code></td><td>是否在使用（true/false）</td><td>true</td></tr>
+                                    <tr><td><code>is_active</code></td><td>是否有效（true/false）</td><td>true</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-muted small mt-3">
+                            <i class="fas fa-info-circle"></i> 字段名不区分大小写，文件列标题请使用上述英文名称。<br>
+                            日期格式必须为 <code>YYYY-MM-DD</code>，数字请使用纯数字（不要带货币符号）。<br>
+                            导入时系统会根据购买日期和折旧率自动计算当前价值。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 历史导入记录（可选） -->
+        <div class="card mt-4">
+            <div class="card-header bg-white">
+                <i class="fas fa-history me-1"></i> 最近导入记录
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% if import_logs %}
+                        {% for log in import_logs[:5] %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-file-import text-primary me-2"></i>
+                                {{ log.filename }} 
+                                <small class="text-muted ms-2">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                            <span class="badge bg-{{ 'success' if log.success else 'danger' }}">
+                                {{ '成功' if log.success else '失败' }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="list-group-item text-muted text-center">暂无导入记录</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    (function() {
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+        const selectFileBtn = document.getElementById('selectFileBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const selectedFileName = document.getElementById('selectedFileName');
+
+        // 点击按钮触发文件选择
+        selectFileBtn.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        // 拖拽事件
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+            dropArea.classList.add('bg-light', 'border-primary');
+        }
+
+        function unhighlight() {
+            dropArea.classList.remove('bg-light', 'border-primary');
+        }
+
+        // 处理拖拽文件
+        dropArea.addEventListener('drop', handleDrop, false);
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length) {
+                fileInput.files = files;
+                updateFileInfo(files[0]);
+            }
+        }
+
+        // 处理选择文件
+        fileInput.addEventListener('change', function() {
+            if (this.files.length) {
+                updateFileInfo(this.files[0]);
+            } else {
+                selectedFileName.innerHTML = '';
+                submitBtn.disabled = true;
+            }
+        });
+
+        function updateFileInfo(file) {
+            const size = (file.size / 1024).toFixed(2);
+            selectedFileName.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i> 已选择: ${file.name} (${size} KB)`;
+            submitBtn.disabled = false;
+        }
+
+        // 表单提交前验证
+        document.getElementById('importForm').addEventListener('submit', function(e) {
+            if (!fileInput.files.length) {
+                e.preventDefault();
+                alert('请先选择要导入的文件');
+                return;
+            }
+            // 可添加文件类型、大小验证
+            const file = fileInput.files[0];
+            const allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv'];
+            if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
+                e.preventDefault();
+                alert('不支持的文件格式，请上传 .xlsx, .xls 或 .csv 文件');
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                e.preventDefault();
+                alert('文件大小不能超过 10MB');
+                return;
+            }
+            // 可禁用提交按钮防止重复提交
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导入中...';
+        });
+    })();
+</script>
+
+<style>
+    .border-dashed {
+        border-style: dashed !important;
+    }
+    .upload-area {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .upload-area:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}

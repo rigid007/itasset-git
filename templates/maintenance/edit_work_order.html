@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}编辑工单 - {{ work_order.work_order_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <span class="text-muted">编辑工单</span>
+            <small class="text-muted">#{{ work_order.work_order_number }}</small>
+        </h2>
+        <a href="{{ url_for('maintenance.view_work_order', id=work_order.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回详情
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('maintenance.edit_work_order', id=work_order.id) }}">
+                {{ form.hidden_tag() }}
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.title.label(class="form-label") }}
+                        {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else "")) }}
+                        {% for error in form.title.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        {{ form.category.label(class="form-label") }}
+                        {{ form.category(class="form-select" + (" is-invalid" if form.category.errors else "")) }}
+                        {% for error in form.category.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows=5) }}
+                    {% for error in form.description.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.priority.label(class="form-label") }}
+                        {{ form.priority(class="form-select" + (" is-invalid" if form.priority.errors else "")) }}
+                        {% for error in form.priority.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        {{ form.assigned_to.label(class="form-label") }}
+                        {{ form.assigned_to(class="form-select" + (" is-invalid" if form.assigned_to.errors else "")) }}
+                        {% for error in form.assigned_to.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        {{ form.deadline.label(class="form-label") }}
+                        {{ form.deadline(class="form-control" + (" is-invalid" if form.deadline.errors else ""), type="date") }}
+                        {% for error in form.deadline.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mb-3">
+                    {{ form.is_major(class="form-check-input") }}
+                    {{ form.is_major.label(class="form-check-label") }}
+                </div>
+
+                <hr class="my-4">
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{{ url_for('maintenance.view_work_order', id=work_order.id) }}" class="btn btn-secondary">取消</a>
+                    <button type="submit" class="btn btn-primary">保存更改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .card {
+        border-radius: 0.5rem;
+        border: none;
+    }
+    .form-label {
+        font-weight: 600;
+        color: #555;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 可选：为日期字段设置默认值或使用日期选择器
+    // 如果浏览器不支持 date 输入，可以在这里初始化一个 JS 日期选择器
+</script>
+{% endblock %}

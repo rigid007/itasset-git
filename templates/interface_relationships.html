@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+
+{% block title %}接口邻居关系 - 网络管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">接口邻居关系</h1>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#discoverModal">
+                <i class="fas fa-search"></i> 发现邻居
+            </button>
+            <form action="{{ url_for('cleanup.cleanup_interfaces') }}" method="POST" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-broom"></i> 清理过期
+                </button>
+            </form>
+            <a href="{{ url_for('interface.interface_topology') }}" class="btn btn-info">
+                <i class="fas fa-project-diagram"></i> 拓扑视图
+            </a>
+        </div>
+    </div>
+
+    <!-- 过滤表单 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="device_id" class="form-label">设备</label>
+                    <select id="device_id" name="device_id" class="form-select">
+                        <option value="">所有设备</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                            {{ device.hostname }} ({{ device.ip_address }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="status" class="form-label">状态</label>
+                    <select id="status" name="status" class="form-select">
+                        <option value="All" {% if status == 'All' %}selected{% endif %}>所有状态</option>
+                        <option value="Active" {% if status == 'Active' %}selected{% endif %}>活动</option>
+                        <option value="Expired" {% if status == 'Expired' %}selected{% endif %}>过期</option>
+                        <option value="Deleted" {% if status == 'Deleted' %}selected{% endif %}>已删除</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="protocol" class="form-label">协议</label>
+                    <select id="protocol" name="protocol" class="form-select">
+                        <option value="All" {% if protocol == 'All' %}selected{% endif %}>所有协议</option>
+                        <option value="LLDP" {% if protocol == 'LLDP' %}selected{% endif %}>LLDP</option>
+                        <option value="CDP" {% if protocol == 'CDP' %}selected{% endif %}>CDP</option>
+                        <option value="EDP" {% if protocol == 'EDP' %}selected{% endif %}>EDP</option>
+                        <option value="FDP" {% if protocol == 'FDP' %}selected{% endif %}>FDP</option>
+                        <option value="NDP" {% if protocol == 'NDP' %}selected{% endif %}>NDP</option>
+                        <option value="Other" {% if protocol == 'Other' %}selected{% endif %}>其他</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-filter"></i> 筛选
+                    </button>
+                    <a href="{{ url_for('interface.interface_relationships') }}" class="btn btn-secondary">
+                        重置
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 关系列表 -->
+    <div class="card">
+        <div class="card-body">
+            {% if relationships.items %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>本地设备</th>
+                            <th>本地接口</th>
+                            <th>邻居设备</th>
+                            <th>邻居接口</th>
+                            <th>协议</th>
+                            <th>最后发现</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rel in relationships.items %}
+                        <tr>
+                            <td>
+                                {% if rel.local_device %}
+                                <a href="{{ url_for('device_detail', id=rel.local_device_id) }}">
+                                    {{ rel.local_device.hostname }}
+                                </a>
+                                {% else %}
+                                    未知
+                                {% endif %}
+                            </td>
+                            <td>{{ rel.local_interface }}</td>
+                            <td>
+                                {% if rel.neighbor_device %}
+                                <a href="{{ url_for('device_detail', id=rel.neighbor_device_id) }}">
+                                    {{ rel.neighbor_device_name }}
+                                </a>
+                                {% else %}
+                                    {{ rel.neighbor_device_name or '未知' }}
+                                {% endif %}
+                            </td>
+                            <td>{{ rel.neighbor_interface or 'N/A' }}</td>
+                            <td>
+                                {% if rel.protocol == 'LLDP' %}
+                                <span class="badge bg-info">LLDP</span>
+                                {% elif rel.protocol == 'CDP' %}
+                                <span class="badge bg-success">CDP</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ rel.protocol }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ rel.last_discovered|format_datetime if rel.last_discovered else '' }}</td>
+                            <td>
+                                {% if rel.status == 'Active' %}
+                                <span class="badge bg-success">活动</span>
+                                {% elif rel.status == 'Expired' %}
+                                <span class="badge bg-warning">过期</span>
+                                {% else %}
+                                <span class="badge bg-danger">已删除</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('interface_detail', id=rel.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <form action="{{ url_for('delete_interface_relationship', id=rel.id) }}"
+                                      method="POST"
+                                      class="d-inline"
+                                      onsubmit="return confirm('确定要删除这个接口关系吗？');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            {% if relationships.pages > 1 %}
+            <nav aria-label="分页导航">
+                <ul class="pagination justify-content-center">
+                    {% if relationships.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('interface.interface_relationships', page=relationships.prev_num, device_id=device_id, status=status, protocol=protocol) }}">
+                            上一页
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in relationships.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            {% if page_num == relationships.page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('interface.interface_relationships', page=page_num, device_id=device_id, status=status, protocol=protocol) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if relationships.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('interface.interface_relationships', page=relationships.next_num, device_id=device_id, status=status, protocol=protocol) }}">
+                            下一页
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            
+            <div class="text-muted mt-3">
+                共 {{ relationships.total }} 条记录，当前显示第 {{ relationships.page }} 页
+            </div>
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-link fa-3x text-muted mb-3"></i>
+                <p class="text-muted">未发现接口邻居关系</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#discoverModal">
+                    <i class="fas fa-search"></i> 开始发现邻居
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 发现邻居模态框 -->
+<div class="modal fade" id="discoverModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">发现邻居设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="discoverForm">
+                    <div class="mb-3">
+                        <label for="discover_device" class="form-label">选择设备</label>
+                        <select id="discover_device" class="form-select" required>
+                            <option value="">请选择设备...</option>
+                            {% for device in devices %}
+                            <option value="{{ device.id }}">{{ device.hostname }} ({{ device.ip_address }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="discover_protocol" class="form-label">发现协议</label>
+                        <select id="discover_protocol" class="form-select">
+                            <option value="LLDP">LLDP (优先)</option>
+                            <option value="CDP">CDP</option>
+                            <option value="Both">两者都尝试</option>
+                        </select>
+                    </div>
+                </form>
+                <div id="discoverResult" class="mt-3 d-none">
+                    <div class="alert alert-info">
+                        <div class="spinner-border spinner-border-sm me-2"></div>
+                        <span id="discoverMessage">正在发现邻居...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="startDiscovery()">开始发现</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作模态框 -->
+<div class="modal fade" id="bulkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">批量操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>请选择要执行的操作：</p>
+                <div class="list-group">
+                    <a href="#" class="list-group-item list-group-item-action" onclick="bulkMarkActive()">
+                        <i class="fas fa-check text-success me-2"></i> 标记为活动
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action" onclick="bulkMarkExpired()">
+                        <i class="fas fa-clock text-warning me-2"></i> 标记为过期
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action" onclick="bulkDelete()">
+                        <i class="fas fa-trash text-danger me-2"></i> 批量删除
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 全选/取消全选
+function toggleSelectAll(source) {
+    const checkboxes = document.querySelectorAll('.select-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = source.checked;
+    });
+}
+
+// 获取选中的关系ID
+function getSelectedIds() {
+    const checkboxes = document.querySelectorAll('.select-checkbox:checked');
+    const ids = [];
+    checkboxes.forEach(checkbox => {
+        ids.push(checkbox.value);
+    });
+    return ids;
+}
+
+// 开始邻居发现
+function startDiscovery() {
+    const deviceId = document.getElementById('discover_device').value;
+    const protocol = document.getElementById('discover_protocol').value;
+    const resultDiv = document.getElementById('discoverResult');
+    const messageSpan = document.getElementById('discoverMessage');
+    
+    if (!deviceId) {
+        alert('请选择要发现的设备');
+        return;
+    }
+    
+    // 显示加载状态
+    resultDiv.classList.remove('d-none');
+    messageSpan.textContent = '正在发现邻居...';
+    
+    // 发送AJAX请求
+    fetch('/api/interfaces/discover', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({
+            device_id: parseInt(deviceId),
+            protocol: protocol
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageSpan.textContent = data.message;
+            resultDiv.classList.remove('alert-info');
+            resultDiv.classList.add('alert-success');
+            
+            // 3秒后刷新页面
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        } else {
+            messageSpan.textContent = '发现失败: ' + data.message;
+            resultDiv.classList.remove('alert-info');
+            resultDiv.classList.add('alert-danger');
+        }
+    })
+    .catch(error => {
+        messageSpan.textContent = '请求失败: ' + error;
+        resultDiv.classList.remove('alert-info');
+        resultDiv.classList.add('alert-danger');
+    });
+}
+
+// 批量操作函数
+function bulkMarkActive() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要操作的关系');
+        return;
+    }
+    
+    if (confirm(`确定要将 ${ids.length} 个关系标记为活动吗？`)) {
+        fetch('/api/interfaces/bulk/active', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ids: ids})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert('操作失败: ' + data.message);
+            }
+        });
+    }
+}
+
+function bulkMarkExpired() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要操作的关系');
+        return;
+    }
+    
+    if (confirm(`确定要将 ${ids.length} 个关系标记为过期吗？`)) {
+        fetch('/api/interfaces/bulk/expired', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ids: ids})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert('操作失败: ' + data.message);
+            }
+        });
+    }
+}
+
+function bulkDelete() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) {
+        alert('请先选择要删除的关系');
+        return;
+    }
+    
+    if (confirm(`确定要删除 ${ids.length} 个关系吗？此操作不可撤销！`)) {
+        fetch('/api/interfaces/bulk/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ids: ids})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert('删除失败: ' + data.message);
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

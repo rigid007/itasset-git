@@ -1,0 +1,153 @@
+{# templates/monitoring/schedule_list.html #}
+{% extends "base.html" %}
+
+{% block title %}监控调度列表 - 监控系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>监控调度列表
+                    </h5>
+                    <a href="{{ url_for('monitoring.schedule_create') }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg"></i> 新增调度
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if schedules %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>名称</th>
+                                    <th>监控类型</th>
+                                    <th>调度方式</th>
+                                    <th>状态</th>
+                                    <th>上次运行</th>
+                                    <th>下次运行</th>
+                                    <th>成功率</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in schedules %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ s.name }}</strong>
+                                        {% if s.description %}
+                                        <br><small class="text-muted">{{ s.description | truncate(40) }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ s.monitor_type | upper }}</span>
+                                    </td>
+                                    <td>
+                                        {% if s.schedule_type == 'interval' %}
+                                            <i class="bi bi-arrow-repeat me-1"></i>间隔 {{ s.interval_seconds }}秒
+                                        {% elif s.schedule_type == 'cron' %}
+                                            <i class="bi bi-calendar-week me-1"></i>Cron: {{ s.cron_expression }}
+                                        {% else %}
+                                            <i class="bi bi-hand-index me-1"></i>手动
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if s.enabled %}
+                                            <span class="badge bg-success">启用</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">禁用</span>
+                                        {% endif %}
+                                        {% if s.last_status == 'running' %}
+                                            <span class="badge bg-warning text-dark">运行中</span>
+                                        {% elif s.last_status == 'failed' %}
+                                            <span class="badge bg-danger">失败</span>
+                                        {% elif s.last_status == 'success' %}
+                                            <span class="badge bg-success">成功</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">空闲</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if s.last_run %}
+                                            {{ s.last_run | strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if s.next_run %}
+                                            {{ s.next_run | strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if s.run_count > 0 %}
+                                            {% set rate = (s.success_count / s.run_count * 100) | round(1) %}
+                                            <span class="{% if rate >= 90 %}text-success{% elif rate >= 70 %}text-warning{% else %}text-danger{% endif %}">
+                                                {{ rate }}%
+                                            </span>
+                                            <small class="text-muted">({{ s.success_count }}/{{ s.run_count }})</small>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('monitoring.schedule_view', schedule_id=s.id) }}" class="btn btn-outline-primary" title="查看">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('monitoring.schedule_edit', schedule_id=s.id) }}" class="btn btn-outline-secondary" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            {% if s.enabled %}
+                                            <a href="{{ url_for('monitoring.schedule_toggle', schedule_id=s.id) }}" class="btn btn-outline-warning" title="禁用" onclick="return confirm('确定要禁用该调度吗？')">
+                                                <i class="bi bi-pause-fill"></i>
+                                            </a>
+                                            {% else %}
+                                            <a href="{{ url_for('monitoring.schedule_toggle', schedule_id=s.id) }}" class="btn btn-outline-success" title="启用" onclick="return confirm('确定要启用该调度吗？')">
+                                                <i class="bi bi-play-fill"></i>
+                                            </a>
+                                            {% endif %}
+                                            <a href="{{ url_for('monitoring.schedule_run_now', schedule_id=s.id) }}" class="btn btn-outline-info" title="立即执行" onclick="return confirm('立即执行该调度？')">
+                                                <i class="bi bi-lightning-charge-fill"></i>
+                                            </a>
+                                            <a href="{{ url_for('monitoring.schedule_delete', schedule_id=s.id) }}" class="btn btn-outline-danger" title="删除" onclick="return confirm('确定要删除该调度吗？此操作不可撤销。')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-clock fs-1 text-muted"></i>
+                        <p class="mt-3 text-muted">暂无监控调度任务，请新增调度。</p>
+                        <a href="{{ url_for('monitoring.schedule_create') }}" class="btn btn-primary">
+                            <i class="bi bi-plus-lg"></i> 新增调度
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 可选：添加 tooltip 初始化等 -->
+<script>
+    // 初始化 Bootstrap 工具提示（如果按钮使用了 tooltip）
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+</script>
+{% endblock %}

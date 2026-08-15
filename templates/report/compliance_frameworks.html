@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}合规框架{% endblock %}
+{% block page_title %}合规框架{% endblock %}
+{% block page_subtitle %}ISO27001/SOX/PCI等合规标准管理{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card border-primary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-primary mb-1">{{ frameworks|length }}</h4><small>合规框架</small></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-success text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-success mb-1">{{ frameworks|selectattr('enabled', 'equalto', true)|list|length }}</h4><small>已启用</small></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-secondary text-center h-100">
+                    <div class="card-body py-3"><h4 class="text-secondary mb-1">{{ frameworks|rejectattr('enabled', 'equalto', true)|list|length }}</h4><small>未启用</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFrameworkModal"><i class="fas fa-plus"></i> 添加框架</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>框架名称</th><th>版本</th><th>描述</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+                {% for fw in frameworks %}
+                <tr>
+                    <td><strong>{{ fw.name }}</strong></td>
+                    <td>{{ fw.version or '-' }}</td>
+                    <td><small class="text-muted">{{ fw.description[:60] if fw.description else '-' }}</small></td>
+                    <td>{% if fw.enabled %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">停用</span>{% endif %}</td>
+                    <td>{{ fw.created_at.strftime('%Y-%m-%d') if fw.created_at else '-' }}</td>
+                    <td>
+                        {% if has_permission(current_user, 'report:edit') %}
+                        <form method="POST" action="{{ url_for('report_extra.compliance_framework_delete', id=fw.id) }}" style="display:inline"
+                              onsubmit="return confirm('确定要删除合规框架「{{ fw.name }}」吗？关联的合规证据也将被删除。')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" title="删除"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">暂无合规框架，请添加</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框 -->
+<div class="modal fade" id="addFrameworkModal" tabindex="-1">
+<div class="modal-dialog"><div class="modal-content">
+<form method="POST" action="{{ url_for('report_extra.compliance_framework_add') }}">
+    <div class="modal-header"><h5 class="modal-title">添加合规框架</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3"><label class="form-label">框架名称 <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required placeholder="如: ISO27001, SOX, PCI-DSS"></div>
+        <div class="mb-3"><label class="form-label">版本</label><input type="text" name="version" class="form-control" placeholder="如: 2022"></div>
+        <div class="mb-3"><label class="form-label">描述</label><textarea name="description" class="form-control" rows="3"></textarea></div>
+        <div class="mb-3">
+            <label class="form-label">控制项 (JSON)</label>
+            <textarea name="control_items" class="form-control" rows="3" placeholder='[{"id":"A1","name":"访问控制","description":"..."}]'></textarea>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" name="enabled" class="form-check-input" id="fw_enabled" checked>
+            <label class="form-check-label" for="fw_enabled">启用</label>
+        </div>
+    </div>
+    <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+</form>
+</div></div></div>
+{% endblock %}

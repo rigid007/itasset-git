@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}折旧结果 - 资产管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>折旧计算结果</h2>
+        </div>
+        <div class="col text-right">
+            <a href="{{ url_for('asset.depreciation_calculation') }}" class="btn btn-primary">
+                <i class="fas fa-redo-alt"></i> 重新计算
+            </a>
+            <a href="{{ url_for('asset.asset_ledger') }}" class="btn btn-secondary">
+                <i class="fas fa-list"></i> 返回台账
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="card-title mb-0">资产信息</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-borderless table-sm">
+                        <tr><th style="width: 120px;">资产编号</th><td>{{ asset.asset_number }}</td></tr>
+                        <tr><th>资产名称</th><td>{{ asset.asset_name }}</td></tr>
+                        <tr><th>资产类型</th><td>{{ asset.asset_type }}</td></tr>
+                        <tr><th>品牌型号</th><td>{{ asset.brand }} {{ asset.model }}</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-borderless table-sm">
+                        <tr><th style="width: 120px;">购买日期</th><td>{{ asset.purchase_date.strftime('%Y-%m-%d') if asset.purchase_date else '—' }}</td></tr>
+                        <tr><th>购买价格</th><td>¥{{ "%.2f"|format(asset.purchase_price or 0) }}</td></tr>
+                        <tr><th>当前价值</th><td>¥{{ "%.2f"|format(asset.current_value or 0) }}</td></tr>
+                        <tr><th>折旧方法</th><td>
+                            {% if method == 'straight' %}直线法
+                            {% elif method == 'double_declining' %}双倍余额递减法
+                            {% elif method == 'sum_of_years' %}年数总和法
+                            {% else %}{{ method }}{% endif %}
+                        </td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">折旧明细表</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>年份</th>
+                            <th>年折旧额</th>
+                            <th>累计折旧</th>
+                            <th>账面净值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td>{{ record.year }}</td>
+                            <td class="text-right">¥{{ "%.2f"|format(record.depreciation_amount) }}</td>
+                            <td class="text-right">¥{{ "%.2f"|format(record.accumulated_depreciation) }}</td>
+                            <td class="text-right">¥{{ "%.2f"|format(record.net_book_value) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center">暂无折旧数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col text-center">
+            <button class="btn btn-success" onclick="window.print()">
+                <i class="fas fa-print"></i> 打印结果
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table-borderless th, .table-borderless td {
+        border: none;
+        padding: 0.3rem 0;
+    }
+    .table th, .table td {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}

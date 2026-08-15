@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}配置漂移记录{% endblock %}
+{% block page_title %}配置漂移监控{% endblock %}
+{% block page_subtitle %}检测网络设备配置与基线的差异{% endblock %}
+
+{% block content %}
+<!-- 过滤 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-2" method="GET">
+            <div class="col-md-4">
+                <select name="device_id" class="form-select">
+                    <option value="">-- 全部设备 --</option>
+                    {% for d in devices %}
+                    <option value="{{ d.id }}" {% if current_device_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select">
+                    <option value="">-- 全部状态 --</option>
+                    <option value="open" {% if current_status == 'open' %}selected{% endif %}>未处理</option>
+                    <option value="acknowledged" {% if current_status == 'acknowledged' %}selected{% endif %}>已确认</option>
+                    <option value="resolved" {% if current_status == 'resolved' %}selected{% endif %}>已解决</option>
+                    <option value="ignored" {% if current_status == 'ignored' %}selected{% endif %}>已忽略</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter"></i> 筛选</button>
+            </div>
+            <div class="col-md-3 text-end">
+                <a href="{{ url_for('config_compliance.config_baseline') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> 返回基线</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 漂移列表 -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">漂移记录</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>设备</th><th>类型</th><th>摘要</th><th>严重度</th><th>状态</th><th>检测时间</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in drifts.items %}
+                <tr>
+                    <td>{{ d.device.name if d.device else '-' }}</td>
+                    <td><span class="badge bg-secondary">{{ d.drift_type }}</span></td>
+                    <td><small>{{ d.diff_summary or '-' }}</small></td>
+                    <td>
+                        {% if d.severity == 'critical' %}<span class="badge bg-danger">严重</span>
+                        {% elif d.severity == 'high' %}<span class="badge bg-warning text-dark">高</span>
+                        {% elif d.severity == 'medium' %}<span class="badge bg-info">中</span>
+                        {% else %}<span class="badge bg-secondary">低</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if d.status == 'open' %}<span class="badge bg-danger">未处理</span>
+                        {% elif d.status == 'acknowledged' %}<span class="badge bg-warning text-dark">已确认</span>
+                        {% elif d.status == 'resolved' %}<span class="badge bg-success">已解决</span>
+                        {% else %}<span class="badge bg-secondary">已忽略</span>{% endif %}
+                    </td>
+                    <td><small>{{ d.detected_at.strftime('%Y-%m-%d %H:%M') if d.detected_at else '-' }}</small></td>
+                    <td>
+                        {% if d.status == 'open' %}
+                        <form method="POST" action="{{ url_for('config_compliance.config_baseline_drift_resolve', id=d.id) }}" style="display:inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-success" title="标记为已解决"><i class="fas fa-check"></i> 解决</button>
+                        </form>
+                        {% endif %}
+                        {% if d.device_id and d.baseline_id %}
+                        <a href="{{ url_for('config_compliance.config_diff', device_id=d.device_id, baseline_id=d.baseline_id) }}"
+                           class="btn btn-sm btn-outline-info"><i class="fas fa-code-branch"></i> 对比</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-4">暂无漂移记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if drifts.pages > 1 %}
+    <div class="card-footer">
+        <nav><ul class="pagination justify-content-center mb-0">
+            {% for p in range(1, drifts.pages + 1) %}
+            <li class="page-item {% if p == drifts.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('config_compliance.config_baseline_drifts', page=p, device_id=current_device_id, status=current_status) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+        </ul></nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

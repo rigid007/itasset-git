@@ -1,0 +1,789 @@
+<!-- templates/config/snmp_settings.html -->
+{% extends "base.html" %}
+
+{% block title %}SNMP配置管理 - 网络资产管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-network-wired text-primary"></i> SNMP配置管理
+            </h1>
+            <p class="text-muted mb-0">管理和配置SNMP监控参数</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" id="addSnmpBtn">
+                <i class="fas fa-plus mr-1"></i> 添加配置
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 筛选和搜索区域 -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form id="filterForm" class="row g-3">
+                <div class="col-md-3">
+                    <label for="versionFilter" class="form-label">SNMP版本</label>
+                    <select id="versionFilter" class="form-control">
+                        <option value="">全部版本</option>
+                        <option value="v1">v1</option>
+                        <option value="v2c">v2c</option>
+                        <option value="v3">v3</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="statusFilter" class="form-label">状态</label>
+                    <select id="statusFilter" class="form-control">
+                        <option value="">全部状态</option>
+                        <option value="enabled">已启用</option>
+                        <option value="disabled">已禁用</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="searchInput" class="form-label">搜索</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="searchInput" placeholder="配置名称...">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-secondary w-100" id="clearFilterBtn">
+                        <i class="fas fa-filter"></i> 清除筛选
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SNMP配置列表 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">SNMP配置列表</h6>
+            <div class="text-muted">
+                <span id="configCount">{{ settings|length }}</span> 个配置
+            </div>
+        </div>
+        <div class="card-body">
+            {% if settings %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="snmpTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>配置名称</th>
+                            <th>SNMP版本</th>
+                            <th>社区/用户名</th>
+                            <th>安全级别</th>
+                            <th>认证协议</th>
+                            <th>加密协议</th>
+                            <th>端口</th>
+                            <th>超时</th>
+                            <th>重试次数</th>
+                            <th>状态</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for setting in settings %}
+                        <tr data-id="{{ setting.id }}">
+                            <td>{{ setting.id }}</td>
+                            <td><strong>{{ setting.name }}</strong></td>
+                            <td>
+                                <span class="badge 
+                                    {% if setting.version == 'v3' %}badge-danger
+                                    {% elif setting.version == 'v2c' %}badge-warning
+                                    {% else %}badge-secondary{% endif %}">
+                                    {{ setting.version|default('v2c') }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if setting.version == 'v3' %}
+                                    {{ setting.username|default('-') }}
+                                {% else %}
+                                    {{ setting.community|default('-') }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if setting.version == 'v3' and setting.security_level %}
+                                    {% if setting.security_level == 'authPriv' %}
+                                        <span class="badge badge-info">认证加密</span>
+                                    {% elif setting.security_level == 'authNoPriv' %}
+                                        <span class="badge badge-warning">认证不加密</span>
+                                    {% else %}
+                                        <span class="badge badge-secondary">不认证不加密</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ setting.auth_protocol|default('-') }}</td>
+                            <td>{{ setting.priv_protocol|default('-') }}</td>
+                            <td>{{ setting.port|default(161) }}</td>
+                            <td>{{ setting.timeout|default(5) }}秒</td>
+                            <td>{{ setting.retries|default(3) }}</td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input toggle-status" 
+                                           id="status_{{ setting.id }}" 
+                                           data-id="{{ setting.id }}"
+                                           {% if setting.enabled %}checked{% endif %}>
+                                    <label class="custom-control-label" for="status_{{ setting.id }}">
+                                        {% if setting.enabled %}
+                                        <span class="text-success">启用</span>
+                                        {% else %}
+                                        <span class="text-danger">禁用</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </td>
+                            <td><small class="text-muted">{{ setting.updated_at.strftime('%Y-%m-%d %H:%M') if setting.updated_at else '-' }}</small></td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-info edit-snmp" data-id="{{ setting.id }}" title="编辑"><i class="fas fa-edit"></i></button>
+                                    <button type="button" class="btn btn-outline-primary copy-snmp" data-id="{{ setting.id }}" title="复制"><i class="fas fa-copy"></i></button>
+                                    <button type="button" class="btn btn-outline-danger delete-snmp" data-id="{{ setting.id }}" data-name="{{ setting.name }}" title="删除"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-3"><i class="fas fa-network-wired fa-4x text-muted"></i></div>
+                <h5 class="text-muted">暂无SNMP配置</h5>
+                <p class="text-muted">点击右上角的"添加配置"按钮创建您的第一个SNMP配置</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑SNMP配置模态框 -->
+<div class="modal fade" id="snmpModal" tabindex="-1" role="dialog" aria-labelledby="snmpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="snmpModalLabel">添加SNMP配置</h5>
+                <button type="button" class="close" onclick="closeModal()" aria-label="Close" id="modalCloseBtn">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="snmpForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="configName">配置名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="configName" name="name" required>
+                                <small class="form-text text-muted">SNMP配置的唯一标识名称</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="snmpVersion">SNMP版本 <span class="text-danger">*</span></label>
+                                <select class="form-control" id="snmpVersion" name="version" required>
+                                    <option value="v2c" selected>v2c (简单社区字符串)</option>
+                                    <option value="v1">v1 (兼容模式)</option>
+                                    <option value="v3">v3 (安全模式)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- v1/v2c 配置区域 -->
+                    <div id="v1v2cConfig" class="version-config">
+                        <div class="form-group">
+                            <label for="community">社区字符串 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="community" name="community" value="public">
+                            <small class="form-text text-muted">SNMP v1/v2c的社区字符串，如public/private</small>
+                        </div>
+                    </div>
+                    
+                    <!-- v3 配置区域 -->
+                    <div id="v3Config" class="version-config" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="username">用户名 <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="username" name="username">
+                                    <small class="form-text text-muted">SNMP v3用户名</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="contextName">上下文名称</label>
+                                    <input type="text" class="form-control" id="contextName" name="context_name">
+                                    <small class="form-text text-muted">SNMP v3上下文名称（可选）</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="securityLevel">安全级别 <span class="text-danger">*</span></label>
+                            <select class="form-control" id="securityLevel" name="security_level">
+                                <option value="noAuthNoPriv">noAuthNoPriv (不认证不加密)</option>
+                                <option value="authNoPriv">authNoPriv (认证不加密)</option>
+                                <option value="authPriv" selected>authPriv (认证加密)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 认证配置 -->
+                        <div id="authConfig" class="security-config">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="authProtocol">认证协议 <span class="text-danger">*</span></label>
+                                        <select class="form-control" id="authProtocol" name="auth_protocol">
+                                            <option value="MD5">MD5</option>
+                                            <option value="SHA" selected>SHA</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="authPassword">认证密码</label>
+                                        <input type="password" class="form-control" id="authPassword" name="auth_password" autocomplete="new-password">
+                                        <small class="form-text text-muted">至少8个字符，留空表示不修改（编辑时）</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 加密配置 -->
+                        <div id="privConfig" class="security-config">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="privProtocol">加密协议 <span class="text-danger">*</span></label>
+                                        <select class="form-control" id="privProtocol" name="priv_protocol">
+                                            <option value="DES">DES</option>
+                                            <option value="AES" selected>AES</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="privPassword">加密密码</label>
+                                        <input type="password" class="form-control" id="privPassword" name="priv_password" autocomplete="new-password">
+                                        <small class="form-text text-muted">至少8个字符，留空表示不修改（编辑时）</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 通用配置 -->
+                    <div class="row mt-3">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="port">端口 <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="port" name="port" value="161" min="1" max="65535" required>
+                                <small class="form-text text-muted">SNMP端口，默认161</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="timeout">超时时间(秒) <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="timeout" name="timeout" value="5" min="1" max="60" required>
+                                <small class="form-text text-muted">SNMP请求超时时间</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="retries">重试次数 <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="retries" name="retries" value="3" min="1" max="10" required>
+                                <small class="form-text text-muted">失败时重试次数</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>启用配置</label>
+                                <div class="custom-control custom-checkbox mt-2">
+                                    <input type="checkbox" class="custom-control-input" id="configEnabled" name="enabled" checked>
+                                    <label class="custom-control-label" for="configEnabled">启用此配置</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 测试连接区域 -->
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">测试连接</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="form-group">
+                                        <label for="testHost">测试主机</label>
+                                        <input type="text" class="form-control" id="testHost" placeholder="输入IP地址或主机名进行测试">
+                                        <small class="form-text text-muted">输入要测试的主机地址</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="button" class="btn btn-outline-primary w-100" id="testConnectionBtn">
+                                        <i class="fas fa-plug mr-1"></i> 测试连接
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="testResult" class="mt-2" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()" id="modalCancelBtn">取消</button>
+                    <button type="submit" class="btn btn-primary" id="saveSnmpBtn">
+                        <span id="saveBtnText">保存配置</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <input type="hidden" id="configId" name="id" value="">
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// 全局函数：关闭模态框
+function closeModal() {
+    $('#snmpModal').modal('hide');
+    $('body').removeClass('modal-open');
+    $('.modal-backdrop').remove();
+}
+
+$(document).ready(function() {
+    console.log('SNMP配置管理页面已加载');
+    
+    // 初始化
+    initSNMPForm();
+    
+    // 事件绑定
+    $('#addSnmpBtn').click(() => openSNMPModal('add'));
+    $('#snmpVersion').change(function() { toggleSNMPVersion($(this).val()); });
+    $('#securityLevel').change(function() { toggleSecurityLevel($(this).val()); });
+    $('#testConnectionBtn').click(testSNMPConnection);
+    $('#snmpForm').on('submit', function(e) { e.preventDefault(); saveSNMPConfig(); });
+    $(document).on('click', '.edit-snmp', function() { openSNMPModal('edit', $(this).data('id')); });
+    $(document).on('click', '.copy-snmp', function() { openSNMPModal('copy', $(this).data('id')); });
+    $(document).on('click', '.delete-snmp', function() { deleteSNMPConfig($(this).data('id'), $(this).data('name')); });
+    $(document).on('change', '.toggle-status', function() { updateSNMPStatus($(this).data('id'), $(this).prop('checked')); });
+    
+    $('#searchBtn').click(applyFilters);
+    $('#searchInput').keypress(e => e.which === 13 && applyFilters());
+    $('#versionFilter, #statusFilter').change(applyFilters);
+    $('#clearFilterBtn').click(() => { $('#filterForm')[0].reset(); applyFilters(); });
+    $('#refreshBtn').click(() => location.reload());
+    
+    $(document).on('keydown', e => e.key === 'Escape' && closeModal());
+
+    // ==================== 函数定义 ====================
+    function initSNMPForm() {
+        $('#snmpVersion').val('v2c');
+        toggleSNMPVersion('v2c');
+        $('#securityLevel').val('authPriv');
+        toggleSecurityLevel('authPriv');
+        $('#community').val('public');
+        // 编辑时密码字段不为必填
+        $('#authPassword, #privPassword').removeAttr('required');
+    }
+
+    function toggleSNMPVersion(version) {
+        if (version === 'v3') {
+            $('#v1v2cConfig').hide();
+            $('#v3Config').show();
+            $('#username').prop('required', true);
+            $('#community').removeAttr('required');
+        } else {
+            $('#v1v2cConfig').show();
+            $('#v3Config').hide();
+            $('#community').prop('required', true);
+            $('#username').removeAttr('required');
+            $('#authPassword, #privPassword').removeAttr('required');
+        }
+    }
+
+    function toggleSecurityLevel(securityLevel) {
+        $('#authPassword, #privPassword').removeAttr('required');
+        if (securityLevel === 'authPriv') {
+            $('#authConfig, #privConfig').show();
+            // 编辑模式下密码非必填，但需要在前端提示
+            if ($('#configId').val() === '') { // 新增模式才设为必填
+                $('#authPassword, #privPassword').prop('required', true);
+            }
+        } else if (securityLevel === 'authNoPriv') {
+            $('#authConfig').show();
+            $('#privConfig').hide();
+            if ($('#configId').val() === '') {
+                $('#authPassword').prop('required', true);
+            }
+        } else {
+            $('#authConfig, #privConfig').hide();
+        }
+    }
+
+    function openSNMPModal(action, configId = null) {
+        $('#snmpForm')[0].reset();
+        $('#configId').val('');
+        $('#testResult').hide().empty();
+        
+        if (action === 'add') {
+            $('#snmpModalLabel').text('添加SNMP配置');
+            initSNMPForm();
+            $('#snmpModal').modal({ backdrop: 'static', keyboard: false }).modal('show');
+        } else if (action === 'edit' || action === 'copy') {
+            loadSNMPConfig(configId, action);
+        }
+    }
+
+    function loadSNMPConfig(configId, action) {
+        showLoading(true);
+        $.ajax({
+            url: `/config/api/snmp-settings/${configId}`,
+            method: 'GET',
+            timeout: 10000,  // 10秒超时
+            success: function(response) {
+                if (response.success && response.config) {
+                    const config = response.config;
+                    $('#snmpModalLabel').text(action === 'edit' ? '编辑SNMP配置' : '复制SNMP配置');
+                    if (action === 'edit') {
+                        $('#configId').val(config.id);
+                    } else {
+                        $('#configId').val('');
+                        config.name = config.name + ' (副本)';
+                    }
+                    
+                    $('#configName').val(config.name);
+                    $('#snmpVersion').val(config.version || 'v2c');
+                    $('#port').val(config.port || 161);
+                    $('#timeout').val(config.timeout || 5);
+                    $('#retries').val(config.retries || 3);
+                    $('#configEnabled').prop('checked', config.enabled !== false);
+                    
+                    if (config.version === 'v3') {
+                        $('#username').val(config.username || '');
+                        $('#contextName').val(config.context_name || '');
+                        $('#securityLevel').val(config.security_level || 'authPriv');
+                        $('#authProtocol').val(config.auth_protocol || 'SHA');
+                        $('#privProtocol').val(config.priv_protocol || 'AES');
+                        // 密码留空，不填充
+                    } else {
+                        $('#community').val(config.community || 'public');
+                    }
+                    
+                    toggleSNMPVersion(config.version || 'v2c');
+                    toggleSecurityLevel(config.security_level || 'authPriv');
+                    
+                    // 编辑模式下密码字段不要必填
+                    $('#authPassword, #privPassword').removeAttr('required');
+                    
+                    $('#snmpModal').modal({ backdrop: 'static', keyboard: false }).modal('show');
+                } else {
+                    alert(response.message || '获取配置失败');
+                }
+            },
+            error: function(xhr) {
+                let msg = '获取配置失败';
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    msg = res.message || msg;
+                } catch (e) {}
+                alert(msg);
+            },
+            complete: () => showLoading(false)
+        });
+    }
+
+    function saveSNMPConfig() {
+        const formData = collectFormData();
+        if (!validateFormData(formData)) return;
+        
+        showLoading(true);
+        const method = formData.id ? 'PUT' : 'POST';
+        const url = formData.id ? `/config/api/snmp-settings/${formData.id}` : '/config/api/snmp-settings';
+        
+        $.ajax({
+            url: url,
+            method: method,
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            data: JSON.stringify(formData),
+            timeout: 15000,  // 保存操作15秒超时
+            success: function(response) {
+                if (response.success) {
+                    alert(response.message || '配置保存成功');
+                    closeModal();
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    alert(response.message || '配置保存失败');
+                }
+            },
+            error: function(xhr) {
+                let msg = '配置保存失败';
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    msg = res.message || msg;
+                } catch (e) {}
+                alert(msg);
+            },
+            complete: () => showLoading(false)
+        });
+    }
+
+    function collectFormData() {
+        const formData = {
+            id: $('#configId').val(),
+            name: $('#configName').val(),
+            version: $('#snmpVersion').val(),
+            port: parseInt($('#port').val()),
+            timeout: parseInt($('#timeout').val()),
+            retries: parseInt($('#retries').val()),
+            enabled: $('#configEnabled').prop('checked')
+        };
+        
+        if (formData.version === 'v3') {
+            formData.username = $('#username').val();
+            formData.security_level = $('#securityLevel').val();
+            formData.auth_protocol = $('#authProtocol').val();
+            formData.auth_password = $('#authPassword').val() || null;  // 空字符串转为null，后端将忽略
+            formData.priv_protocol = $('#privProtocol').val();
+            formData.priv_password = $('#privPassword').val() || null;
+            formData.context_name = $('#contextName').val() || null;
+            formData.community = null;
+        } else {
+            formData.community = $('#community').val();
+            formData.username = null;
+            formData.security_level = null;
+            formData.auth_protocol = null;
+            formData.auth_password = null;
+            formData.priv_protocol = null;
+            formData.priv_password = null;
+            formData.context_name = null;
+        }
+        return formData;
+    }
+
+    function validateFormData(formData) {
+        if (!formData.name || !formData.name.trim()) { alert('请填写配置名称'); return false; }
+        if (!formData.version) { alert('请选择SNMP版本'); return false; }
+        
+        if (formData.version === 'v3') {
+            if (!formData.username || !formData.username.trim()) { alert('请填写SNMP v3用户名'); return false; }
+            // 新增时才需要密码必填
+            if (!formData.id) {
+                if ((formData.security_level === 'authNoPriv' || formData.security_level === 'authPriv') && !formData.auth_password) {
+                    alert('请填写认证密码'); return false;
+                }
+                if (formData.security_level === 'authPriv' && !formData.priv_password) {
+                    alert('请填写加密密码'); return false;
+                }
+            }
+            if (formData.auth_password && formData.auth_password.length < 8) { alert('认证密码至少需要8个字符'); return false; }
+            if (formData.priv_password && formData.priv_password.length < 8) { alert('加密密码至少需要8个字符'); return false; }
+        } else {
+            if (!formData.community || !formData.community.trim()) { alert('请填写SNMP社区字符串'); return false; }
+        }
+        
+        if (!formData.port || formData.port < 1 || formData.port > 65535) { alert('端口号必须在1-65535之间'); return false; }
+        if (!formData.timeout || formData.timeout < 1 || formData.timeout > 60) { alert('超时时间必须在1-60秒之间'); return false; }
+        if (!formData.retries || formData.retries < 1 || formData.retries > 10) { alert('重试次数必须在1-10次之间'); return false; }
+        return true;
+    }
+
+    function testSNMPConnection() {
+        const host = $('#testHost').val();
+        if (!host || !host.trim()) { alert('请输入要测试的主机地址'); return; }
+        
+        const formData = collectFormData();
+        if (!validateFormData(formData)) return;
+        
+        const testBtn = $('#testConnectionBtn');
+        const originalHtml = testBtn.html();
+        testBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> 测试中...');
+        $('#testResult').hide().empty();
+        
+        $.ajax({
+            url: '/config/api/snmp-settings/test',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            data: JSON.stringify({ host: host, config: formData }),
+            timeout: 15000,  // 测试连接最多15秒
+            success: function(response) {
+                $('#testResult').show();
+                const alertClass = response.success ? 'alert-success' : 'alert-danger';
+                const icon = response.success ? 'fa-check-circle' : 'fa-exclamation-triangle';
+                $('#testResult').html(`
+                    <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                        <i class="fas ${icon} mr-2"></i>
+                        <strong>${response.success ? '连接成功' : '连接失败'}！</strong> ${response.message || ''}
+                        ${response.sys_info ? `<br><small class="d-block mt-1">系统信息: ${response.sys_info}</small>` : ''}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `);
+            },
+            error: function(xhr) {
+                let msg = '测试连接失败，请稍后重试';
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    msg = res.message || msg;
+                } catch (e) {}
+                $('#testResult').show().html(`
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <strong>请求错误！</strong> ${msg}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `);
+            },
+            complete: function() {
+                testBtn.prop('disabled', false).html(originalHtml);
+            }
+        });
+    }
+
+    function updateSNMPStatus(configId, enabled) {
+        $.ajax({
+            url: `/config/api/snmp-settings/${configId}/status`,
+            method: 'PUT',
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            data: JSON.stringify({ enabled: enabled }),
+            timeout: 10000,
+            success: function(response) {
+                if (!response.success) {
+                    $(`#status_${configId}`).prop('checked', !enabled);
+                    alert(response.message || '状态更新失败');
+                }
+            },
+            error: function(xhr) {
+                $(`#status_${configId}`).prop('checked', !enabled);
+                let msg = '状态更新失败';
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    msg = res.message || msg;
+                } catch (e) {}
+                alert(msg);
+            }
+        });
+    }
+
+    function deleteSNMPConfig(configId, configName) {
+        if (!confirm(`确定要删除配置"${configName}"吗？此操作不可撤销。`)) return;
+        
+        const deleteBtn = $(`.delete-snmp[data-id="${configId}"]`);
+        const originalHtml = deleteBtn.html();
+        deleteBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        
+        $.ajax({
+            url: `/config/api/snmp-settings/${configId}`,
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+            timeout: 10000,
+            success: function(response) {
+                if (response.success) {
+                    $(`tr[data-id="${configId}"]`).fadeOut(300, function() {
+                        $(this).remove();
+                        $('#configCount').text($('#snmpTable tbody tr').length);
+                    });
+                } else {
+                    alert(response.message || '配置删除失败');
+                    deleteBtn.html(originalHtml).prop('disabled', false);
+                }
+            },
+            error: function(xhr) {
+                let msg = '配置删除失败';
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    msg = res.message || msg;
+                } catch (e) {}
+                alert(msg);
+                deleteBtn.html(originalHtml).prop('disabled', false);
+            }
+        });
+    }
+
+    function applyFilters() {
+        const searchTerm = $('#searchInput').val().toLowerCase();
+        const versionFilter = $('#versionFilter').val();
+        const statusFilter = $('#statusFilter').val();
+        
+        let visibleCount = 0;
+        $('#snmpTable tbody tr').each(function() {
+            const $row = $(this);
+            const name = $row.find('td:nth-child(2)').text().toLowerCase();
+            const version = $row.find('td:nth-child(3) span').text().toLowerCase();
+            const status = $row.find('.toggle-status').prop('checked') ? 'enabled' : 'disabled';
+            
+            let show = true;
+            if (searchTerm && !name.includes(searchTerm)) show = false;
+            if (versionFilter && version !== versionFilter) show = false;
+            if (statusFilter && status !== statusFilter) show = false;
+            
+            $row.toggle(show);
+            if (show) visibleCount++;
+        });
+        $('#configCount').text(visibleCount);
+    }
+
+    function showLoading(isLoading) {
+        const saveBtn = $('#saveSnmpBtn');
+        const spinner = saveBtn.find('.spinner-border');
+        const saveBtnText = $('#saveBtnText');
+        
+        if (isLoading) {
+            spinner.removeClass('d-none');
+            saveBtnText.addClass('d-none');
+            saveBtn.prop('disabled', true);
+        } else {
+            spinner.addClass('d-none');
+            saveBtnText.removeClass('d-none');
+            saveBtn.prop('disabled', false);
+        }
+    }
+});
+</script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+/* 原有样式保持不变，此处略（可粘贴原有样式） */
+.version-config { padding:15px; border:1px solid #e3e6f0; border-radius:5px; margin-bottom:15px; background-color:#f8f9fc; }
+.security-config { padding:10px; border:1px dashed #ddd; border-radius:5px; margin-bottom:10px; background-color:#fdfdfd; }
+.badge { font-size:85%; font-weight:500; padding:0.25em 0.5em; }
+.custom-switch .custom-control-label::after { background-color:#fff; }
+.custom-control-input:checked~.custom-control-label::before { border-color:#4e73df; background-color:#4e73df; }
+.table-hover tbody tr:hover { background-color:rgba(78,115,223,0.05); }
+.btn-group-sm .btn { padding:0.25rem 0.5rem; }
+.form-control:focus { border-color:#4e73df; box-shadow:0 0 0 0.2rem rgba(78,115,223,0.25); }
+.custom-checkbox .custom-control-input:checked~.custom-control-label::before { background-color:#4e73df; border-color:#4e73df; }
+.custom-switch .custom-control-input:checked~.custom-control-label::before { background-color:#4e73df; border-color:#4e73df; }
+.modal { z-index:1050 !important; }
+.modal-backdrop { z-index:1040 !important; }
+.form-group { margin-bottom:1rem; }
+.btn-group-sm > .btn { font-size:0.875rem; line-height:1.5; border-radius:0.2rem; }
+.modal.show { display:block !important; }
+.modal-backdrop.show { opacity:0.5 !important; }
+.close { font-size:1.5rem; font-weight:700; line-height:1; color:#000; text-shadow:0 1px 0 #fff; opacity:.5; }
+.close:hover { color:#000; text-decoration:none; opacity:.75; }
+</style>
+{% endblock %}

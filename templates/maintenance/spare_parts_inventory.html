@@ -1,0 +1,1864 @@
+{% extends "base.html" %}
+
+{% block title %}备件库存管理 - IT资产管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .status-low {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .status-normal {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .status-adequate {
+        background-color: #20c997;
+        color: white;
+    }
+    
+    .status-excess {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .category-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .category-hardware {
+        background-color: #6f42c1;
+        color: white;
+    }
+    
+    .category-software {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    .category-consumable {
+        background-color: #fd7e14;
+        color: white;
+    }
+    
+    .stock-bar {
+        height: 6px;
+        background-color: #e9ecef;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 0.25rem;
+    }
+    
+    .stock-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+    }
+    
+    .stock-bar-danger {
+        background-color: #dc3545;
+    }
+    
+    .stock-bar-warning {
+        background-color: #ffc107;
+    }
+    
+    .stock-bar-success {
+        background-color: #198754;
+    }
+    
+    .stock-bar-info {
+        background-color: #0dcaf0;
+    }
+    
+    .part-card {
+        border-left: 4px solid #dee2e6;
+        transition: all 0.2s;
+        height: 100%;
+    }
+    
+    .part-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+        transform: translateY(-1px);
+    }
+    
+    .part-card-low-stock {
+        border-left-color: #dc3545;
+        background-color: #fff5f5;
+    }
+    
+    .part-card-normal {
+        border-left-color: #198754;
+        background-color: #f5fff9;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+    }
+    
+    .stat-card {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+    
+    .stat-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: bold;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .price-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: #495057;
+    }
+    
+    .location-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e7f5ff;
+        color: #0d6efd;
+    }
+    
+    .installed-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e6f7ee;
+        color: #198754;
+    }
+    
+    .uninstalled-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+    
+    .stock-status-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 4px;
+    }
+    
+    .stock-status-low {
+        background-color: #dc3545;
+    }
+    
+    .stock-status-normal {
+        background-color: #198754;
+    }
+    
+    .stock-status-adequate {
+        background-color: #20c997;
+    }
+    
+    .stock-status-excess {
+        background-color: #0dcaf0;
+    }
+    
+    .vendor-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #f3f0ff;
+        color: #6f42c1;
+    }
+    
+    .supplier-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .table-action-buttons {
+        display: flex;
+        gap: 0.25rem;
+        justify-content: center;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .table-action-buttons {
+            flex-direction: column;
+            align-items: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">首页</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('maintenance.maintenance_dashboard') }}">设备维护</a></li>
+            <li class="breadcrumb-item active">备件库存</li>
+        </ol>
+    </nav>
+
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">备件库存管理</h1>
+            <p class="text-muted mb-0">管理备件库存，包括硬件、软件和耗材</p>
+        </div>
+        <div class="action-buttons">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPartModal">
+                <i class="fas fa-plus me-2"></i>新增备件
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="exportBtn">
+                <i class="fas fa-download me-2"></i>导出库存
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">备件总数</h6>
+                        <div class="stat-number">{{ parts|length }}</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-boxes text-primary" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">库存总值</h6>
+                        <div class="stat-number text-success">¥{{ "%.2f"|format(total_value) }}</div>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-money-bill-wave text-success" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">低库存备件</h6>
+                        <div class="stat-number text-danger">{{ low_stock_parts }}</div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">可用备件</h6>
+                        <div class="stat-number text-info" id="availableParts">0</div>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-check-circle text-info" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 筛选和搜索区域 -->
+    <div class="filter-section mb-4">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="categoryFilter" class="form-label">备件类别</label>
+                <select class="form-select" id="categoryFilter">
+                    <option value="">全部类别</option>
+                    <option value="hardware">硬件</option>
+                    <option value="software">软件</option>
+                    <option value="consumable">耗材</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="statusFilter" class="form-label">库存状态</label>
+                <select class="form-select" id="statusFilter">
+                    <option value="">全部状态</option>
+                    <option value="low">低库存</option>
+                    <option value="normal">正常库存</option>
+                    <option value="adequate">充足库存</option>
+                    <option value="excess">过量库存</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="vendorFilter" class="form-label">供应商</label>
+                <input type="text" class="form-control" id="vendorFilter" placeholder="输入供应商名称">
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="searchInput" class="form-label">搜索备件</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索零件号、名称、型号...">
+                    <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 备件库存列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">备件库存列表</h5>
+            <div class="text-muted small">
+                共 <span id="partCount">{{ parts|length }}</span> 个备件
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if parts %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>零件信息</th>
+                            <th>库存状态</th>
+                            <th>类别</th>
+                            <th>供应商</th>
+                            <th>单价</th>
+                            <th>库存位置</th>
+                            <th>安装状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in parts %}
+                        {% set is_low_stock = part.current_stock <= part.min_stock_level %}
+                        {% set stock_status = 'low' if is_low_stock else 'normal' %}
+                        {% if part.max_stock_level %}
+                            {% if part.current_stock > part.max_stock_level * 1.5 %}
+                                {% set stock_status = 'excess' %}
+                            {% elif part.current_stock > part.max_stock_level * 0.8 %}
+                                {% set stock_status = 'adequate' %}
+                            {% endif %}
+                        {% endif %}
+                        
+                        <tr class="{% if is_low_stock %}table-danger{% endif %}">
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ part.name }}</div>
+                                <div class="text-muted small">
+                                    <strong>零件号:</strong> {{ part.part_number }}
+                                    {% if part.model %}
+                                    | <strong>型号:</strong> {{ part.model }}
+                                    {% endif %}
+                                    {% if part.asset_number %}
+                                    | <strong>资产号:</strong> {{ part.asset_number }}
+                                    {% endif %}
+                                </div>
+                                {% if part.description %}
+                                <div class="text-muted small text-truncate" style="max-width: 300px;">
+                                    {{ part.description }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="stock-status-indicator stock-status-{{ stock_status }}"></span>
+                                    <span class="fw-medium">{{ part.current_stock }}</span>
+                                    <span class="text-muted ms-1">/ {{ part.min_stock_level|default(1) }}</span>
+                                    {% if part.max_stock_level %}
+                                    <span class="text-muted ms-1">(最大: {{ part.max_stock_level }})</span>
+                                    {% endif %}
+                                </div>
+                                <div class="stock-bar mt-1">
+                                    {% if part.max_stock_level %}
+                                        {% set usage_percentage = (part.current_stock / part.max_stock_level * 100)|int %}
+                                    {% else %}
+                                        {% set usage_percentage = (part.current_stock / (part.min_stock_level * 3) * 100)|int %}
+                                        {% if usage_percentage > 100 %}{% set usage_percentage = 100 %}{% endif %}
+                                    {% endif %}
+                                    
+                                    {% if usage_percentage <= 30 %}
+                                        <div class="stock-bar-fill stock-bar-danger" style="width: {{ usage_percentage }}%"></div>
+                                    {% elif usage_percentage <= 60 %}
+                                        <div class="stock-bar-fill stock-bar-warning" style="width: {{ usage_percentage }}%"></div>
+                                    {% elif usage_percentage <= 90 %}
+                                        <div class="stock-bar-fill stock-bar-success" style="width: {{ usage_percentage }}%"></div>
+                                    {% else %}
+                                        <div class="stock-bar-fill stock-bar-info" style="width: {{ usage_percentage }}%"></div>
+                                    {% endif %}
+                                </div>
+                                <div class="mt-1">
+                                    <span class="status-badge status-{{ stock_status }}">
+                                        {% if stock_status == 'low' %}
+                                            低库存
+                                        {% elif stock_status == 'normal' %}
+                                            正常库存
+                                        {% elif stock_status == 'adequate' %}
+                                            充足库存
+                                        {% elif stock_status == 'excess' %}
+                                            过量库存
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                {% if part.category == 'hardware' %}
+                                <span class="category-badge category-hardware">
+                                    <i class="fas fa-microchip me-1"></i>硬件
+                                </span>
+                                {% elif part.category == 'software' %}
+                                <span class="category-badge category-software">
+                                    <i class="fas fa-compact-disc me-1"></i>软件
+                                </span>
+                                {% elif part.category == 'consumable' %}
+                                <span class="category-badge category-consumable">
+                                    <i class="fas fa-tint me-1"></i>耗材
+                                </span>
+                                {% else %}
+                                <span class="text-muted">未分类</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if part.vendor %}
+                                <span class="vendor-badge">{{ part.vendor }}</span>
+                                {% else %}
+                                <span class="text-muted">未指定</span>
+                                {% endif %}
+                                {% if part.supplier %}
+                                <div class="small mt-1">
+                                    <span class="supplier-badge">{{ part.supplier.name if part.supplier.name else part.supplier.id }}</span>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if part.unit_price %}
+                                <div class="fw-medium">¥{{ "%.2f"|format(part.unit_price) }}</div>
+                                <div class="price-badge mt-1">
+                                    总价: ¥{{ "%.2f"|format(part.current_stock * part.unit_price) }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">未设置</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if part.location %}
+                                <span class="location-badge">
+                                    <i class="fas fa-map-marker-alt me-1"></i>{{ part.location }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">未指定</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if part.installed_device %}
+                                <span class="installed-badge">
+                                    <i class="fas fa-server me-1"></i>已安装
+                                </span>
+                                <div class="small mt-1">
+                                    {{ part.installed_device.hostname|default('未知设备') }}
+                                </div>
+                                {% else %}
+                                <span class="uninstalled-badge">
+                                    <i class="fas fa-box me-1"></i>库存中
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="table-action-buttons">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewPart({{ part.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editPart({{ part.id }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="stockOperation({{ part.id }}, 'in')">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="stockOperation({{ part.id }}, 'out')">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePart({{ part.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-boxes"></i>
+                </div>
+                <h4 class="mb-3">暂无备件库存</h4>
+                <p class="text-muted mb-4">您还没有添加任何备件，点击右上角按钮添加第一个备件</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPartModal">
+                    <i class="fas fa-plus me-2"></i>添加备件
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% if parts %}
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                显示 {{ parts|length }} 个备件中的 {{ parts|length }} 个
+            </div>
+            <nav aria-label="备件分页">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item disabled"><a class="page-link" href="#">下一页</a></li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 创建备件模态框 -->
+<div class="modal fade" id="createPartModal" tabindex="-1" aria-labelledby="createPartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createPartModalLabel">添加新备件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createPartForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="partNumber" class="form-label">零件号 *</label>
+                            <input type="text" class="form-control" id="partNumber" name="part_number" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="partName" class="form-label">零件名称 *</label>
+                            <input type="text" class="form-control" id="partName" name="name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="assetNumber" class="form-label">资产号</label>
+                            <input type="text" class="form-control" id="assetNumber" name="asset_number">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="partCategory" class="form-label">备件类别</label>
+                            <select class="form-select" id="partCategory" name="category">
+                                <option value="hardware">硬件</option>
+                                <option value="software">软件</option>
+                                <option value="consumable">耗材</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="partDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="partDescription" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="partVendor" class="form-label">供应商名称</label>
+                            <input type="text" class="form-control" id="partVendor" name="vendor">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="partModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="partModel" name="model">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="unitPrice" class="form-label">单价 (元)</label>
+                            <input type="number" step="0.01" class="form-control" id="unitPrice" name="unit_price" min="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="currentStock" class="form-label">当前库存 *</label>
+                            <input type="number" class="form-control" id="currentStock" name="current_stock" value="0" min="0" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="minStockLevel" class="form-label">最低库存水平</label>
+                            <input type="number" class="form-control" id="minStockLevel" name="min_stock_level" value="1" min="1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="maxStockLevel" class="form-label">最高库存水平</label>
+                            <input type="number" class="form-control" id="maxStockLevel" name="max_stock_level" min="1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="partLocation" class="form-label">存放位置</label>
+                            <input type="text" class="form-control" id="partLocation" name="location">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="storageConditions" class="form-label">存储条件</label>
+                            <textarea class="form-control" id="storageConditions" name="storage_conditions" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="supplierSelect" class="form-label">供应商</label>
+                            <select class="form-select" id="supplierSelect" name="supplier_id">
+                                <option value="">选择供应商...</option>
+                                <!-- 供应商选项将通过JavaScript动态加载 -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="compatibleDevices" class="form-label">兼容设备 (每行一个)</label>
+                            <textarea class="form-control" id="compatibleDevices" name="compatible_devices" rows="3" placeholder="例如：&#10;Dell PowerEdge R740&#10;HP ProLiant DL380"></textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="installDevice" class="form-label">安装设备</label>
+                            <select class="form-select" id="installDevice" name="installed_device_id">
+                                <option value="">选择安装设备...</option>
+                                <!-- 设备选项将通过JavaScript动态加载 -->
+                            </select>
+                            <div class="form-text">如果不安装到设备上，请保持为空</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建备件</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 备件详情模态框 -->
+<div class="modal fade" id="partDetailModal" tabindex="-1" aria-labelledby="partDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="partDetailModalLabel">备件详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="partDetailContent">
+                <!-- 备件详情将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="printPartDetails()">
+                    <i class="fas fa-print me-1"></i>打印
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑备件模态框 -->
+<div class="modal fade" id="editPartModal" tabindex="-1" aria-labelledby="editPartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPartModalLabel">编辑备件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editPartForm">
+                <div class="modal-body" id="editPartContent">
+                    <!-- 编辑表单将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 库存操作模态框 -->
+<div class="modal fade" id="stockOperationModal" tabindex="-1" aria-labelledby="stockOperationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stockOperationModalLabel">库存操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="stockOperationForm">
+                <div class="modal-body">
+                    <input type="hidden" id="operationPartId">
+                    <input type="hidden" id="operationType">
+                    
+                    <div class="mb-3">
+                        <h6 id="operationTitle">库存入库</h6>
+                        <div class="alert alert-info" id="operationInfo">
+                            <!-- 操作信息将通过JavaScript动态加载 -->
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="operationQuantity" class="form-label">数量 *</label>
+                        <input type="number" class="form-control" id="operationQuantity" name="quantity" min="1" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="operationReason" class="form-label">操作原因</label>
+                        <select class="form-select" id="operationReason" name="reason">
+                            <option value="purchase">采购入库</option>
+                            <option value="return">退库</option>
+                            <option value="transfer">调拨</option>
+                            <option value="adjustment">库存调整</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="operationNotes" class="form-label">备注</label>
+                        <textarea class="form-control" id="operationNotes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="operationSubmitBtn">确认操作</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 二维码标签模态框 -->
+<div class="modal fade" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="qrCodeModalLabel">备件二维码</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="qrCodeContainer"></div>
+                <div class="mt-3">
+                    <h6 id="qrPartName"></h6>
+                    <p class="text-muted small" id="qrPartNumber"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="printQRCode()">
+                    <i class="fas fa-print me-1"></i>打印标签
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化
+        initializePage();
+        
+        // 添加刷新按钮事件
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 添加导出按钮事件
+        document.getElementById('exportBtn').addEventListener('click', exportInventory);
+        
+        // 初始化筛选功能
+        initializeFilters();
+        
+        // 统计可用备件
+        countAvailableParts();
+        
+        // 加载供应商和设备数据
+        loadSuppliers();
+        loadDevices();
+        
+        // 设置创建表单提交事件
+        const createForm = document.getElementById('createPartForm');
+        if (createForm) {
+            createForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                createSparePart();
+            });
+        }
+        
+        // 设置库存操作表单提交事件
+        const stockForm = document.getElementById('stockOperationForm');
+        if (stockForm) {
+            stockForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitStockOperation();
+            });
+        }
+    });
+    
+    // 初始化页面
+    function initializePage() {
+        // 统计可用备件
+        countAvailableParts();
+    }
+    
+    // 初始化筛选功能
+    function initializeFilters() {
+        const categoryFilter = document.getElementById('categoryFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const vendorFilter = document.getElementById('vendorFilter');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        
+        // 类别筛选
+        if (categoryFilter) {
+            categoryFilter.addEventListener('change', filterParts);
+        }
+        
+        // 状态筛选
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterParts);
+        }
+        
+        // 供应商筛选
+        if (vendorFilter) {
+            vendorFilter.addEventListener('input', filterParts);
+        }
+        
+        // 搜索功能
+        if (searchBtn) {
+            searchBtn.addEventListener('click', filterParts);
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    filterParts();
+                }
+            });
+        }
+    }
+    
+    // 筛选备件
+    function filterParts() {
+        const categoryFilter = document.getElementById('categoryFilter').value;
+        const statusFilter = document.getElementById('statusFilter').value;
+        const vendorFilter = document.getElementById('vendorFilter').value.toLowerCase();
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            let showRow = true;
+            
+            // 类别筛选
+            if (categoryFilter && showRow) {
+                const categoryCell = row.cells[3];
+                const categoryBadge = categoryCell.querySelector('.category-badge');
+                let category = '';
+                
+                if (categoryBadge) {
+                    if (categoryBadge.textContent.includes('硬件')) {
+                        category = 'hardware';
+                    } else if (categoryBadge.textContent.includes('软件')) {
+                        category = 'software';
+                    } else if (categoryBadge.textContent.includes('耗材')) {
+                        category = 'consumable';
+                    }
+                }
+                
+                if (categoryFilter !== category) {
+                    showRow = false;
+                }
+            }
+            
+            // 状态筛选
+            if (statusFilter && showRow) {
+                const statusCell = row.cells[2];
+                const statusBadge = statusCell.querySelector('.status-badge');
+                let status = '';
+                
+                if (statusBadge) {
+                    if (statusBadge.textContent.includes('低库存')) {
+                        status = 'low';
+                    } else if (statusBadge.textContent.includes('正常库存')) {
+                        status = 'normal';
+                    } else if (statusBadge.textContent.includes('充足库存')) {
+                        status = 'adequate';
+                    } else if (statusBadge.textContent.includes('过量库存')) {
+                        status = 'excess';
+                    }
+                }
+                
+                if (statusFilter !== status) {
+                    showRow = false;
+                }
+            }
+            
+            // 供应商筛选
+            if (vendorFilter && showRow) {
+                const vendorCell = row.cells[4];
+                const vendorBadge = vendorCell.querySelector('.vendor-badge');
+                let vendor = vendorBadge ? vendorBadge.textContent.toLowerCase() : '';
+                
+                if (!vendor.includes(vendorFilter)) {
+                    showRow = false;
+                }
+            }
+            
+            // 搜索筛选
+            if (searchQuery && showRow) {
+                const partInfoCell = row.cells[1];
+                const partNumber = partInfoCell.querySelector('.small')?.textContent.toLowerCase() || '';
+                const partName = partInfoCell.querySelector('.fw-semibold')?.textContent.toLowerCase() || '';
+                const partModel = partInfoCell.querySelector('.small')?.textContent.toLowerCase() || '';
+                
+                if (!partNumber.includes(searchQuery) && !partName.includes(searchQuery) && !partModel.includes(searchQuery)) {
+                    showRow = false;
+                }
+            }
+            
+            // 显示/隐藏行
+            row.style.display = showRow ? '' : 'none';
+            if (showRow) visibleCount++;
+        });
+        
+        // 更新备件计数
+        document.getElementById('partCount').textContent = visibleCount;
+        
+        // 如果没有显示任何备件，显示空状态
+        const tbody = document.querySelector('tbody');
+        const emptyState = document.querySelector('.empty-state');
+        
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!emptyState) {
+                const newEmptyState = document.createElement('div');
+                newEmptyState.className = 'empty-state';
+                newEmptyState.innerHTML = `
+                    <div class="empty-state-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h4 class="mb-3">未找到匹配的备件</h4>
+                    <p class="text-muted mb-4">请尝试其他筛选条件或搜索关键词</p>
+                    <button type="button" class="btn btn-outline-secondary" id="resetFiltersBtn">
+                        重置筛选条件
+                    </button>
+                `;
+                tbody.parentNode.insertBefore(newEmptyState, tbody);
+                tbody.style.display = 'none';
+                
+                document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+            }
+        } else if (emptyState && emptyState.id !== 'emptyState') {
+            emptyState.remove();
+            tbody.style.display = '';
+        }
+    }
+    
+    // 重置筛选条件
+    function resetFilters() {
+        document.getElementById('categoryFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('vendorFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        filterParts();
+    }
+    
+    // 统计可用备件
+    function countAvailableParts() {
+        let availableCount = 0;
+        
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const installedCell = row.cells[7];
+            const installedBadge = installedCell.querySelector('.uninstalled-badge');
+            
+            // 统计未安装的备件
+            if (installedBadge && installedBadge.textContent.includes('库存中')) {
+                availableCount++;
+            }
+        });
+        
+        // 更新统计显示
+        document.getElementById('availableParts').textContent = availableCount;
+    }
+    
+    // 查看备件详情
+    function viewPart(partId) {
+        // 从API获取备件详情
+        fetch(`/api/maintenance/spare_parts/${partId}`)
+            .then(response => response.json())
+            .then(part => {
+                if (!part) {
+                    alert('备件不存在');
+                    return;
+                }
+                
+                // 构建详情内容
+                let categoryBadge = '';
+                if (part.category === 'hardware') {
+                    categoryBadge = '<span class="badge bg-purple">硬件</span>';
+                } else if (part.category === 'software') {
+                    categoryBadge = '<span class="badge bg-primary">软件</span>';
+                } else if (part.category === 'consumable') {
+                    categoryBadge = '<span class="badge bg-orange">耗材</span>';
+                }
+                
+                let stockStatusBadge = '';
+                let stockStatusClass = '';
+                if (part.stock_status === 'low') {
+                    stockStatusBadge = '<span class="badge bg-danger">低库存</span>';
+                    stockStatusClass = 'text-danger';
+                } else if (part.stock_status === 'normal') {
+                    stockStatusBadge = '<span class="badge bg-success">正常库存</span>';
+                    stockStatusClass = 'text-success';
+                } else if (part.stock_status === 'adequate') {
+                    stockStatusBadge = '<span class="badge bg-teal">充足库存</span>';
+                    stockStatusClass = 'text-teal';
+                } else if (part.stock_status === 'excess') {
+                    stockStatusBadge = '<span class="badge bg-info">过量库存</span>';
+                    stockStatusClass = 'text-info';
+                }
+                
+                // 计算库存百分比
+                let stockPercentage = 0;
+                if (part.max_stock_level) {
+                    stockPercentage = Math.min(100, (part.current_stock / part.max_stock_level) * 100);
+                } else {
+                    stockPercentage = Math.min(100, (part.current_stock / (part.min_stock_level * 3)) * 100);
+                }
+                
+                // 处理兼容设备
+                let compatibleDevicesHtml = '<p class="text-muted">无兼容设备信息</p>';
+                if (part.compatible_devices && part.compatible_devices.length > 0) {
+                    compatibleDevicesHtml = '<ul class="list-unstyled">';
+                    part.compatible_devices.forEach(device => {
+                        compatibleDevicesHtml += `<li class="mb-1"><i class="fas fa-server me-2"></i>${device}</li>`;
+                    });
+                    compatibleDevicesHtml += '</ul>';
+                }
+                
+                const detailHtml = `
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4>${part.name}</h4>
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="badge bg-secondary me-2">${part.part_number}</span>
+                                ${categoryBadge}
+                                ${stockStatusBadge}
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="generateQRCode(${part.id}, '${part.part_number}', '${part.name}')">
+                                <i class="fas fa-qrcode me-1"></i>生成二维码
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">基本信息</h6>
+                            <dl class="part-modal-info">
+                                <dt>资产号:</dt>
+                                <dd>${part.asset_number || '未设置'}</dd>
+                                
+                                <dt>型号:</dt>
+                                <dd>${part.model || '未设置'}</dd>
+                                
+                                <dt>供应商:</dt>
+                                <dd>${part.vendor || '未设置'}</dd>
+                                
+                                <dt>供应商:</dt>
+                                <dd>${part.supplier_name || '未设置'}</dd>
+                                
+                                <dt>存放位置:</dt>
+                                <dd>${part.location || '未设置'}</dd>
+                                
+                                <dt>存储条件:</dt>
+                                <dd>${part.storage_conditions || '未设置'}</dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3">库存信息</h6>
+                            <dl class="part-modal-info">
+                                <dt>当前库存:</dt>
+                                <dd class="${stockStatusClass} fw-bold">${part.current_stock} 个</dd>
+                                
+                                <dt>最低库存:</dt>
+                                <dd>${part.min_stock_level || 1} 个</dd>
+                                
+                                <dt>最高库存:</dt>
+                                <dd>${part.max_stock_level || '未设置'}</dd>
+                                
+                                <dt>单价:</dt>
+                                <dd>${part.unit_price ? '¥' + part.unit_price.toFixed(2) : '未设置'}</dd>
+                                
+                                <dt>库存总值:</dt>
+                                <dd>¥${(part.current_stock * (part.unit_price || 0)).toFixed(2)}</dd>
+                            </dl>
+                            
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>库存水平</span>
+                                    <span>${Math.round(stockPercentage)}%</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar ${stockStatusClass.replace('text-', 'bg-')}" role="progressbar" 
+                                         style="width: ${stockPercentage}%" aria-valuenow="${stockPercentage}" 
+                                         aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">兼容设备</h6>
+                            ${compatibleDevicesHtml}
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3">安装状态</h6>
+                            ${part.installed_device ? `
+                                <div class="alert alert-success">
+                                    <i class="fas fa-server me-2"></i>
+                                    <strong>已安装到:</strong> ${part.installed_device.hostname || '未知设备'}
+                                    ${part.installed_device.ip_address ? `(${part.installed_device.ip_address})` : ''}
+                                </div>
+                            ` : `
+                                <div class="alert alert-secondary">
+                                    <i class="fas fa-box me-2"></i>
+                                    <strong>当前状态:</strong> 库存中
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                    
+                    ${part.description ? `
+                    <hr>
+                    <div class="mt-3">
+                        <h6>备件描述</h6>
+                        <p>${part.description}</p>
+                    </div>
+                    ` : ''}
+                    
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="text-muted small">
+                                <i class="fas fa-calendar-plus me-1"></i> 创建时间: ${new Date(part.created_at).toLocaleString()}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small text-end">
+                                <i class="fas fa-calendar-check me-1"></i> 更新时间: ${new Date(part.updated_at).toLocaleString()}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 显示模态框
+                document.getElementById('partDetailContent').innerHTML = detailHtml;
+                
+                const modal = new bootstrap.Modal(document.getElementById('partDetailModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching part details:', error);
+                alert('获取备件详情失败');
+            });
+    }
+    
+    // 编辑备件
+    function editPart(partId) {
+        // 从API获取备件数据
+        fetch(`/api/maintenance/spare_parts/${partId}`)
+            .then(response => response.json())
+            .then(part => {
+                if (!part) {
+                    alert('备件不存在');
+                    return;
+                }
+                
+                // 处理兼容设备
+                let compatibleDevicesText = '';
+                if (part.compatible_devices && part.compatible_devices.length > 0) {
+                    compatibleDevicesText = part.compatible_devices.join('\n');
+                }
+                
+                // 构建编辑表单
+                const editHtml = `
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editPartNumber" class="form-label">零件号 *</label>
+                            <input type="text" class="form-control" id="editPartNumber" name="part_number" value="${part.part_number}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editPartName" class="form-label">零件名称 *</label>
+                            <input type="text" class="form-control" id="editPartName" name="name" value="${part.name}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editAssetNumber" class="form-label">资产号</label>
+                            <input type="text" class="form-control" id="editAssetNumber" name="asset_number" value="${part.asset_number || ''}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editPartCategory" class="form-label">备件类别</label>
+                            <select class="form-select" id="editPartCategory" name="category">
+                                <option value="hardware" ${part.category === 'hardware' ? 'selected' : ''}>硬件</option>
+                                <option value="software" ${part.category === 'software' ? 'selected' : ''}>软件</option>
+                                <option value="consumable" ${part.category === 'consumable' ? 'selected' : ''}>耗材</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editPartDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="editPartDescription" name="description" rows="3">${part.description || ''}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editPartVendor" class="form-label">供应商名称</label>
+                            <input type="text" class="form-control" id="editPartVendor" name="vendor" value="${part.vendor || ''}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editPartModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="editPartModel" name="model" value="${part.model || ''}">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editUnitPrice" class="form-label">单价 (元)</label>
+                            <input type="number" step="0.01" class="form-control" id="editUnitPrice" name="unit_price" value="${part.unit_price || ''}" min="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editCurrentStock" class="form-label">当前库存 *</label>
+                            <input type="number" class="form-control" id="editCurrentStock" name="current_stock" value="${part.current_stock}" min="0" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="editMinStockLevel" class="form-label">最低库存水平</label>
+                            <input type="number" class="form-control" id="editMinStockLevel" name="min_stock_level" value="${part.min_stock_level || 1}" min="1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editMaxStockLevel" class="form-label">最高库存水平</label>
+                            <input type="number" class="form-control" id="editMaxStockLevel" name="max_stock_level" value="${part.max_stock_level || ''}" min="1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editPartLocation" class="form-label">存放位置</label>
+                            <input type="text" class="form-control" id="editPartLocation" name="location" value="${part.location || ''}">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editStorageConditions" class="form-label">存储条件</label>
+                            <textarea class="form-control" id="editStorageConditions" name="storage_conditions" rows="2">${part.storage_conditions || ''}</textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editSupplierSelect" class="form-label">供应商</label>
+                            <select class="form-select" id="editSupplierSelect" name="supplier_id">
+                                <option value="">选择供应商...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editCompatibleDevices" class="form-label">兼容设备 (每行一个)</label>
+                            <textarea class="form-control" id="editCompatibleDevices" name="compatible_devices" rows="3">${compatibleDevicesText}</textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editInstallDevice" class="form-label">安装设备</label>
+                            <select class="form-select" id="editInstallDevice" name="installed_device_id">
+                                <option value="">选择安装设备...</option>
+                            </select>
+                            <div class="form-text">如果不安装到设备上，请保持为空</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editIsActive" name="is_active" ${part.is_active ? 'checked' : ''}>
+                            <label class="form-check-label" for="editIsActive">
+                                备件状态为活跃
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" name="part_id" value="${part.id}">
+                `;
+                
+                // 显示编辑表单
+                document.getElementById('editPartContent').innerHTML = editHtml;
+                
+                // 设置表单提交URL
+                document.getElementById('editPartForm').action = `/api/maintenance/spare_parts/${partId}`;
+                
+                // 加载并选中供应商
+                loadSuppliersForEdit(part.supplier_id);
+                
+                // 加载并选中安装设备
+                loadDevicesForEdit(part.installed_device_id);
+                
+                // 添加表单提交事件
+                document.getElementById('editPartForm').onsubmit = function(e) {
+                    e.preventDefault();
+                    updateSparePart(partId);
+                };
+                
+                const modal = new bootstrap.Modal(document.getElementById('editPartModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching part for edit:', error);
+                alert('获取备件信息失败');
+            });
+    }
+    
+    // 删除备件
+    function deletePart(partId) {
+        if (confirm('确定要删除这个备件吗？此操作可能会影响关联的维护任务。')) {
+            fetch(`/api/maintenance/spare_parts/${partId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert('备件删除成功');
+                    window.location.reload();
+                } else {
+                    alert('删除备件失败: ' + result.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting part:', error);
+                alert('删除备件失败');
+            });
+        }
+    }
+    
+    // 库存操作
+    function stockOperation(partId, operationType) {
+        // 设置操作类型和备件ID
+        document.getElementById('operationPartId').value = partId;
+        document.getElementById('operationType').value = operationType;
+        
+        // 获取备件信息
+        fetch(`/api/maintenance/spare_parts/${partId}`)
+            .then(response => response.json())
+            .then(part => {
+                if (!part) {
+                    alert('备件不存在');
+                    return;
+                }
+                
+                // 设置操作标题和信息
+                const operationTitle = document.getElementById('operationTitle');
+                const operationInfo = document.getElementById('operationInfo');
+                const operationSubmitBtn = document.getElementById('operationSubmitBtn');
+                
+                if (operationType === 'in') {
+                    operationTitle.textContent = '库存入库';
+                    operationInfo.innerHTML = `
+                        <strong>${part.name}</strong> (${part.part_number})<br>
+                        当前库存: <strong>${part.current_stock} 个</strong><br>
+                        最低库存: ${part.min_stock_level || 1} 个 | 最高库存: ${part.max_stock_level || '未设置'}
+                    `;
+                    operationSubmitBtn.textContent = '确认入库';
+                } else {
+                    operationTitle.textContent = '库存出库';
+                    operationInfo.innerHTML = `
+                        <strong>${part.name}</strong> (${part.part_number})<br>
+                        当前库存: <strong>${part.current_stock} 个</strong><br>
+                        出库后库存: <span id="afterStock">${part.current_stock}</span> 个
+                    `;
+                    operationSubmitBtn.textContent = '确认出库';
+                    
+                    // 添加出库数量实时计算
+                    const quantityInput = document.getElementById('operationQuantity');
+                    quantityInput.addEventListener('input', function() {
+                        const afterStock = part.current_stock - (parseInt(this.value) || 0);
+                        document.getElementById('afterStock').textContent = Math.max(0, afterStock);
+                    });
+                }
+                
+                // 显示模态框
+                const modal = new bootstrap.Modal(document.getElementById('stockOperationModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching part for stock operation:', error);
+                alert('获取备件信息失败');
+            });
+    }
+    
+    // 提交库存操作
+    function submitStockOperation() {
+        const partId = document.getElementById('operationPartId').value;
+        const operationType = document.getElementById('operationType').value;
+        const quantity = document.getElementById('operationQuantity').value;
+        const reason = document.getElementById('operationReason').value;
+        const notes = document.getElementById('operationNotes').value;
+        
+        if (!quantity || parseInt(quantity) <= 0) {
+            alert('请输入有效的数量');
+            return;
+        }
+        
+        const data = {
+            operation_type: operationType,
+            quantity: parseInt(quantity),
+            reason: reason,
+            notes: notes
+        };
+        
+        fetch(`/api/maintenance/spare_parts/${partId}/stock`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('库存操作成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('stockOperationModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('库存操作失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error performing stock operation:', error);
+            alert('库存操作失败');
+        });
+    }
+    
+    // 创建备件
+    function createSparePart() {
+        const form = document.getElementById('createPartForm');
+        const formData = new FormData(form);
+        
+        // 处理兼容设备
+        const compatibleDevicesText = formData.get('compatible_devices');
+        let compatibleDevices = [];
+        if (compatibleDevicesText) {
+            compatibleDevices = compatibleDevicesText.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+        }
+        
+        // 构建数据对象
+        const data = {
+            part_number: formData.get('part_number'),
+            name: formData.get('name'),
+            asset_number: formData.get('asset_number') || null,
+            description: formData.get('description') || null,
+            category: formData.get('category'),
+            vendor: formData.get('vendor') || null,
+            model: formData.get('model') || null,
+            compatible_devices: compatibleDevices,
+            unit_price: formData.get('unit_price') ? parseFloat(formData.get('unit_price')) : null,
+            current_stock: parseInt(formData.get('current_stock')),
+            min_stock_level: formData.get('min_stock_level') ? parseInt(formData.get('min_stock_level')) : 1,
+            max_stock_level: formData.get('max_stock_level') ? parseInt(formData.get('max_stock_level')) : null,
+            location: formData.get('location') || null,
+            storage_conditions: formData.get('storage_conditions') || null,
+            supplier_id: formData.get('supplier_id') || null,
+            installed_device_id: formData.get('installed_device_id') || null
+        };
+        
+        fetch('/api/maintenance/spare_parts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('备件创建成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createPartModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('创建备件失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error creating part:', error);
+            alert('创建备件失败');
+        });
+    }
+    
+    // 更新备件
+    function updateSparePart(partId) {
+        const form = document.getElementById('editPartForm');
+        const formData = new FormData(form);
+        
+        // 处理兼容设备
+        const compatibleDevicesText = formData.get('compatible_devices');
+        let compatibleDevices = [];
+        if (compatibleDevicesText) {
+            compatibleDevices = compatibleDevicesText.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+        }
+        
+        // 构建数据对象
+        const data = {
+            part_number: formData.get('part_number'),
+            name: formData.get('name'),
+            asset_number: formData.get('asset_number') || null,
+            description: formData.get('description') || null,
+            category: formData.get('category'),
+            vendor: formData.get('vendor') || null,
+            model: formData.get('model') || null,
+            compatible_devices: compatibleDevices,
+            unit_price: formData.get('unit_price') ? parseFloat(formData.get('unit_price')) : null,
+            current_stock: parseInt(formData.get('current_stock')),
+            min_stock_level: formData.get('min_stock_level') ? parseInt(formData.get('min_stock_level')) : 1,
+            max_stock_level: formData.get('max_stock_level') ? parseInt(formData.get('max_stock_level')) : null,
+            location: formData.get('location') || null,
+            storage_conditions: formData.get('storage_conditions') || null,
+            supplier_id: formData.get('supplier_id') || null,
+            installed_device_id: formData.get('installed_device_id') || null,
+            is_active: formData.get('is_active') === 'on'
+        };
+        
+        fetch(`/api/maintenance/spare_parts/${partId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('备件更新成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editPartModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('更新备件失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating part:', error);
+            alert('更新备件失败');
+        });
+    }
+    
+    // 生成二维码
+    function generateQRCode(partId, partNumber, partName) {
+        // 在实际项目中，您可能需要使用一个二维码生成库，如qrcode.js
+        // 这里我们使用一个简单的示例
+        
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
+        const qrPartName = document.getElementById('qrPartName');
+        const qrPartNumber = document.getElementById('qrPartNumber');
+        
+        // 清空容器
+        qrCodeContainer.innerHTML = '';
+        
+        // 显示备件信息
+        qrPartName.textContent = partName;
+        qrPartNumber.textContent = `零件号: ${partNumber}`;
+        
+        // 创建简单的二维码（文本表示）
+        const qrText = `备件信息:\n名称: ${partName}\n零件号: ${partNumber}\nID: ${partId}`;
+        
+        // 在实际项目中，您可以使用以下代码生成真正的二维码：
+        /*
+        new QRCode(qrCodeContainer, {
+            text: qrText,
+            width: 200,
+            height: 200
+        });
+        */
+        
+        // 临时显示文本
+        qrCodeContainer.innerHTML = `
+            <div class="border rounded p-4 bg-light">
+                <div class="text-center">
+                    <i class="fas fa-qrcode fa-4x text-muted mb-3"></i>
+                    <div class="small">二维码功能需要引入QRCode.js库</div>
+                </div>
+            </div>
+        `;
+        
+        const modal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
+        modal.show();
+    }
+    
+    // 打印备件详情
+    function printPartDetails() {
+        const printContent = document.getElementById('partDetailContent').innerHTML;
+        const originalContent = document.body.innerHTML;
+        
+        document.body.innerHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>备件详情 - 打印</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            </head>
+            <body>
+                <div class="container mt-4">
+                    ${printContent}
+                </div>
+            </body>
+            </html>
+        `;
+        
+        window.print();
+        document.body.innerHTML = originalContent;
+        window.location.reload();
+    }
+    
+    // 打印二维码
+    function printQRCode() {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>备件二维码标签</title>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .label { width: 80mm; height: 50mm; border: 1px solid #000; padding: 5mm; }
+                    .header { text-align: center; font-weight: bold; margin-bottom: 2mm; }
+                    .content { text-align: center; }
+                    .qr-placeholder { width: 30mm; height: 30mm; border: 1px dashed #ccc; margin: 0 auto 2mm; }
+                </style>
+            </head>
+            <body>
+                <div class="label">
+                    <div class="header">备件二维码标签</div>
+                    <div class="content">
+                        <div class="qr-placeholder"></div>
+                        <div style="font-size: 12px;">${document.getElementById('qrPartName').textContent}</div>
+                        <div style="font-size: 10px; color: #666;">${document.getElementById('qrPartNumber').textContent}</div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+    }
+    
+    // 导出库存
+    function exportInventory() {
+        // 这里可以实现导出功能，如导出为Excel或CSV
+        alert('导出功能开发中...');
+        
+        // 示例：导出为CSV
+        /*
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "零件号,名称,类别,供应商,型号,单价,当前库存,最低库存,最高库存,存放位置\n";
+        
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.style.display !== 'none') {
+                const cells = row.cells;
+                const rowData = [
+                    cells[1].querySelector('.small')?.textContent.split('零件号:')[1]?.split('|')[0]?.trim() || '',
+                    cells[1].querySelector('.fw-semibold')?.textContent || '',
+                    cells[3].querySelector('.category-badge')?.textContent || '',
+                    cells[4].querySelector('.vendor-badge')?.textContent || '',
+                    cells[1].querySelector('.small')?.textContent.split('型号:')[1]?.trim() || '',
+                    cells[5].querySelector('.fw-medium')?.textContent.replace('¥', '') || '',
+                    cells[2].querySelector('.fw-medium')?.textContent || '',
+                    cells[2].querySelector('.text-muted')?.textContent.split('/')[1]?.trim() || '',
+                    cells[2].querySelector('.text-muted')?.textContent.split('最大:')[1]?.replace(')', '')?.trim() || '',
+                    cells[6].querySelector('.location-badge')?.textContent || ''
+                ];
+                csvContent += rowData.join(",") + "\n";
+            }
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "备件库存.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        */
+    }
+    
+    // 加载供应商列表
+    function loadSuppliers() {
+        // 从API获取供应商数据
+        fetch('/api/maintenance/suppliers')
+            .then(response => response.json())
+            .then(suppliers => {
+                const supplierSelect = document.getElementById('supplierSelect');
+                if (supplierSelect) {
+                    suppliers.forEach(supplier => {
+                        const option = document.createElement('option');
+                        option.value = supplier.id;
+                        option.textContent = `${supplier.name} (${supplier.contact_person || '无联系人'})`;
+                        supplierSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading suppliers:', error);
+            });
+    }
+    
+    // 加载供应商列表用于编辑
+    function loadSuppliersForEdit(selectedSupplierId) {
+        // 从API获取供应商数据
+        fetch('/api/maintenance/suppliers')
+            .then(response => response.json())
+            .then(suppliers => {
+                const supplierSelect = document.getElementById('editSupplierSelect');
+                if (supplierSelect) {
+                    suppliers.forEach(supplier => {
+                        const option = document.createElement('option');
+                        option.value = supplier.id;
+                        option.textContent = `${supplier.name} (${supplier.contact_person || '无联系人'})`;
+                        
+                        // 如果供应商ID是选中的供应商，则选中
+                        if (selectedSupplierId && supplier.id == selectedSupplierId) {
+                            option.selected = true;
+                        }
+                        
+                        supplierSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading suppliers for edit:', error);
+            });
+    }
+    
+    // 加载设备列表
+    function loadDevices() {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('installDevice');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定类型'})`;
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices:', error);
+            });
+    }
+    
+    // 加载设备列表用于编辑
+    function loadDevicesForEdit(selectedDeviceId) {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('editInstallDevice');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定类型'})`;
+                        
+                        // 如果设备ID是选中的安装设备，则选中
+                        if (selectedDeviceId && device.id == selectedDeviceId) {
+                            option.selected = true;
+                        }
+                        
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices for edit:', error);
+            });
+    }
+</script>
+{% endblock %}

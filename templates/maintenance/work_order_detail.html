@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+
+{% block title %}工单详情 - {{ work_order.work_order_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <span class="text-muted">工单详情</span> 
+            <small class="text-muted">#{{ work_order.work_order_number }}</small>
+        </h2>
+        <div>
+            <a href="{{ url_for('maintenance.work_order_list') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 返回列表
+            </a>
+            {% if work_order.status not in ['closed', 'cancelled'] %}
+                <a href="{{ url_for('maintenance.edit_work_order', id=work_order.id) }}" class="btn btn-primary me-2">
+                    <i class="bi bi-pencil"></i> 编辑
+                </a>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-gear"></i> 操作
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% if work_order.status == 'open' %}
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#assignModal">指派</a></li>
+                        {% endif %}
+                        {% if work_order.status in ['assigned', 'in_progress'] %}
+                            <li><button type="submit" form="processForm" class="dropdown-item">开始处理</button></li>
+                            <li><button type="submit" form="holdForm" class="dropdown-item">暂停</button></li>
+                        {% endif %}
+                        {% if work_order.status == 'in_progress' %}
+                            <li><a class="dropdown-item" href="#resolveModal" data-bs-toggle="modal">解决</a></li>
+                        {% endif %}
+                        {% if work_order.status == 'resolved' %}
+                            <li><button type="submit" form="closeForm" class="dropdown-item">关闭</button></li>
+                        {% endif %}
+                        <li><button type="submit" form="majorForm" class="dropdown-item">{{ '取消重大标记' if work_order.is_major else '标记重大事件' }}</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button type="submit" form="cancelForm" class="dropdown-item text-danger">取消工单</button></li>
+                    </ul>
+                </div>
+
+                <!-- 隐藏的操作表单（在dropdown外部，通过form属性关联） -->
+                <form id="processForm" method="POST" action="{{ url_for('maintenance.process_work_order', id=work_order.id) }}" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+                <form id="holdForm" method="POST" action="{{ url_for('maintenance.hold_work_order', id=work_order.id) }}" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+                <form id="closeForm" method="POST" action="{{ url_for('maintenance.close_work_order', id=work_order.id) }}" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+                <form id="cancelForm" method="POST" action="{{ url_for('maintenance.cancel_work', id=work_order.id) }}" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+                <form id="majorForm" method="POST" action="{{ url_for('maintenance.toggle_major_work_order', id=work_order.id) }}" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 工单概要卡片 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h3 class="mb-2">{{ work_order.title }}</h3>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-{{ 'secondary' if work_order.status == 'open' 
+                                               else 'info' if work_order.status == 'assigned'
+                                               else 'primary' if work_order.status == 'in_progress'
+                                               else 'warning' if work_order.status == 'on_hold'
+                                               else 'success' if work_order.status == 'resolved'
+                                               else 'dark' if work_order.status == 'closed'
+                                               else 'danger' }} fs-6">
+                            {{ {'open':'待处理', 'assigned':'已指派', 'in_progress':'处理中', 
+                                'on_hold':'暂停', 'resolved':'已解决', 'closed':'已关闭', 
+                                'cancelled':'已取消'}.get(work_order.status, work_order.status) }}
+                        </span>
+                        <span class="badge bg-{{ 'success' if work_order.priority == 'low'
+                                               else 'warning' if work_order.priority == 'medium'
+                                               else 'danger' if work_order.priority == 'high'
+                                               else 'dark' }} fs-6">
+                            {{ {'low':'低', 'medium':'中', 'high':'高', 'critical':'紧急'}.get(work_order.priority, work_order.priority) }} 优先级
+                        </span>
+                        <span class="badge bg-light text-dark fs-6">
+                            类型: {{ {'incident':'事件', 'problem':'问题', 'change':'变更', 
+                                      'request':'请求', 'task':'任务'}.get(work_order.work_order_type, work_order.work_order_type) }}
+                        </span>
+                        <span class="badge bg-light text-dark fs-6">
+                            分类: {{ work_order.category or '-' }}
+                        </span>
+                        {% if work_order.is_major %}
+                        <span class="badge bg-danger fs-6">重大事件</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                    <div class="text-muted small">创建于: {{ work_order.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                    <div class="text-muted small">更新于: {{ work_order.updated_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 左侧信息栏 -->
+        <div class="col-lg-8">
+            <!-- 详细描述卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">详细描述</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ (work_order.description or '暂无描述') | e | replace('\n', '<br>') | safe }}</p>
+                </div>
+            </div>
+
+            <!-- 时间信息卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">时间信息</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <th style="width: 40%">请求时间：</th>
+                                    <td>{{ work_order.requested_at.strftime('%Y-%m-%d %H:%M') if work_order.requested_at else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>计划完成日期：</th>
+                                    <td>{{ work_order.scheduled_date.strftime('%Y-%m-%d') if work_order.scheduled_date else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>到期日期：</th>
+                                    <td>{{ work_order.due_date.strftime('%Y-%m-%d') if work_order.due_date else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>实际开始时间：</th>
+                                    <td>{{ work_order.actual_start_date.strftime('%Y-%m-%d %H:%M') if work_order.actual_start_date else '-' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <th style="width: 40%">实际结束时间：</th>
+                                    <td>{{ work_order.actual_end_date.strftime('%Y-%m-%d %H:%M') if work_order.actual_end_date else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>解决时间（小时）：</th>
+                                    <td>{{ work_order.resolution_time if work_order.resolution_time else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>关闭时间：</th>
+                                    <td>{{ work_order.closed_at.strftime('%Y-%m-%d %H:%M') if work_order.closed_at else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>关闭人：</th>
+                                    <td>{{ work_order.closed_by or '-' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 解决方案卡片（如果已解决或关闭） -->
+            {% if work_order.resolution or work_order.resolution_notes %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">解决方案</h5>
+                </div>
+                <div class="card-body">
+                    {% if work_order.resolution %}
+                        <p><strong>解决方案：</strong><br>{{ work_order.resolution | nl2br }}</p>
+                    {% endif %}
+                    {% if work_order.resolution_notes %}
+                        <p><strong>解决备注：</strong><br>{{ work_order.resolution_notes | nl2br }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 客户反馈卡片 -->
+            {% if work_order.customer_feedback or work_order.customer_rating %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">客户反馈</h5>
+                </div>
+                <div class="card-body">
+                    {% if work_order.customer_rating %}
+                        <div class="mb-2">
+                            <strong>评分：</strong>
+                            {% for i in range(1,6) %}
+                                {% if i <= work_order.customer_rating %}
+                                    <i class="bi bi-star-fill text-warning"></i>
+                                {% else %}
+                                    <i class="bi bi-star text-warning"></i>
+                                {% endif %}
+                            {% endfor %}
+                            ({{ work_order.customer_rating }}/5)
+                        </div>
+                    {% endif %}
+                    {% if work_order.customer_feedback %}
+                        <p class="mb-0">{{ work_order.customer_feedback | nl2br }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 右侧信息栏 -->
+        <div class="col-lg-4">
+            <!-- 请求人卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">请求人信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th style="width: 40%">姓名：</th>
+                            <td>{{ work_order.requester_name or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>部门：</th>
+                            <td>{{ work_order.requester_department or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>联系方式：</th>
+                            <td>{{ work_order.requester_contact or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>请求人ID：</th>
+                            <td>{{ work_order.requester.username if work_order.requester else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 分配信息卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">分配信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th style="width: 40%">指派给：</th>
+                            <td>{{ work_order.assigned_to_name or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>工程师ID：</th>
+                            <td>{{ work_order.assigned_to.username if work_order.assigned_to else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>部门：</th>
+                            <td>{{ work_order.assigned_department or '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 设备/资产卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">关联设备/资产</h5>
+                </div>
+                <div class="card-body">
+                    {% if work_order.device %}
+                        <p><strong>设备：</strong> 
+                            <a href="{{ url_for('inventory.device_detail', id=work_order.device.id) }}">
+                                {{ work_order.device.name }} ({{ work_order.device.serial_number }})
+                            </a>
+                        </p>
+                    {% else %}
+                        <p><strong>设备：</strong> -</p>
+                    {% endif %}
+                    
+                    {% if work_order.asset %}
+                        <p><strong>资产：</strong> 
+                            <a href="{{ url_for('inventory.asset_detail', id=work_order.asset.id) }}">
+                                {{ work_order.asset.name }} ({{ work_order.asset.asset_number }})
+                            </a>
+                        </p>
+                    {% else %}
+                        <p><strong>资产：</strong> -</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 相关知识库卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">相关知识库（智能推荐）</h5>
+                </div>
+                <div class="card-body">
+                    {% if recommended_kb %}
+                        <ul class="list-unstyled mb-0">
+                        {% for article in recommended_kb %}
+                            <li class="mb-2">
+                                <i class="fas fa-book text-info me-1"></i>
+                                <a href="{{ url_for('maintenance_extra.kb_article', id=article.id) }}">{{ article.title }}</a>
+                                {% if article.view_count %}<span class="text-muted small">（浏览 {{ article.view_count }}）</span>{% endif %}
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted mb-0">暂无相关知识点，可在知识库手动补充</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- SLA信息卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">SLA信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th style="width: 50%">SLA级别：</th>
+                            <td>{{ work_order.sla_level or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>SLA状态：</th>
+                            <td>
+                                {% if work_order.sla_status == 'breached' %}
+                                    <span class="badge bg-danger">已违约</span>
+                                {% elif work_order.sla_status == 'met' %}
+                                    <span class="badge bg-success">已达标</span>
+                                {% elif work_order.sla_status == 'monitoring' %}
+                                    <span class="badge bg-warning text-dark">监控中</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">待定</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>响应达标：</th>
+                            <td>
+                                {% if work_order.sla_response_met is sameas true %}<span class="badge bg-success">是</span>
+                                {% elif work_order.sla_response_met is sameas false %}<span class="badge bg-danger">否</span>
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>解决达标：</th>
+                            <td>
+                                {% if work_order.sla_resolution_met is sameas true %}<span class="badge bg-success">是</span>
+                                {% elif work_order.sla_resolution_met is sameas false %}<span class="badge bg-danger">否</span>
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>首次违约时间：</th>
+                            <td>{{ work_order.breached_at.strftime('%Y-%m-%d %H:%M') if work_order.breached_at else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>响应时间（小时）：</th>
+                            <td>{{ work_order.sla_response_time or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>解决时间（小时）：</th>
+                            <td>{{ work_order.sla_resolution_time or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>实际响应时间（小时）：</th>
+                            <td>{{ work_order.actual_response_time or '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 成本信息卡片 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">成本信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th style="width: 50%">预估工时（小时）：</th>
+                            <td>{{ work_order.estimated_hours or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>实际工时（小时）：</th>
+                            <td>{{ work_order.actual_hours or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>人工成本：</th>
+                            <td>{{ work_order.labor_cost or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>材料成本：</th>
+                            <td>{{ work_order.material_cost or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>总成本：</th>
+                            <td>{{ work_order.total_cost or '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 审批信息卡片 -->
+            {% if work_order.approval_required %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">审批信息</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <th style="width: 40%">审批状态：</th>
+                            <td>
+                                <span class="badge bg-{{ 'warning' if work_order.approval_status == 'pending'
+                                                       else 'success' if work_order.approval_status == 'approved'
+                                                       else 'danger' }}">
+                                    {{ {'pending':'待审批', 'approved':'已批准', 'rejected':'已拒绝'}.get(work_order.approval_status, work_order.approval_status) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>审批人：</th>
+                            <td>{{ work_order.approved_by or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>审批时间：</th>
+                            <td>{{ work_order.approved_at.strftime('%Y-%m-%d %H:%M') if work_order.approved_at else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 关闭信息卡片（如果已关闭或取消） -->
+            {% if work_order.status in ['closed', 'cancelled'] and work_order.closure_notes %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">关闭信息</h5>
+                </div>
+                <div class="card-body">
+                    <p>{{ work_order.closure_notes | nl2br }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 指派工程师弹窗 -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('maintenance.assign_work_order', id=work_order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">指派工程师</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="engineer_id" class="form-label">选择工程师</label>
+                        <select class="form-select" id="engineer_id" name="engineer_id" required>
+                            <option value="">-- 请选择 --</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">备注（可选）</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">确认指派</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 解决工单弹窗 -->
+<div class="modal fade" id="resolveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('maintenance.resolve_work_order', id=work_order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">解决工单</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="resolution" class="form-label">解决方案 <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="resolution" name="resolution" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="actual_hours" class="form-label">实际工时（小时）</label>
+                        <input type="number" class="form-control" id="actual_hours" name="actual_hours" min="0" step="0.5">
+                    </div>
+                    <div class="mb-3">
+                        <label for="resolveNotes" class="form-label">备注</label>
+                        <textarea class="form-control" id="resolveNotes" name="notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-success">确认解决</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .badge.fs-6 {
+        font-size: 0.9rem;
+        padding: 0.5em 0.8em;
+    }
+    .table-sm th {
+        font-weight: 600;
+        color: #555;
+    }
+    .card {
+        border-radius: 0.5rem;
+        border: none;
+    }
+    .card-header {
+        border-bottom: 1px solid #e9ecef;
+        font-weight: 600;
+        padding: 1rem 1.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 如果需要动态操作可在此添加
+</script>
+{% endblock %}

@@ -1,0 +1,729 @@
+<!-- templates/report/location_summary.html -->
+{% extends "base.html" %}
+
+{% block title %}位置汇总报表 - 运维管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .summary-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    
+    .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .progress-bar {
+        border-radius: 4px;
+    }
+    
+    .location-type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .badge-device {
+        background-color: #17a2b8;
+    }
+    
+    .badge-cabinet {
+        background-color: #28a745;
+    }
+    
+    .badge-u {
+        background-color: #6f42c1;
+    }
+    
+    .usage-bar {
+        height: 20px;
+        border-radius: 4px;
+        overflow: hidden;
+        background-color: #e9ecef;
+    }
+    
+    .usage-fill {
+        height: 100%;
+        transition: width 0.6s ease;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .card-body {
+            padding: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+    }
+    
+    /* 打印样式 */
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        
+        .card {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作栏 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2">位置汇总报表</h1>
+            <p class="text-muted">查看所有位置的设备、机柜统计信息和使用情况</p>
+        </div>
+        <div class="no-print">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary" onclick="window.print()">
+                    <i class="fas fa-print"></i> 打印
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="exportToExcel()">
+                    <i class="fas fa-file-excel"></i> 导出 Excel
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="refreshPage()">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计摘要卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card h-100 border-left-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">总位置数</h6>
+                            <h2 class="stat-number text-primary">{{ location_stats|length }}</h2>
+                        </div>
+                        <div class="bg-primary rounded-circle p-3">
+                            <i class="fas fa-map-marker-alt fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card h-100 border-left-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">总设备数</h6>
+                            <h2 class="stat-number text-success">
+                                {{ location_stats|sum(attribute='device_count') }}
+                            </h2>
+                        </div>
+                        <div class="bg-success rounded-circle p-3">
+                            <i class="fas fa-server fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card h-100 border-left-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">总机柜数</h6>
+                            <h2 class="stat-number text-info">
+                                {{ location_stats|sum(attribute='cabinet_count') }}
+                            </h2>
+                        </div>
+                        <div class="bg-info rounded-circle p-3">
+                            <i class="fas fa-archive fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card h-100 border-left-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted mb-2">U位总容量</h6>
+                            <h2 class="stat-number text-warning">
+                                {{ location_stats|sum(attribute='total_u') }}
+                            </h2>
+                        </div>
+                        <div class="bg-warning rounded-circle p-3">
+                            <i class="fas fa-layer-group fa-2x text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 位置详情表格 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">位置详情列表</h5>
+            <p class="card-subtitle text-muted mb-0">点击位置名称查看详情</p>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="locationTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>位置名称</th>
+                            <th>类型</th>
+                            <th>地址/楼层</th>
+                            <th>设备数</th>
+                            <th>机柜数</th>
+                            <th>U位使用情况</th>
+                            <th>联系人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stat in location_stats %}
+                        {% set location = stat.location %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="mr-2">
+                                        <i class="fas fa-map-marker-alt text-primary"></i>
+                                    </div>
+                                    <div>
+                                        <strong>{{ location.name }}</strong>
+                                        {% if location.description %}
+                                        <div class="text-muted small">{{ location.description|truncate(30) }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if location.location_type %}
+                                <span class="badge badge-secondary location-type-badge">
+                                    {{ location.location_type }}
+                                </span>
+                                {% else %}
+                                <span class="badge badge-light location-type-badge">
+                                    未指定
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if location.address %}
+                                <div class="small">{{ location.address }}</div>
+                                {% endif %}
+                                {% if location.floor %}
+                                <div class="text-muted smaller">
+                                    <i class="fas fa-building"></i> {{ location.floor }}
+                                    {% if location.room_number %}
+                                    - {{ location.room_number }}
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge badge-device mr-2">{{ stat.device_count }}</span>
+                                    {% if stat.device_count > 0 %}
+                                    <a href="{{ url_for('device.device_list') }}?location_id={{ location.id }}" 
+                                       class="text-decoration-none small" 
+                                       title="查看设备">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge badge-cabinet mr-2">{{ stat.cabinet_count }}</span>
+                                    {% if stat.cabinet_count > 0 %}
+                                    <a href="{{ url_for('cabinet.cabinet_list') }}?location_id={{ location.id }}" 
+                                       class="text-decoration-none small" 
+                                       title="查看机柜">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <div class="mb-1">
+                                        <span class="badge badge-u mr-1">{{ stat.used_u }}/{{ stat.total_u }}</span>
+                                        <small class="text-muted">U</small>
+                                    </div>
+                                    {% if stat.total_u > 0 %}
+                                    <div class="usage-bar mb-1">
+                                        {% set usage_percent = (stat.used_u / stat.total_u * 100)|int %}
+                                        <div class="usage-fill 
+                                            {% if usage_percent >= 90 %}bg-danger
+                                            {% elif usage_percent >= 70 %}bg-warning
+                                            {% elif usage_percent >= 50 %}bg-info
+                                            {% else %}bg-success{% endif %}" 
+                                            style="width: {{ usage_percent }}%"
+                                            title="使用率: {{ usage_percent }}%">
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted">
+                                        {{ usage_percent }}% 使用率
+                                    </div>
+                                    {% else %}
+                                    <div class="small text-muted">
+                                        暂无U位信息
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if location.contact_person %}
+                                <div class="small">{{ location.contact_person }}</div>
+                                {% if location.contact_department %}
+                                <div class="text-muted smaller">{{ location.contact_department }}</div>
+                                {% endif %}
+                                {% if location.contact_phone %}
+                                <div class="small">
+                                    <i class="fas fa-phone text-success"></i> 
+                                    {{ location.contact_phone }}
+                                </div>
+                                {% endif %}
+                                {% else %}
+                                <div class="text-muted small">未指定</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-primary" 
+                                            onclick="viewLocationDetails({{ location.id }})"
+                                            title="查看详情">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <a href="{{ url_for('location.edit_location', id=location.id) }}" 
+                                       class="btn btn-outline-secondary"
+                                       title="编辑位置">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4">
+                                <div class="text-muted">
+                                    <i class="fas fa-inbox fa-2x mb-3"></i>
+                                    <p>暂无位置数据</p>
+                                    <a href="{{ url_for('location.location_add') }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-plus"></i> 添加位置
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer no-print">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="small text-muted">
+                    共 {{ location_stats|length }} 个位置
+                </div>
+                <div>
+                    <button type="button" class="btn btn-light btn-sm" onclick="filterTable('all')">
+                        全部
+                    </button>
+                    <button type="button" class="btn btn-light btn-sm" onclick="filterTable('high')">
+                        高使用率(>70%)
+                    </button>
+                    <button type="button" class="btn btn-light btn-sm" onclick="filterTable('normal')">
+                        正常
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详细信息模态框 -->
+    <div class="modal fade" id="locationDetailModal" tabindex="-1" aria-labelledby="locationDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="locationDetailModalLabel">位置详情</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="locationDetailContent">
+                    <!-- 内容将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 查看位置详情
+    function viewLocationDetails(locationId) {
+        // 显示加载中
+        $('#locationDetailContent').html(`
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">加载中...</span>
+                </div>
+                <p class="mt-2">正在加载位置信息...</p>
+            </div>
+        `);
+        
+        // 获取位置详情
+        $.ajax({
+            url: '/api/location/' + locationId,
+            method: 'GET',
+            success: function(data) {
+                if (data.success) {
+                    renderLocationDetails(data.location);
+                } else {
+                    $('#locationDetailContent').html(`
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle"></i>
+                            加载位置信息失败: ${data.message}
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#locationDetailContent').html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        无法连接到服务器，请检查网络连接
+                    </div>
+                `);
+            }
+        });
+        
+        $('#locationDetailModal').modal('show');
+    }
+    
+    // 渲染位置详情
+    function renderLocationDetails(location) {
+        const html = `
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>${location.name}</h5>
+                    ${location.description ? `<p class="text-muted">${location.description}</p>` : ''}
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">基本信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    ${location.location_type ? `
+                                    <tr>
+                                        <td><strong>类型:</strong></td>
+                                        <td>
+                                            <span class="badge badge-secondary">${location.location_type}</span>
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.address ? `
+                                    <tr>
+                                        <td><strong>地址:</strong></td>
+                                        <td>${location.address}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.floor ? `
+                                    <tr>
+                                        <td><strong>楼层/房间:</strong></td>
+                                        <td>${location.floor}${location.room_number ? ' - ' + location.room_number : ''}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.area ? `
+                                    <tr>
+                                        <td><strong>面积:</strong></td>
+                                        <td>${location.area} m²</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.capacity ? `
+                                    <tr>
+                                        <td><strong>容量:</strong></td>
+                                        <td>${location.capacity}</td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">联系人信息</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    ${location.contact_person ? `
+                                    <tr>
+                                        <td><strong>联系人:</strong></td>
+                                        <td>${location.contact_person}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.contact_department ? `
+                                    <tr>
+                                        <td><strong>部门:</strong></td>
+                                        <td>${location.contact_department}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.contact_phone ? `
+                                    <tr>
+                                        <td><strong>电话:</strong></td>
+                                        <td>
+                                            <a href="tel:${location.contact_phone}" class="text-decoration-none">
+                                                <i class="fas fa-phone text-success mr-1"></i>
+                                                ${location.contact_phone}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                    ${location.contact_email ? `
+                                    <tr>
+                                        <td><strong>邮箱:</strong></td>
+                                        <td>
+                                            <a href="mailto:${location.contact_email}" class="text-decoration-none">
+                                                <i class="fas fa-envelope text-primary mr-1"></i>
+                                                ${location.contact_email}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h6 class="text-muted mb-3">环境信息</h6>
+                            <div class="row">
+                                ${location.power_supply ? `
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge badge-light">供电:</span>
+                                    <span class="ml-2">${location.power_supply}</span>
+                                </div>
+                                ` : ''}
+                                ${location.cooling_system ? `
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge badge-light">冷却:</span>
+                                    <span class="ml-2">${location.cooling_system}</span>
+                                </div>
+                                ` : ''}
+                                ${location.temperature ? `
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge badge-light">温度:</span>
+                                    <span class="ml-2">${location.temperature}</span>
+                                </div>
+                                ` : ''}
+                                ${location.humidity ? `
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge badge-light">湿度:</span>
+                                    <span class="ml-2">${location.humidity}</span>
+                                </div>
+                                ` : ''}
+                                ${location.access_control ? `
+                                <div class="col-md-6 mb-2">
+                                    <span class="badge badge-light">门禁:</span>
+                                    <span class="ml-2">${location.access_control}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 border-left">
+                    <h6 class="text-muted mb-3">统计信息</h6>
+                    <div class="card bg-light mb-3">
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <h4 class="text-primary">${location.device_count || 0}</h4>
+                                    <p class="small text-muted mb-0">设备数</p>
+                                </div>
+                                <div class="col-6">
+                                    <h4 class="text-success">${location.cabinet_count || 0}</h4>
+                                    <p class="small text-muted mb-0">机柜数</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${location.notes ? `
+                    <h6 class="text-muted mb-3">备注</h6>
+                    <div class="card">
+                        <div class="card-body">
+                            <p class="mb-0">${location.notes}</p>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${location.tags ? `
+                    <h6 class="text-muted mt-4 mb-2">标签</h6>
+                    <div>
+                        ${location.tags.split(',').map(tag => 
+                            `<span class="badge badge-info mr-1">${tag.trim()}</span>`
+                        ).join('')}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        
+        $('#locationDetailContent').html(html);
+    }
+    
+    // 筛选表格
+    function filterTable(filterType) {
+        const rows = $('#locationTable tbody tr');
+        
+        rows.each(function() {
+            const row = $(this);
+            const usageText = row.find('td:nth-child(6) .text-muted').text();
+            const match = usageText.match(/(\d+)%/);
+            
+            if (match) {
+                const usage = parseInt(match[1]);
+                let show = true;
+                
+                switch(filterType) {
+                    case 'high':
+                        show = usage >= 70;
+                        break;
+                    case 'normal':
+                        show = usage < 70 && usage > 0;
+                        break;
+                    case 'empty':
+                        show = usage === 0;
+                        break;
+                    default:
+                        show = true;
+                }
+                
+                if (show) {
+                    row.show();
+                } else {
+                    row.hide();
+                }
+            }
+        });
+        
+        // 更新按钮状态
+        $('.card-footer .btn-light').removeClass('active');
+        $(`.card-footer .btn-light:contains('${filterType === 'all' ? '全部' : filterType === 'high' ? '高使用率' : '正常'}')`).addClass('active');
+    }
+    
+    // 导出到Excel
+    function exportToExcel() {
+        // 收集数据
+        const data = [];
+        const headers = ['位置名称', '位置类型', '地址', '设备数', '机柜数', '已用U位', '总U位', '使用率', '联系人', '联系电话'];
+        
+        data.push(headers);
+        
+        $('#locationTable tbody tr:visible').each(function() {
+            const row = $(this);
+            const name = row.find('td:first-child strong').text().trim();
+            const type = row.find('td:nth-child(2) .badge').text().trim();
+            const address = row.find('td:nth-child(3) .small').text().trim();
+            const deviceCount = row.find('td:nth-child(4) .badge').text().trim();
+            const cabinetCount = row.find('td:nth-child(5) .badge').text().trim();
+            
+            const uInfo = row.find('td:nth-child(6) .badge-u').text().trim();
+            const [usedU, totalU] = uInfo.split('/');
+            const usage = row.find('td:nth-child(6) .small:last').text().trim();
+            
+            const contact = row.find('td:nth-child(7) .small:first').text().trim();
+            const phone = row.find('td:nth-child(7) .fa-phone').parent().text().trim();
+            
+            data.push([name, type, address, deviceCount, cabinetCount, usedU || '0', totalU || '0', usage, contact, phone]);
+        });
+        
+        // 转换为Excel
+        const worksheet = XLSX.utils.aoa_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "位置汇总");
+        
+        // 设置列宽
+        const wscols = [
+            {wch: 20}, // 位置名称
+            {wch: 12}, // 位置类型
+            {wch: 25}, // 地址
+            {wch: 8},  // 设备数
+            {wch: 8},  // 机柜数
+            {wch: 10}, // 已用U位
+            {wch: 10}, // 总U位
+            {wch: 10}, // 使用率
+            {wch: 15}, // 联系人
+            {wch: 15}  // 联系电话
+        ];
+        worksheet['!cols'] = wscols;
+        
+        // 下载文件
+        const fileName = `位置汇总报表_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+    }
+    
+    // 刷新页面
+    function refreshPage() {
+        location.reload();
+    }
+    
+    // 页面加载完成后初始化
+    $(document).ready(function() {
+        // 初始化表格排序
+        $('#locationTable').DataTable({
+            pageLength: 25,
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh-CN.json'
+            },
+            order: [[0, 'asc']],
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+            responsive: true
+        });
+        
+        // 添加高亮效果
+        $('.table-hover tbody tr').hover(
+            function() {
+                $(this).addClass('table-active');
+            },
+            function() {
+                $(this).removeClass('table-active');
+            }
+        );
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}配置差异对比 - {{ device.name }}{% endblock %}
+{% block page_title %}配置差异对比{% endblock %}
+{% block page_subtitle %}设备: {{ device.name }} ({{ device.ip_address or '-' }}){% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('config_compliance.config_baseline') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回基线</a>
+<a href="{{ url_for('config_compliance.config_versions', device_id=device.id) }}" class="btn btn-outline-info"><i class="fas fa-history"></i> 版本历史</a>
+{% endblock %}
+
+{% block head %}
+<style>
+.diff-removed { background: #fdd; color: #a00; }
+.diff-added { background: #dfd; color: #0a0; }
+.diff-header { background: #eef; color: #66f; }
+pre.diff-text { font-size:12px; line-height:1.5; tab-size:4; margin:0; white-space:pre-wrap; }
+.diff-line-num { display:inline-block; width:40px; text-align:right; color:#999; user-select:none; border-right:1px solid #ddd; padding-right:8px; margin-right:8px; }
+td.diff-line { padding:1px 8px; font-family:monospace; font-size:12px; white-space:pre; }
+td.diff-line-num { padding:1px 4px; color:#999; text-align:right; user-select:none; width:40px; font-family:monospace; font-size:12px; background:#fafafa; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">选择比较对象</h5></div>
+            <div class="card-body">
+                <form class="row g-2" method="GET">
+                    <div class="col-md-5">
+                        <select name="baseline_id" class="form-select">
+                            <option value="">-- 选择基线 --</option>
+                            {% for b in baselines %}
+                            <option value="{{ b.id }}" {% if baseline and baseline.id == b.id %}selected{% endif %}>
+                                {{ b.config_type }} @ {{ b.captured_at.strftime('%m-%d %H:%M') if b.captured_at else '' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <select name="version_id" class="form-select">
+                            <option value="">-- 选择版本 --</option>
+                            {% for v in versions %}
+                            <option value="{{ v.id }}" {% if version and version.id == v.id %}selected{% endif %}>
+                                v{{ v.version_number }} {{ v.change_summary[:30] if v.change_summary else '' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-compare"></i> 对比</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">快速操作</h5></div>
+            <div class="card-body">
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('config_compliance.config_versions', device_id=device.id) }}" class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-history"></i> 配置版本历史
+                    </a>
+                    <a href="{{ url_for('config_compliance.config_baseline_drifts') }}?device_id={{ device.id }}" class="btn btn-outline-warning btn-sm">
+                        <i class="fas fa-exclamation-triangle"></i> 漂移记录
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if diff_stats %}
+<!-- 统计摘要 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-center gap-4">
+                    <span><strong>变更统计:</strong> {{ diff_stats.summary }}</span>
+                    <span class="text-success">+{{ diff_stats.added }} 新增</span>
+                    <span class="text-danger">-{{ diff_stats.removed }} 删除</span>
+                    <span class="text-info">{{ diff_stats.modified }} 修改</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 左右对照差异 -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background:#fdd;">
+                <h5 class="mb-0"><i class="fas fa-circle-minus text-danger"></i> {{ left_label or '基线' }}</h5>
+            </div>
+            <div class="card-body p-0" style="max-height:600px;overflow-y:auto;">
+                <table class="table table-sm mb-0" style="font-size:12px;">
+                    {% for line_no, content, cls in left_lines %}
+                    <tr class="{{ 'diff-removed' if cls == 'removed' else '' }}">
+                        <td class="diff-line-num">{{ line_no if line_no else '' }}</td>
+                        <td class="diff-line" style="background:{{ '#fdd' if cls == 'removed' else 'transparent' }}">{{ content }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background:#dfd;">
+                <h5 class="mb-0"><i class="fas fa-circle-plus text-success"></i> {{ right_label or '版本' }}</h5>
+            </div>
+            <div class="card-body p-0" style="max-height:600px;overflow-y:auto;">
+                <table class="table table-sm mb-0" style="font-size:12px;">
+                    {% for line_no, content, cls in right_lines %}
+                    <tr class="{{ 'diff-added' if cls == 'added' else '' }}">
+                        <td class="diff-line-num">{{ line_no if line_no else '' }}</td>
+                        <td class="diff-line" style="background:{{ '#dfd' if cls == 'added' else 'transparent' }}">{{ content }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% elif configs %}
+<!-- 无对照，仅展示单份配置 -->
+<div class="row">
+    {% for label, content, ts in configs %}
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">{{ label }} <small class="text-muted">{{ ts.strftime('%Y-%m-%d %H:%M:%S') if ts else '' }}</small></h5></div>
+            <div class="card-body p-0">
+                <pre class="mb-0 p-3" style="font-size:12px;max-height:500px;overflow-y:auto;background:#f8f9fa;">{{ content }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info"><i class="fas fa-info-circle"></i> 请从左侧选择一个基线和版本，点击"对比"查看差异</div>
+{% endif %}
+{% endblock %}

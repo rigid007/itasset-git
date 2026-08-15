@@ -1,0 +1,365 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ group.name }} - 设备分组{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('device_group.list_view') }}">设备分组</a></li>
+            {% for crumb in breadcrumb %}
+            <li class="breadcrumb-item {% if loop.last %}active{% endif %}">
+                {% if not loop.last %}
+                <a href="{{ url_for('device_group.detail', id=crumb.id) }}">{{ crumb.name }}</a>
+                {% else %}
+                {{ crumb.name }}
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+    </nav>
+
+    <!-- 分组信息头 -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="d-flex align-items-center">
+                <div style="width:16px;height:16px;border-radius:50%;background:{{ group.color }};margin-right:12px;"></div>
+                <div>
+                    <h1 class="h3 mb-1">{{ group.name }}</h1>
+                    <p class="text-muted mb-0">
+                        {% if group.description %}{{ group.description }}<br>{% endif %}
+                        {% if group.auto_rule_type == 'ip_subnet' %}
+                        <span class="badge bg-success">IP网段自动归类: {{ group.auto_rule_value }}0/24</span>
+                        {% elif group.auto_rule_type == 'name_pattern' %}
+                        <span class="badge bg-warning">名称匹配: {{ group.auto_rule_value }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary">人工归类</span>
+                        {% endif %}
+                        共 <strong>{{ devices|length }}</strong> 台设备
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('device_group.edit', id=group.id) }}" class="btn btn-warning btn-sm">
+                <i class="fas fa-edit"></i> 编辑分组
+            </a>
+            <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#assignDeviceModal">
+                <i class="fas fa-plus"></i> 分配设备
+            </button>
+            {% if group.parent_id %}
+            <a href="{{ url_for('device_group.add') }}?parent_id={{ group.id }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus"></i> 新增子分组
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 设备列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-server me-1"></i>设备列表</h5>
+            <span class="badge bg-primary">{{ devices|length }}</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th width="40"><input type="checkbox" id="selectAll"></th>
+                            <th width="60">ID</th>
+                            <th>设备名称</th>
+                            <th>管理IP</th>
+                            <th>设备类型</th>
+                            <th>型号</th>
+                            <th>状态</th>
+                            <th width="100">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in devices %}
+                        <tr>
+                            <td><input type="checkbox" class="device-checkbox" value="{{ device.id }}"></td>
+                            <td>{{ device.id }}</td>
+                            <td>
+                                <strong>{{ device.name }}</strong>
+                                {% if device.serial_number %}
+                                <br><small class="text-muted">SN: {{ device.serial_number }}</small>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-light text-dark">{{ device.management_ip or '-' }}</span></td>
+                            <td><span class="badge bg-light text-dark">{{ device.device_type }}</span></td>
+                            <td>{{ device.model or '-' }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if device.status == 'online' else 'danger' if device.status == 'offline' else 'secondary' }}">
+                                    {{ device.status or 'unknown' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('device.device_detail', id=device.id) }}" class="btn btn-outline-primary" title="查看详情">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-danger remove-device-btn"
+                                            data-device-id="{{ device.id }}"
+                                            data-device-name="{{ device.name }}" title="移出分组">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-2x mb-2"></i>
+                                <p>此分组暂无设备</p>
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#assignDeviceModal">
+                                    <i class="fas fa-plus"></i> 分配设备
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 批量操作 -->
+            <div class="d-flex align-items-center mt-3">
+                <button class="btn btn-sm btn-outline-danger me-2" id="removeSelectedBtn" disabled>
+                    <i class="fas fa-times"></i> 移出选中设备
+                </button>
+                <span class="text-muted small" id="selectedHint">未选中任何设备</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 分配设备模态框 -->
+<div class="modal fade" id="assignDeviceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>分配设备到「{{ group.name }}」</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if ungrouped_devices %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-1"></i>
+                    已选 <span id="assignSelectedCount">0</span> 个设备
+                </div>
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th width="40"><input type="checkbox" id="assignSelectAll"></th>
+                                <th>设备名称</th>
+                                <th>管理IP</th>
+                                <th>设备类型</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in ungrouped_devices %}
+                            <tr>
+                                <td><input type="checkbox" class="assign-checkbox" value="{{ d.id }}"></td>
+                                <td><strong>{{ d.name }}</strong></td>
+                                <td><code>{{ d.management_ip or '-' }}</code></td>
+                                <td><span class="badge bg-secondary">{{ d.device_type }}</span></td>
+                                <td><span class="badge bg-{{ 'success' if d.status == 'online' else 'danger' if d.status == 'offline' else 'secondary' }}">{{ d.status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                    <p>所有设备已经归类，没有未归类的设备</p>
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmAssignBtn" {% if not ungrouped_devices %}disabled{% endif %}>
+                    <i class="fas fa-check"></i> 确认分配
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 移出确认模态框 -->
+<div class="modal fade" id="removeDeviceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认移出</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要将设备 <strong id="removeDeviceName"></strong> 移出分组「{{ group.name }}」吗？</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" id="confirmRemoveBtn">确认移出</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const groupId = {{ group.id }};
+    let selectedDevices = new Set();
+
+    // ==================== 选择逻辑 ====================
+    document.getElementById('selectAll')?.addEventListener('change', function() {
+        const checked = this.checked;
+        document.querySelectorAll('.device-checkbox').forEach(cb => {
+            cb.checked = checked;
+            if (checked) selectedDevices.add(cb.value);
+            else selectedDevices.delete(cb.value);
+        });
+        updateRemoveBtn();
+    });
+
+    document.querySelectorAll('.device-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (this.checked) selectedDevices.add(this.value);
+            else selectedDevices.delete(this.value);
+            updateRemoveBtn();
+        });
+    });
+
+    function updateRemoveBtn() {
+        const btn = document.getElementById('removeSelectedBtn');
+        const hint = document.getElementById('selectedHint');
+        const count = selectedDevices.size;
+        btn.disabled = count === 0;
+        hint.textContent = count > 0 ? `已选中 ${count} 个设备` : '未选中任何设备';
+    }
+
+    // ==================== 分配设备 ====================
+    document.getElementById('assignSelectAll')?.addEventListener('change', function() {
+        document.querySelectorAll('.assign-checkbox').forEach(cb => cb.checked = this.checked);
+        updateAssignCount();
+    });
+
+    document.querySelectorAll('.assign-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateAssignCount);
+    });
+
+    function updateAssignCount() {
+        const count = document.querySelectorAll('.assign-checkbox:checked').length;
+        document.getElementById('assignSelectedCount').textContent = count;
+    }
+
+    document.getElementById('confirmAssignBtn')?.addEventListener('click', function() {
+        const deviceIds = [];
+        document.querySelectorAll('.assign-checkbox:checked').forEach(cb => deviceIds.push(cb.value));
+        if (deviceIds.length === 0) { alert('请先选择设备'); return; }
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分配中...';
+
+        fetch('{{ url_for("device_group.api_assign") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ device_ids: deviceIds, group_id: groupId, action: 'assign' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('分配失败: ' + data.message);
+            }
+        })
+        .catch(e => alert('请求失败: ' + e.message))
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> 确认分配'; });
+    });
+
+    // ==================== 移出单台设备 ====================
+    let currentRemoveDeviceId = null;
+
+    document.querySelectorAll('.remove-device-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            currentRemoveDeviceId = this.dataset.deviceId;
+            document.getElementById('removeDeviceName').textContent = this.dataset.deviceName;
+            new bootstrap.Modal(document.getElementById('removeDeviceModal')).show();
+        });
+    });
+
+    document.getElementById('confirmRemoveBtn')?.addEventListener('click', function() {
+        if (!currentRemoveDeviceId) return;
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
+
+        fetch('{{ url_for("device_group.api_assign") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ device_ids: [currentRemoveDeviceId], group_id: groupId, action: 'remove' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('移出失败: ' + data.message);
+            }
+        })
+        .catch(e => alert('请求失败: ' + e.message))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '确认移出';
+            bootstrap.Modal.getInstance(document.getElementById('removeDeviceModal')).hide();
+        });
+    });
+
+    // ==================== 批量移出 ====================
+    document.getElementById('removeSelectedBtn')?.addEventListener('click', function() {
+        const deviceIds = Array.from(selectedDevices);
+        if (deviceIds.length === 0) return;
+        if (!confirm(`确定将选中的 ${deviceIds.length} 台设备移出分组吗？`)) return;
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
+
+        fetch('{{ url_for("device_group.api_assign") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({ device_ids: deviceIds, group_id: groupId, action: 'remove' })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('移出失败: ' + data.message);
+            }
+        })
+        .catch(e => alert('请求失败: ' + e.message))
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="fas fa-times"></i> 移出选中设备'; });
+    });
+
+    // ==================== 初始化 ====================
+    updateRemoveBtn();
+});
+</script>
+{% endblock %}

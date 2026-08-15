@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}变更详情 - {{ cr.change_number }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <h2>变更请求详情 #{{ cr.change_number }}</h2>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">{{ cr.title }}</h5>
+            <p class="text-muted">状态: {{ cr.status }} | 类型: {{ cr.change_type }}</p>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>请求人:</strong> {{ cr.requester_name }}<br>
+                    <strong>创建时间:</strong> {{ cr.created_at.strftime('%Y-%m-%d %H:%M') }}<br>
+                    <strong>计划日期:</strong> {{ cr.scheduled_date or '未设置' }}<br>
+                </div>
+                <div class="col-md-6">
+                    <strong>影响级别:</strong> {{ cr.impact_level or '无' }}<br>
+                    <strong>风险级别:</strong> {{ cr.risk_level or '无' }}<br>
+                    <strong>CAB评审:</strong> {{ '需要' if cr.cab_review_required else '不需要' }}<br>
+                </div>
+            </div>
+            <hr>
+            <h6>描述</h6>
+            <p>{{ cr.description or '无描述' }}</p>
+            <h6>实施计划</h6>
+            <pre>{{ cr.implementation_plan or '无' }}</pre>
+            <h6>回滚计划</h6>
+            <pre>{{ cr.rollback_plan or '无' }}</pre>
+            <h6>测试计划</h6>
+            <pre>{{ cr.test_plan or '无' }}</pre>
+        </div>
+    </div>
+    <div class="mt-3">
+        <a href="{{ url_for('maintenance.change_requests') }}" class="btn btn-secondary">返回列表</a>
+        <a href="{{ url_for('maintenance.edit_change_request', change_id=cr.id) }}" class="btn btn-primary">编辑</a>
+    </div>
+</div>
+{% endblock %}
+

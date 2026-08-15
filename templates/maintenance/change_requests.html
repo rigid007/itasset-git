@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}变更请求 - 运维管理平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和新建按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-exchange-alt me-2"></i>变更请求</h2>
+        <a href="{{ url_for('maintenance.create_change_request') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>新建变更请求
+        </a>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-1">总变更数</h6>
+                        <h3 class="mb-0">{{ total_requests }}</h3>
+                    </div>
+                    <i class="fas fa-clipboard-list fa-3x opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-1">待处理</h6>
+                        <h3 class="mb-0">{{ pending_requests }}</h3>
+                    </div>
+                    <i class="fas fa-clock fa-3x opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-1">已批准</h6>
+                        <h3 class="mb-0">{{ approved_requests }}</h3>
+                    </div>
+                    <i class="fas fa-check-circle fa-3x opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white h-100">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-1">已拒绝</h6>
+                        <h3 class="mb-0">{{ rejected_requests }}</h3>
+                    </div>
+                    <i class="fas fa-times-circle fa-3x opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤工具栏 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('maintenance.change_requests') }}" class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <label for="status" class="col-form-label"><i class="fas fa-filter me-1"></i>状态：</label>
+                </div>
+                <div class="col-auto">
+                    <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>全部</option>
+                        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>草稿</option>
+                        <option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>已提交</option>
+                        <option value="review" {% if status_filter == 'review' %}selected{% endif %}>评审中</option>
+                        <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>已批准</option>
+                        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>已拒绝</option>
+                        <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>已计划</option>
+                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>进行中</option>
+                        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>已完成</option>
+                        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>已取消</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <a href="{{ url_for('maintenance.change_requests') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-redo-alt me-1"></i>重置
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 变更请求列表 -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>变更编号</th>
+                            <th>标题</th>
+                            <th>类型</th>
+                            <th>请求人</th>
+                            <th>状态</th>
+                            <th>计划日期</th>
+                            <th>影响/风险</th>
+                            <th class="text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if change_requests %}
+                            {% for cr in change_requests %}
+                            <tr>
+                                <td><span class="fw-bold">{{ cr.change_number }}</span></td>
+                                <td>{{ cr.title }}</td>
+                                <td>
+                                    {% if cr.change_type == 'emergency' %}
+                                        <span class="badge bg-danger">紧急</span>
+                                    {% elif cr.change_type == 'standard' %}
+                                        <span class="badge bg-success">标准</span>
+                                    {% elif cr.change_type == 'normal' %}
+                                        <span class="badge bg-info">普通</span>
+                                    {% else %}
+                                        {{ cr.change_type }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ cr.requester_name or '未知' }}</td>
+                                <td>
+                                    {% set status_map = {
+                                        'draft': ('secondary', '草稿'),
+                                        'submitted': ('primary', '已提交'),
+                                        'review': ('info', '评审中'),
+                                        'approved': ('success', '已批准'),
+                                        'rejected': ('danger', '已拒绝'),
+                                        'scheduled': ('warning', '已计划'),
+                                        'in_progress': ('primary', '进行中'),
+                                        'completed': ('success', '已完成'),
+                                        'cancelled': ('secondary', '已取消')
+                                    } %}
+                                    {% set badge_color, status_text = status_map.get(cr.status, ('secondary', cr.status)) %}
+                                    <span class="badge bg-{{ badge_color }}">{{ status_text }}</span>
+                                </td>
+                                <td>
+                                    {% if cr.scheduled_date %}
+                                        {{ cr.scheduled_date.strftime('%Y-%m-%d') }}
+                                        {% if cr.scheduled_start_time %}
+                                            <br><small class="text-muted">{{ cr.scheduled_start_time }} ~ {{ cr.scheduled_end_time }}</small>
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if cr.impact_level or cr.risk_level %}
+                                        <span class="d-block">
+                                            影响：
+                                            {% if cr.impact_level == 'high' %}
+                                                <span class="badge bg-danger">高</span>
+                                            {% elif cr.impact_level == 'medium' %}
+                                                <span class="badge bg-warning text-dark">中</span>
+                                            {% elif cr.impact_level == 'low' %}
+                                                <span class="badge bg-success">低</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </span>
+                                        <span class="d-block">
+                                            风险：
+                                            {% if cr.risk_level == 'high' %}
+                                                <span class="badge bg-danger">高</span>
+                                            {% elif cr.risk_level == 'medium' %}
+                                                <span class="badge bg-warning text-dark">中</span>
+                                            {% elif cr.risk_level == 'low' %}
+                                                <span class="badge bg-success">低</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('maintenance.view_change_request', change_id=cr.id) }}" class="btn btn-sm btn-outline-primary" title="查看详情">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('maintenance.edit_change_request', change_id=cr.id) }}" class="btn btn-sm btn-outline-secondary" title="编辑">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+
+        {% if cr.status == 'draft' %}
+            <!-- 提交审批按钮，使用 POST 方式避免 CSRF 问题 -->
+            <form method="post" action="{{ url_for('maintenance.submit_change_for_approval', change_id=cr.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-warning" title="提交审批" onclick="return confirm('确定提交该变更请求进行审批吗？');">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        {% elif cr.status == 'submitted' %}
+            <span class="btn btn-sm btn-outline-secondary disabled" title="已提交待审批"><i class="fas fa-hourglass-half"></i></span>
+        {% endif %}
+
+<form method="post" action="{{ url_for('maintenance.delete_change_request', change_id=cr.id) }}" style="display:inline;" onsubmit="return confirm('确定要删除变更 {{ cr.change_number }} 吗？');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
+        <i class="fas fa-trash"></i>
+    </button>
+</form>
+                                        
+                                        <!-- 如果状态允许删除，可以添加删除按钮，需要确认弹窗 -->
+                                        <!-- 
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDelete('{{ cr.change_number }}')" title="删除">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        -->
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                                    <p>暂无变更请求记录</p>
+                                    <a href="{{ url_for('maintenance.create_change_request') }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-plus me-1"></i>创建第一个变更
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 自定义样式，调整卡片间距和表格对齐 */
+    .card .table th {
+        font-weight: 600;
+        background-color: #f8f9fa;
+    }
+    .btn-group .btn {
+        padding: 0.25rem 0.5rem;
+    }
+    .badge {
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 可选：删除确认弹窗（如果实现了删除功能）
+    function confirmDelete(changeNumber) {
+        if (confirm('确定要删除变更 ' + changeNumber + ' 吗？此操作不可撤销。')) {
+            // 跳转到删除路由，需要后端实现
+            window.location.href = "{{ url_for('maintenance.delete_change_request', change_id=0) }}".replace('0', changeId);
+        }
+    }
+</script>
+{% endblock %}

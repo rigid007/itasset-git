@@ -1,0 +1,1634 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cabinet.name }} - 机柜详情{% endblock %}
+
+{% block head %}
+<style>
+    /* 保持原有CSS不变，增加设备信息行内样式 */
+    .u-view-container {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    
+    .u-slot {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+        background-color: white;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        position: relative;
+    }
+    
+    .u-slot:hover {
+        background-color: #f0f8ff;
+    }
+    
+    .u-slot.empty {
+        background-color: #f8f9fa;
+    }
+    
+    .u-slot.occupied {
+        background-color: #e7f4e4;
+        border-left: 4px solid #28a745;
+    }
+    
+    .u-slot.selected {
+        background-color: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+    }
+    
+    .u-number {
+        width: 40px;
+        font-weight: bold;
+        text-align: center;
+        color: #495057;
+    }
+    
+    .u-device-info {
+        flex-grow: 1;
+        margin-left: 1rem;
+    }
+    
+    /* 设备信息主行：高度+名称 */
+    .device-info-main {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .device-height {
+        font-weight: 600;
+        color: #0d6efd;
+        background-color: #e9ecef;
+        padding: 0.1rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+    }
+    .device-name {
+        font-weight: 600;
+        color: #212529;
+    }
+    .device-ip {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 4px;
+        word-break: break-all;
+    }
+    .device-ip i {
+        margin-right: 4px;
+        font-size: 0.75rem;
+    }
+    
+    .device-actions {
+        display: none;
+        gap: 5px;
+    }
+    
+    .u-slot:hover .device-actions {
+        display: flex;
+    }
+    
+    .u-slot-header {
+        background-color: #e9ecef;
+        font-weight: 600;
+        color: #495057;
+        padding: 0.75rem 0.5rem;
+        border-bottom: 2px solid #dee2e6;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .u-status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .u-status-occupied { background-color: #28a745; }
+    .u-status-reserved { background-color: #ffc107; }
+    .u-status-available { background-color: #6c757d; }
+    
+    .device-form-container {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        background-color: white;
+    }
+    
+    .cabinet-info-card {
+        border: none;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .info-value {
+        color: #212529;
+    }
+    
+    .action-buttons {
+        margin-bottom: 1.5rem;
+    }
+    
+    .usage-indicator {
+        width: 100%;
+        height: 20px;
+        background-color: #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+    
+    .usage-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+    }
+    
+    .usage-low { background-color: #28a745; }
+    .usage-medium { background-color: #ffc107; }
+    .usage-high { background-color: #dc3545; }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    @media (max-width: 768px) {
+        .u-view-container {
+            max-height: 400px;
+        }
+        
+        .u-device-info {
+            margin-left: 0.5rem;
+        }
+        
+        .device-info-main {
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+    }
+    
+    .device-action-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+    }
+    
+    .device-action-btn:hover {
+        transform: translateY(-1px);
+    }
+    
+    .device-status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+    }
+    
+    .custom-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1060;
+        min-width: 300px;
+    }
+    
+    .loading {
+        opacity: 0.7;
+        pointer-events: none;
+    }
+    
+    .loading::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        margin: -10px 0 0 -10px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* ===== 黑色机柜立面（代替原白色 U位视图 列表）===== */
+    .rack-elevation-wrap { max-width: 560px; }
+    .rack-panel {
+        background: #0b0d10;
+        border: 1px solid #2a2f36;
+        border-radius: 10px;
+        color: #f1f3f5;
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 150px);
+        overflow: hidden;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    }
+    .rack-panel-head {
+        padding: 14px 16px;
+        background: linear-gradient(180deg, #16191e, #0e1013);
+        border-bottom: 1px solid #2a2f36;
+    }
+    .rack-panel-head .cab-name {
+        font-size: 1.05rem; font-weight: 700; color: #fff; letter-spacing: .5px;
+    }
+    .rack-panel-head .cab-sub { font-size: .78rem; color: #9aa4b2; }
+    .rack-usage-bar { height: 6px; background: #23272e; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .rack-usage-bar > div { height: 100%; background: linear-gradient(90deg, #2dd4bf, #f59e0b, #ef4444); }
+    .rack-slots { padding: 12px 10px; overflow-y: auto; flex: 1; }
+    .rack-row {
+        display: flex; align-items: stretch; min-height: 34px; margin-bottom: 3px;
+        border-radius: 4px; cursor: pointer;
+        transition: transform .12s, box-shadow .12s, filter .12s; overflow: hidden;
+    }
+    .rack-row:hover { transform: translateX(2px); box-shadow: 0 0 0 1px rgba(255,255,255,.25); filter: brightness(1.12); }
+    .rack-u-no {
+        flex: 0 0 42px; display: flex; align-items: center; justify-content: center;
+        font-size: .72rem; color: #8b95a3; border-right: 1px solid rgba(255,255,255,.06);
+        background: rgba(255,255,255,.03); font-variant-numeric: tabular-nums;
+    }
+    .rack-u-body {
+        flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+        font-size: .82rem; color: #e9edf2; white-space: nowrap; overflow: hidden;
+    }
+    .rack-u-empty { background: #14171c; border: 1px dashed #2c323b; }
+    .rack-u-empty .rack-u-body { color: #5b6573; }
+    .rack-u-device { color: #fff; border: 1px solid rgba(255,255,255,.12); }
+    .rack-u-device-cont { color: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.06); }
+    .rack-type-icon { font-size: .9rem; opacity: .95; }
+    .rack-dev-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .rack-dev-meta { margin-left: auto; font-size: .7rem; opacity: .85; white-space: nowrap; }
+    .rack-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .rack-legend {
+        display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px;
+        border-top: 1px solid #2a2f36; background: #0e1013; font-size: .72rem; color: #9aa4b2;
+    }
+    .rack-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .rack-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+    /* ===== 机柜视图右侧内嵌信息/编辑面板（移植自 rack_editor）===== */
+    .info-panel {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        min-height: calc(100vh - 150px);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    }
+    .info-panel-head {
+        padding: 14px 18px;
+        border-bottom: 1px solid #eef0f3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fafbfc;
+        border-radius: 10px 10px 0 0;
+    }
+    .info-panel-head h5 { margin: 0; font-weight: 700; }
+    .info-panel-body { padding: 18px; overflow-y: auto; flex: 1; }
+
+    .kv-row { display: flex; padding: 7px 0; border-bottom: 1px dashed #eef0f3; font-size: .9rem; }
+    .kv-row .k { flex: 0 0 110px; color: #6b7280; }
+    .kv-row .v { flex: 1; color: #111827; font-weight: 500; word-break: break-all; }
+
+    .source-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+    .source-toggle .st-btn {
+        flex: 1; text-align: center; padding: 9px; border-radius: 8px;
+        border: 1px solid #d1d5db; cursor: pointer; font-size: .9rem; font-weight: 600;
+        background: #fff; color: #374151; transition: all .15s;
+    }
+    .source-toggle .st-btn.active { background: #0b0d10; color: #fff; border-color: #0b0d10; }
+
+    .form-hint {
+        background: #f0f9ff; border: 1px solid #bae6fd; color: #075985;
+        border-radius: 8px; padding: 10px 12px; font-size: .82rem; margin-bottom: 14px;
+    }
+    .usage-pill {
+        font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+        background: #eef2f7; color: #475569; font-weight: 600;
+    }
+    .empty-tip { text-align: center; color: #94a3b8; padding: 40px 10px; }
+    .empty-tip i { font-size: 2.4rem; margin-bottom: 10px; display: block; }
+</style>
+{% endblock %}
+
+{% block page_title %}
+机柜详情
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('cabinet.cabinet_edit', id=cabinet.id) }}" class="btn btn-outline-secondary btn-sm ms-2">
+        <i class="fas fa-edit"></i> 编辑机柜
+    </a>
+    <a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-outline-secondary btn-sm ms-2">
+        <i class="fas fa-arrow-left"></i> 返回列表
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <!-- CSRF令牌用于AJAX请求 -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb" class="mb-4 px-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index' if 'main.index' in url_map else 'main.index') }}">首页</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('cabinet.cabinet_list') }}">机柜列表</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ cabinet.name }}</li>
+        </ol>
+    </nav>
+
+    <!-- 机柜基本信息卡片 -->
+    <div class="row mb-4 px-3">
+        <div class="col-md-4">
+            <div class="card cabinet-info-card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">机柜信息</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">机柜名称:</div>
+                        <div class="col-7 info-value">{{ cabinet.name }}</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">位置:</div>
+                        <div class="col-7 info-value">
+                            {% if cabinet.location %}
+                            <a href="{{ url_for('location.location_detail', id=cabinet.location.id) }}" class="text-decoration-none">
+                                <i class="fas fa-map-marker-alt text-secondary"></i> {{ cabinet.location.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">未分配</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">机柜高度:</div>
+                        <div class="col-7 info-value">{{ cabinet.height_u }} U</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">电源容量:</div>
+                        <div class="col-7 info-value">
+                            {% if cabinet.power_capacity %}
+                            {{ cabinet.power_capacity }} kW
+                            {% else %}
+                            <span class="text-muted">未设置</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">设备数量:</div>
+                        <div class="col-7 info-value">
+                            <span class="badge bg-info">{{ device_count }}</span>
+                        </div>
+                    </div>
+                    
+                    {% if cabinet.description %}
+                    <div class="row mb-2">
+                        <div class="col-5 info-label">描述:</div>
+                        <div class="col-7 info-value">{{ cabinet.description }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card cabinet-info-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">U位使用情况</h5>
+                    <span class="badge bg-secondary">{{ usage_info.used }}/{{ usage_info.available }} U 已使用</span>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>U位使用率</span>
+                                <span>{{ usage_info.usage_percentage }}%</span>
+                            </div>
+                            <div class="usage-indicator">
+                                <div class="usage-fill 
+                                    {% if usage_info.usage_percentage < 70 %}usage-low
+                                    {% elif usage_info.usage_percentage < 90 %}usage-medium
+                                    {% else %}usage-high{% endif %}" 
+                                     style="width: {{ usage_info.usage_percentage }}%;">
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <div class="d-flex mb-1">
+                                    <span class="me-3">
+                                        <i class="fas fa-circle u-status-indicator u-status-occupied"></i> 已占用: {{ usage_info.used }} U
+                                    </span>
+                                    <span class="me-3">
+                                        <i class="fas fa-circle u-status-indicator u-status-available"></i> 可用: {{ usage_info.remaining }} U
+                                    </span>
+                                    <span>
+                                        <i class="fas fa-circle u-status-indicator" style="background-color: #e9ecef;"></i> 总计: {{ usage_info.available }} U
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="display-4">{{ usage_info.usage_percentage }}%</div>
+                                <p class="text-muted">使用率</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 机柜视图：左机架 + 右内嵌信息面板（点击 U 位内联操作，非弹窗） -->
+    <div class="row px-3 mb-2">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h4 class="mb-0">机柜视图</h4>
+                <small class="text-muted">点击左侧 U 位：空白处新增设备，已占用处查看 / 编辑设备</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row px-3 mb-4">
+        <!-- 左侧：机柜立面（黑底白字） -->
+        <div class="col-lg-4 col-md-5">
+            <div class="rack-panel">
+                <div class="rack-panel-head">
+                    <div class="cab-name"><i class="fas fa-server me-2"></i>{{ cabinet.name }}</div>
+                    <div class="cab-sub">
+                        {{ cabinet.location.name if cabinet.location else '未指定位置' }} · {{ cabinet.height_u }}U ·
+                        已用 <span id="rackUsed">{{ used_u }}</span> / 可用 <span id="rackAvail">{{ available_u }}</span>
+                    </div>
+                    <div class="rack-usage-bar">
+                        <div id="rackUsageBar" style="width: {{ usage_percent }}%"></div>
+                    </div>
+                </div>
+                <div class="rack-slots" id="rackSlotsDetail">
+                    <!-- 由 JS 渲染 -->
+                </div>
+                <div class="rack-legend">
+                    <span><i style="background:#4f46e5"></i>服务器</span>
+                    <span><i style="background:#2563eb"></i>交换机</span>
+                    <span><i style="background:#0891b2"></i>路由器</span>
+                    <span><i style="background:#d97706"></i>防火墙</span>
+                    <span><i style="background:#db2777"></i>存储</span>
+                    <span><i style="background:#6b7280"></i>其他</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：基本信息 / 编辑面板（内嵌，非弹窗） -->
+        <div class="col-lg-8 col-md-7">
+            <div class="info-panel">
+                <div class="info-panel-head">
+                    <h5 id="panelTitle">机柜信息</h5>
+                    <span class="usage-pill" id="panelPill">{{ usage_percent }}% 使用率</span>
+                </div>
+                <div class="info-panel-body" id="infoPanel">
+                    <!-- 由 JS 渲染 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设备列表表格 -->
+    <div class="row px-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">设备列表</h5>
+                    <span class="badge bg-secondary">{{ device_count }} 个设备</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if devices %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>设备名称</th>
+                                    <th>管理IP</th>
+                                    <th>业务IP</th>
+                                    <th>起始U位</th>
+                                    <th>高度</th>
+                                    <th>型号</th>
+                                    <th>状态</th>
+                                    <th>更新时间</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for device in devices %}
+                                <tr class="device-row" data-id="{{ device.id }}">
+                                    <td>
+                                        <a href="{{ url_for('device.device_detail', id=device.id) if 'device.device_detail' in url_map else '#' }}" 
+                                           class="text-decoration-none fw-medium">
+                                            {{ device.name }}
+                                        </a>
+                                    </td>
+                                    <td>{{ device.management_ip or '-' }}</td>
+                                    <td>{{ device.ip_address or '-' }}</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ device.position_u }}</span>
+                                    </td>
+                                    <td>{{ device.height_u }} U</td>
+                                    <td>{{ device.model or '-' }}</td>
+                                    <td>
+                                        {% if device.status == 'active' %}
+                                        <span class="badge bg-success">运行中</span>
+                                        {% elif device.status == 'offline' %}
+                                        <span class="badge bg-danger">离线</span>
+                                        {% elif device.status == 'maintenance' %}
+                                        <span class="badge bg-warning">维护中</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ device.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="small text-muted">
+                                            {{ device.updated_at.strftime('%Y-%m-%d') if device.updated_at else '' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button type="button" class="btn btn-outline-primary edit-device-btn" 
+                                                    data-device-id="{{ device.id }}"
+                                                    data-device-name="{{ device.name }}"
+                                                    data-device-management-ip="{{ device.management_ip or '' }}"
+                                                    data-device-ip="{{ device.ip_address or '' }}"
+                                                    data-device-position-u="{{ device.position_u }}"
+                                                    data-device-height-u="{{ device.height_u }}"
+                                                    data-device-type="{{ device.device_type or 'server' }}"
+                                                    data-device-brand="{{ device.brand or '' }}"
+                                                    data-device-model="{{ device.model or '' }}"
+                                                    data-device-status="{{ device.status or 'active' }}"
+                                                    data-device-mac="{{ device.mac_address or '' }}"
+                                                    data-device-description="{{ device.description or '' }}">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-danger delete-device-btn" 
+                                                    data-device-id="{{ device.id }}"
+                                                    data-device-name="{{ device.name }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-server fa-3x text-muted mb-3"></i>
+                        <h5>该机柜暂无设备</h5>
+                        <p class="text-muted">点击上方“机柜视图”中空闲 U 位上的“点击新增”为该机柜添加设备</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加设备模态框 -->
+<div class="modal fade" id="addDeviceModal" tabindex="-1" aria-labelledby="addDeviceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addDeviceModalLabel">添加设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addDeviceForm" method="POST" action="{{ url_for('cabinet.add_device_to_cabinet', cabinet_id=cabinet.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="modal-body">
+                    <input type="hidden" name="cabinet_id" value="{{ cabinet.id }}">
+                    <input type="hidden" name="position_u" id="addPositionU" value="1">
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceName" class="form-label required-field">设备名称 *</label>
+                            <input type="text" class="form-control" id="deviceName" name="name" required>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceManagementIp" class="form-label required-field">管理IP地址 *</label>
+                            <input type="text" class="form-control" id="deviceManagementIp" name="management_ip" required
+                                   placeholder="例如：192.168.1.1">
+                            <div class="form-text">用于设备管理和状态监控</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceIp" class="form-label">业务IP地址</label>
+                            <input type="text" class="form-control" id="deviceIp" name="ip_address"
+                                   placeholder="可选，不同于管理IP">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceType" class="form-label">设备类型</label>
+                            <select class="form-select" id="deviceType" name="device_type">
+                                <option value="server" selected>服务器</option>
+                                <option value="switch">交换机</option>
+                                <option value="router">路由器</option>
+                                <option value="firewall">防火墙</option>
+                                <option value="storage">存储设备</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceBrand" class="form-label">厂商</label>
+                            <select class="form-select" id="deviceBrand" name="brand">
+                                <option value="">请选择厂商</option>
+                                <option value="Cisco">Cisco</option>
+                                <option value="Huawei">Huawei</option>
+                                <option value="H3C">H3C</option>
+                                <option value="Dell">Dell</option>
+                                <option value="HP">HP</option>
+                                <option value="Lenovo">Lenovo</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="deviceModel" name="model"
+                                   placeholder="例如：PowerEdge R740">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceUStart" class="form-label required-field">起始U位 *</label>
+                            <select class="form-select" id="deviceUStart" name="position_u" required>
+                                {% for u in range(1, cabinet.height_u + 1) %}
+                                    {% set available = true %}
+                                    {% for used_u, device in u_slots.items() %}
+                                        {% if u >= used_u and u < used_u + device.height_u %}
+                                            {% set available = false %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <option value="{{ u }}" {% if not available %}disabled{% endif %}>
+                                        {{ u }} {% if not available %}(已被占用){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceHeight" class="form-label required-field">设备高度 (U) *</label>
+                            <select class="form-select" id="deviceHeight" name="height_u" required>
+                                {% for height in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] %}
+                                    <option value="{{ height }}" {% if height == 1 %}selected{% endif %}>{{ height }} U</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceStatus" class="form-label">状态</label>
+                            <select class="form-select" id="deviceStatus" name="status">
+                                <option value="active">运行中</option>
+                                <option value="offline">离线</option>
+                                <option value="maintenance">维护中</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="deviceMac" class="form-label">MAC地址</label>
+                            <input type="text" class="form-control" id="deviceMac" name="mac_address"
+                                   placeholder="例如：00:1A:2B:3C:4D:5E">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="deviceDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="deviceDescription" name="description" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 选中的U位: <span id="selectedUDisplay">1</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">添加设备</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑设备模态框 -->
+<div class="modal fade" id="editDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editDeviceForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" id="editDeviceId" name="id">
+                <input type="hidden" id="editDeviceCabinetId" name="cabinet_id" value="{{ cabinet.id }}">
+                
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceName" class="form-label required-field">设备名称 *</label>
+                            <input type="text" class="form-control" id="editDeviceName" name="name" required>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceManagementIp" class="form-label required-field">管理IP地址 *</label>
+                            <input type="text" class="form-control" id="editDeviceManagementIp" name="management_ip" required
+                                   placeholder="例如：192.168.1.1">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceIp" class="form-label">业务IP地址</label>
+                            <input type="text" class="form-control" id="editDeviceIp" name="ip_address">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceType" class="form-label">设备类型</label>
+                            <select class="form-select" id="editDeviceType" name="device_type">
+                                <option value="server">服务器</option>
+                                <option value="switch">交换机</option>
+                                <option value="router">路由器</option>
+                                <option value="firewall">防火墙</option>
+                                <option value="storage">存储设备</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceBrand" class="form-label">厂商</label>
+                            <select class="form-select" id="editDeviceBrand" name="brand">
+                                <option value="">请选择厂商</option>
+                                <option value="Cisco">Cisco</option>
+                                <option value="Huawei">Huawei</option>
+                                <option value="H3C">H3C</option>
+                                <option value="Dell">Dell</option>
+                                <option value="HP">HP</option>
+                                <option value="Lenovo">Lenovo</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceModel" class="form-label">型号</label>
+                            <input type="text" class="form-control" id="editDeviceModel" name="model">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceUStart" class="form-label required-field">起始U位 *</label>
+                            <select class="form-select" id="editDeviceUStart" name="position_u" required>
+                                {% for u in range(1, cabinet.height_u + 1) %}
+                                    <option value="{{ u }}">{{ u }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceHeight" class="form-label required-field">设备高度 (U) *</label>
+                            <select class="form-select" id="editDeviceHeight" name="height_u" required>
+                                {% for height in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] %}
+                                    <option value="{{ height }}">{{ height }} U</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceStatus" class="form-label">状态</label>
+                            <select class="form-select" id="editDeviceStatus" name="status">
+                                <option value="active">运行中</option>
+                                <option value="offline">离线</option>
+                                <option value="maintenance">维护中</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="editDeviceMac" class="form-label">MAC地址</label>
+                            <input type="text" class="form-control" id="editDeviceMac" name="mac_address">
+                        </div>
+                    </div>
+                    
+                    <!-- 新增 SNMP 版本字段，值为整数 -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editSnmpVersion" class="form-label">SNMP版本</label>
+                            <select class="form-select" id="editSnmpVersion" name="snmp_version">
+                                <option value="1">v1</option>
+                                <option value="2" selected>v2c</option>
+                                <option value="3">v3</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editDeviceDescription" class="form-label">描述</label>
+                        <textarea class="form-control" id="editDeviceDescription" name="description" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除设备确认模态框 -->
+<div class="modal fade" id="deleteDeviceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                您确定要删除设备 <strong id="deleteDeviceName">???</strong> 吗？<br>
+                注意：删除操作不可恢复！
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 全局变量
+let selectedUSlot = 1;
+let deviceIdToDelete = null;
+
+// IP地址验证函数
+function validateIP(ip) {
+    if (!ip) return false;
+    const pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    if (!pattern.test(ip)) return false;
+    
+    const parts = ip.split('.');
+    for (const part of parts) {
+        const num = parseInt(part);
+        if (num < 0 || num > 255) return false;
+        if (part.length > 1 && part[0] === '0') return false;
+    }
+    return true;
+}
+
+// MAC地址验证函数
+function validateMAC(mac) {
+    if (!mac) return true;
+    const pattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+    return pattern.test(mac);
+}
+
+// 处理U位点击
+function handleUSlotClick(uSlot, deviceId) {
+    selectedUSlot = uSlot;
+    
+    document.querySelectorAll('.u-slot').forEach(slot => {
+        slot.classList.remove('selected');
+    });
+    
+    const currentSlot = document.querySelector(`.u-slot[data-u="${uSlot}"]`);
+    if (currentSlot) {
+        currentSlot.classList.add('selected');
+    }
+    
+    document.getElementById('addPositionU').value = uSlot;
+    document.getElementById('deviceUStart').value = uSlot;
+    document.getElementById('selectedUDisplay').textContent = uSlot;
+}
+
+// 设置选中的U位（用于添加设备）
+function setSelectedUSlot(uSlot) {
+    selectedUSlot = uSlot;
+    document.getElementById('addPositionU').value = uSlot;
+    document.getElementById('deviceUStart').value = uSlot;
+    document.getElementById('selectedUDisplay').textContent = uSlot;
+    
+    updateUStartOptions();
+    
+    const addModal = new bootstrap.Modal(document.getElementById('addDeviceModal'));
+    addModal.show();
+}
+
+// 编辑设备 - 直接从按钮的data属性中获取设备信息（修复无效ID问题）
+function editDevice(deviceId, deviceName, event) {
+    const btn = event.target.closest('.edit-device-btn');
+    if (!btn) {
+        showToast('error', '找不到编辑按钮');
+        return;
+    }
+
+    // 从按钮的 data 属性获取设备 ID
+    const id = btn.getAttribute('data-device-id');
+    if (!id || id === '0' || isNaN(parseInt(id, 10))) {
+        showToast('error', '无效的设备ID，请刷新页面后重试');
+        console.error('设备ID无效:', id);
+        return;
+    }
+
+    // 获取所有设备信息（直接从按钮属性读取）
+    const deviceData = {
+        id: id,
+        name: btn.getAttribute('data-device-name') || '',
+        management_ip: btn.getAttribute('data-device-management-ip') || '',
+        ip_address: btn.getAttribute('data-device-ip') || '',
+        position_u: btn.getAttribute('data-device-position-u') || '1',
+        height_u: btn.getAttribute('data-device-height-u') || '1',
+        device_type: btn.getAttribute('data-device-type') || 'server',
+        brand: btn.getAttribute('data-device-brand') || '',
+        model: btn.getAttribute('data-device-model') || '',
+        status: btn.getAttribute('data-device-status') || 'active',
+        mac_address: btn.getAttribute('data-device-mac') || '',
+        description: btn.getAttribute('data-device-description') || ''
+    };
+
+    // 填充编辑表单
+    document.getElementById('editDeviceId').value = deviceData.id;
+    document.getElementById('editDeviceName').value = deviceData.name;
+    document.getElementById('editDeviceManagementIp').value = deviceData.management_ip;
+    document.getElementById('editDeviceIp').value = deviceData.ip_address;
+    document.getElementById('editDeviceUStart').value = deviceData.position_u;
+    document.getElementById('editDeviceHeight').value = deviceData.height_u;
+    document.getElementById('editDeviceType').value = deviceData.device_type;
+    document.getElementById('editDeviceBrand').value = deviceData.brand;
+    document.getElementById('editDeviceModel').value = deviceData.model;
+    document.getElementById('editDeviceStatus').value = deviceData.status;
+    document.getElementById('editDeviceMac').value = deviceData.mac_address;
+    document.getElementById('editDeviceDescription').value = deviceData.description;
+
+    // 显示编辑模态框
+    const editModal = new bootstrap.Modal(document.getElementById('editDeviceModal'));
+    editModal.show();
+}
+
+// 显示删除确认
+function showDeleteConfirm(deviceId, deviceName) {
+    deviceIdToDelete = deviceId;
+    document.getElementById('deleteDeviceName').textContent = deviceName;
+    const modal = new bootstrap.Modal(document.getElementById('deleteDeviceModal'));
+    modal.show();
+}
+
+// 更新起始U位选项
+function updateUStartOptions() {
+    const height = parseInt(document.getElementById('deviceHeight').value);
+    const select = document.getElementById('deviceUStart');
+    
+    select.innerHTML = '';
+    
+    for (let u = 1; u <= {{ cabinet.height_u }}; u++) {
+        let available = true;
+        for (let i = u; i < u + height; i++) {
+            if (i > {{ cabinet.height_u }}) {
+                available = false;
+                break;
+            }
+            const slot = document.querySelector(`.u-slot[data-u="${i}"]`);
+            if (slot && slot.classList.contains('occupied')) {
+                available = false;
+                break;
+            }
+        }
+        const option = document.createElement('option');
+        option.value = u;
+        option.textContent = `${u} ${available ? '' : '(已被占用)'}`;
+        option.disabled = !available;
+        if (u == selectedUSlot && available) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    }
+    
+    if (select.value !== selectedUSlot.toString()) {
+        for (let i = 0; i < select.options.length; i++) {
+            if (!select.options[i].disabled) {
+                select.value = select.options[i].value;
+                break;
+            }
+        }
+    }
+}
+
+// 显示提示消息
+function showToast(type, message) {
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0 custom-toast" 
+             role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() { this.remove(); });
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 为必填字段添加标记
+    const requiredFields = document.querySelectorAll('#addDeviceForm [required], #editDeviceForm [required]');
+    requiredFields.forEach(field => {
+        const label = document.querySelector(`label[for="${field.id}"]`);
+        if (label && !label.classList.contains('required-field')) {
+            label.classList.add('required-field');
+        }
+    });
+    
+    // 事件委托处理编辑和删除按钮点击
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.edit-device-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const btn = e.target.closest('.edit-device-btn');
+            const deviceId = btn.getAttribute('data-device-id');
+            const deviceName = btn.getAttribute('data-device-name');
+            editDevice(deviceId, deviceName, e);
+        }
+        if (e.target.closest('.delete-device-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const btn = e.target.closest('.delete-device-btn');
+            const deviceId = btn.getAttribute('data-device-id');
+            const deviceName = btn.getAttribute('data-device-name');
+            showDeleteConfirm(deviceId, deviceName);
+        }
+        if (e.target.closest('.add-device-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const btn = e.target.closest('.add-device-btn');
+            const u = btn.getAttribute('data-u');
+            setSelectedUSlot(u);
+        }
+    });
+    
+    // 打开添加设备模态框：原按钮已移除，点击空闲 U 位仍可触发新增；保留兼容入口
+    const openAddBtn = document.getElementById('openAddDeviceModal');
+    if (openAddBtn) {
+        openAddBtn.addEventListener('click', function() {
+            setSelectedUSlot(selectedUSlot);
+        });
+    }
+    
+    // 刷新按钮：原按钮已移除，保留兼容入口
+    const refreshBtn = document.getElementById('refreshUView');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            window.location.reload();
+        });
+    }
+    
+    // 设备高度变化时，检查U位是否可用
+    document.getElementById('deviceHeight').addEventListener('change', function() {
+        updateUStartOptions();
+    });
+    
+    // 添加设备表单提交前验证
+    document.getElementById('addDeviceForm').addEventListener('submit', function(e) {
+        const managementIp = document.getElementById('deviceManagementIp').value.trim();
+        if (!managementIp) {
+            e.preventDefault();
+            showToast('warning', '请填写管理IP地址');
+            return false;
+        }
+        if (!validateIP(managementIp)) {
+            e.preventDefault();
+            showToast('warning', '请输入有效的管理IP地址格式（例如：192.168.1.1）');
+            return false;
+        }
+        const macValue = document.getElementById('deviceMac').value.trim();
+        if (macValue && !validateMAC(macValue)) {
+            e.preventDefault();
+            showToast('warning', '请输入有效的MAC地址格式（例如：00:1A:2B:3C:4D:5E）');
+            return false;
+        }
+        const height = parseInt(document.getElementById('deviceHeight').value);
+        const startU = parseInt(document.getElementById('deviceUStart').value);
+        if (startU + height - 1 > {{ cabinet.height_u }}) {
+            e.preventDefault();
+            showToast('warning', '所选U位超出机柜高度范围！');
+            return false;
+        }
+        let isOccupied = false;
+        for (let i = startU; i < startU + height; i++) {
+            const slot = document.querySelector(`.u-slot[data-u="${i}"]`);
+            if (slot && slot.classList.contains('occupied')) {
+                isOccupied = true;
+                break;
+            }
+        }
+        if (isOccupied) {
+            e.preventDefault();
+            showToast('warning', '部分U位已被占用，请选择其他起始U位！');
+            return false;
+        }
+        return true;
+    });
+    
+    // 编辑设备表单提交 - 使用AJAX提交，不跳转页面
+    document.getElementById('editDeviceForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const managementIp = document.getElementById('editDeviceManagementIp').value.trim();
+        if (!managementIp) {
+            showToast('warning', '请填写管理IP地址');
+            return false;
+        }
+        if (!validateIP(managementIp)) {
+            showToast('warning', '请输入有效的管理IP地址格式（例如：192.168.1.1）');
+            return false;
+        }
+        const macValue = document.getElementById('editDeviceMac').value.trim();
+        if (macValue && !validateMAC(macValue)) {
+            showToast('warning', '请输入有效的MAC地址格式（例如：00:1A:2B:3C:4D:5E）');
+            return false;
+        }
+        const deviceId = document.getElementById('editDeviceId').value;
+        if (!deviceId) {
+            showToast('error', '设备ID无效');
+            return false;
+        }
+        
+        const formData = new FormData(this);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+        submitBtn.disabled = true;
+        
+        fetch(`/devices/${deviceId}/edit`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.text().then(text => {
+            try { return JSON.parse(text); } catch(e) {
+                if (response.ok) return { success: true, message: '设备更新成功' };
+                throw new Error('服务器返回了非JSON响应: ' + text.substring(0,200));
+            }
+        }))
+        .then(data => {
+            submitBtn.innerHTML = originalBtnText;
+            submitBtn.disabled = false;
+            if (data.success || data.message) {
+                showToast('success', data.message || '设备更新成功');
+                const editModal = bootstrap.Modal.getInstance(document.getElementById('editDeviceModal'));
+                if (editModal) editModal.hide();
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('error', data.message || '设备更新失败');
+            }
+        })
+        .catch(error => {
+            console.error('更新失败:', error);
+            submitBtn.innerHTML = originalBtnText;
+            submitBtn.disabled = false;
+            showToast('info', '操作完成，正在刷新页面...');
+            setTimeout(() => window.location.reload(), 1000);
+        });
+        return false;
+    });
+    
+    // 删除设备确认按钮
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async function() {
+        if (!deviceIdToDelete) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const deleteBtn = this;
+        const originalBtnText = deleteBtn.innerHTML;
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 删除中...';
+        deleteBtn.disabled = true;
+        try {
+            const response = await fetch(`/devices/${deviceIdToDelete}/delete`, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                }
+            });
+            let result;
+            try { result = await response.json(); } catch(e) { result = { success: true, message: '设备删除成功' }; }
+            deleteBtn.innerHTML = originalBtnText;
+            deleteBtn.disabled = false;
+            if (result.success) {
+                bootstrap.Modal.getInstance(document.getElementById('deleteDeviceModal')).hide();
+                showToast('success', '设备删除成功');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('error', '删除失败: ' + result.message);
+            }
+        } catch (error) {
+            console.error('删除错误:', error);
+            deleteBtn.innerHTML = originalBtnText;
+            deleteBtn.disabled = false;
+            showToast('error', '删除失败: ' + error.message);
+        }
+    });
+    
+    // 默认选中第一个U位
+    handleUSlotClick(1, null);
+    updateUStartOptions();
+});
+</script>
+
+<script>
+// ===== 机柜视图：左机架 + 右内嵌信息面板（非弹窗，移植自 rack_editor，统一加 re_ 前缀避免与下方设备列表模态框脚本冲突）=====
+const RE_CABINET_ID = {{ cabinet.id }};
+const RE_TOTAL_U = {{ cabinet.height_u }};
+
+const re_TYPE_META = {
+    server:   { color: '#4f46e5', icon: 'fa-server',        label: '服务器' },
+    switch:   { color: '#2563eb', icon: 'fa-network-wired', label: '交换机' },
+    router:   { color: '#0891b2', icon: 'fa-router',        label: '路由器' },
+    firewall: { color: '#d97706', icon: 'fa-shield-alt',     label: '防火墙' },
+    storage:  { color: '#db2777', icon: 'fa-database',       label: '存储' },
+    other:    { color: '#6b7280', icon: 'fa-cube',           label: '其他' },
+};
+const re_STATUS_META = {
+    online:      { label: '运行中', color: '#22c55e' },
+    active:      { label: '运行中', color: '#22c55e' },
+    offline:     { label: '离线',   color: '#ef4444' },
+    maintenance: { label: '维护中', color: '#f59e0b' },
+    unknown:     { label: '未知',   color: '#9ca3af' },
+};
+
+const re_rackState = { total_u: RE_TOTAL_U, usage_percent: {{ usage_percent }}, u_slots: {} };
+{% for u, s in u_slots.items() %}
+re_rackState.u_slots[{{ u }}] = {
+    device_id: {{ s.device_id }},
+    name: {{ s.device_name|tojson }},
+    device_type: {{ s.device_type|tojson }},
+    status: {{ s.status|tojson }},
+    height_u: {{ s.height_u }},
+    is_start: ({{ u }} === {{ s.start_u }})
+};
+{% endfor %}
+
+function re_csrf() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+function re_api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({
+        'X-CSRFToken': re_csrf(),
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json'
+    }, opts.headers || {});
+    return fetch(path, opts);
+}
+function re_toast(type, msg) {
+    if (typeof showToast === 'function') { showToast(type, msg); return; }
+    const el = document.createElement('div');
+    el.className = 'toast align-items-center text-white bg-' + type + ' border-0 position-fixed';
+    el.style.cssText = 'top:18px;right:18px;z-index:1090;min-width:280px;';
+    el.innerHTML = '<div class="d-flex"><div class="toast-body">' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+    document.body.appendChild(el);
+    new bootstrap.Toast(el, { delay: 3000 }).show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+}
+function re_escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 渲染机柜立面
+function re_renderRack() {
+    const total = re_rackState.total_u;
+    const box = document.getElementById('rackSlotsDetail');
+    if (!box) return;
+    box.innerHTML = '';
+    for (let u = total; u >= 1; u--) {
+        const slot = re_rackState.u_slots[u];
+        const row = document.createElement('div');
+        row.dataset.u = u;
+        if (!slot) {
+            row.className = 'rack-row rack-u-empty';
+            row.innerHTML = '<div class="rack-u-no">U' + u + '</div><div class="rack-u-body"><i class="fas fa-plus-circle me-1"></i>空闲 · 点击新增</div>';
+            row.onclick = (function (slot) { return function () { re_showAddForm(slot); }; })(u);
+        } else {
+            const meta = re_TYPE_META[slot.device_type] || re_TYPE_META.other;
+            const st = re_STATUS_META[slot.status] || re_STATUS_META.unknown;
+            if (slot.is_start) {
+                row.className = 'rack-row rack-u-device';
+                row.style.background = meta.color;
+                row.innerHTML = '<div class="rack-u-no">U' + u + '</div><div class="rack-u-body">' +
+                    '<span class="rack-type-icon"><i class="fas ' + meta.icon + '"></i></span>' +
+                    '<span class="rack-dev-name">' + re_escapeHtml(slot.name) + '</span>' +
+                    '<span class="rack-dev-meta"><span class="rack-status-dot" style="background:' + st.color + '"></span>' + slot.height_u + 'U · ' + st.label + '</span></div>';
+            } else {
+                row.className = 'rack-row rack-u-device-cont';
+                row.style.background = meta.color;
+                row.innerHTML = '<div class="rack-u-no">U' + u + '</div><div class="rack-u-body"><i class="fas fa-angle-up"></i> 占用</div>';
+            }
+            row.onclick = (function (id) { return function () { re_showEditForm(id, u); }; })(slot.device_id);
+        }
+        box.appendChild(row);
+    }
+}
+
+// 右侧：基本信息
+function re_showBasicInfo() {
+    document.getElementById('panelTitle').textContent = '机柜信息';
+    document.getElementById('panelPill').textContent = re_rackState.usage_percent + '% 使用率';
+    const c = {
+        name: {{ cabinet.name|tojson }},
+        location: {{ (cabinet.location.name if cabinet.location else '未指定位置')|tojson }},
+        total_u: re_rackState.total_u,
+        used: document.getElementById('rackUsed').textContent,
+        avail: document.getElementById('rackAvail').textContent,
+        usage: document.getElementById('panelPill').textContent,
+        desc: {{ (cabinet.description or '')|tojson }}
+    };
+    document.getElementById('infoPanel').innerHTML = `
+        <div class="kv-row"><div class="k">机柜名称</div><div class="v">${re_escapeHtml(c.name)}</div></div>
+        <div class="kv-row"><div class="k">所在位置</div><div class="v">${re_escapeHtml(c.location)}</div></div>
+        <div class="kv-row"><div class="k">机柜高度</div><div class="v">${c.total_u} U</div></div>
+        <div class="kv-row"><div class="k">已用 U 位</div><div class="v"><span class="badge bg-success">${c.used}</span></div></div>
+        <div class="kv-row"><div class="k">可用 U 位</div><div class="v"><span class="badge bg-secondary">${c.avail}</span></div></div>
+        <div class="kv-row"><div class="k">使用率</div><div class="v">${c.usage}</div></div>
+        ${c.desc ? `<div class="kv-row"><div class="k">描述</div><div class="v">${re_escapeHtml(c.desc)}</div></div>` : ''}
+        <div class="form-hint mt-3"><i class="fas fa-lightbulb me-1"></i>
+            点击左侧任意 <b>空闲 U 位</b> 可新增设备；点击 <b>已占用 U 位</b> 可查看 / 编辑设备。新增时可从“设备库”选择已有设备并补充信息，也可直接新建。</div>
+    `;
+}
+
+const re_TYPE_OPTIONS = [['server','服务器'],['switch','交换机'],['router','路由器'],['firewall','防火墙'],['storage','存储设备'],['other','其他']];
+const re_STATUS_OPTIONS = [['online','运行中'],['offline','离线'],['maintenance','维护中'],['unknown','未知']];
+function re_optHtml(options, selected) {
+    return options.map(o => `<option value="${o[0]}" ${o[0]===selected?'selected':''}>${o[1]}</option>`).join('');
+}
+function re_heightOpts(selected) {
+    let s = '';
+    for (let h = 1; h <= 12; h++) s += `<option value="${h}" ${h==selected?'selected':''}>${h} U</option>`;
+    return s;
+}
+
+let re_currentSource = 'new';
+function re_showAddForm(positionU) {
+    re_currentSource = 'new';
+    document.getElementById('panelTitle').textContent = '新增设备到 U' + positionU;
+    const html = `
+        <div class="source-toggle">
+            <div class="st-btn" id="srcLib" onclick="re_switchSource('lib', ${positionU})"><i class="fas fa-box-open me-1"></i>从设备库选择</div>
+            <div class="st-btn active" id="srcNew" onclick="re_switchSource('new', ${positionU})"><i class="fas fa-plus me-1"></i>新建设备</div>
+        </div>
+        <div id="libWrap" style="display:none;">
+            <div class="row g-2 mb-2">
+                <div class="col-8"><input type="text" class="form-control form-control-sm" id="libSearch" placeholder="搜索设备库（名称）..."></div>
+                <div class="col-4"><button class="btn btn-sm btn-outline-secondary w-100" onclick="re_loadLibrary()"><i class="fas fa-search"></i> 搜索</button></div>
+            </div>
+            <select class="form-select form-select-sm mb-1" id="libSelect" onchange="re_onLibChange(${positionU})">
+                <option value="">— 请选择设备 —</option>
+            </select>
+            <div class="form-hint mb-2">选择设备后将自动带入其信息，您可继续补充 U 位等字段。</div>
+        </div>
+        <form id="devForm" onsubmit="return re_submitDevice(event, ${positionU})">
+            ${re_deviceFieldsHTML(null, positionU)}
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-check me-1"></i>确认添加</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="re_showBasicInfo()"><i class="fas fa-times me-1"></i>取消</button>
+            </div>
+        </form>`;
+    document.getElementById('infoPanel').innerHTML = html;
+}
+
+function re_switchSource(src, positionU) {
+    re_currentSource = src;
+    document.getElementById('srcLib').classList.toggle('active', src === 'lib');
+    document.getElementById('srcNew').classList.toggle('active', src === 'new');
+    document.getElementById('libWrap').style.display = src === 'lib' ? 'block' : 'none';
+    if (src === 'lib') re_loadLibrary();
+    else { const sel = document.getElementById('libSelect'); if (sel) sel.value = ''; re_clearDeviceFields(); }
+}
+
+function re_loadLibrary() {
+    const q = document.getElementById('libSearch').value.trim();
+    re_api('/cabinet/api/devices/library?q=' + encodeURIComponent(q)).then(r => r.json()).then(d => {
+        if (!d.success) { re_toast('danger', d.message || '加载设备库失败'); return; }
+        const sel = document.getElementById('libSelect');
+        sel.innerHTML = '<option value="">— 请选择设备 —</option>' +
+            d.devices.map(dev => `<option value="${dev.id}">${re_escapeHtml(dev.name)} (${dev.device_type||''} ${dev.management_ip||'无IP'})</option>`).join('');
+    }).catch(e => re_toast('danger', '加载设备库失败: ' + e.message));
+}
+
+function re_onLibChange(positionU) {
+    const id = document.getElementById('libSelect').value;
+    if (!id) { re_clearDeviceFields(); return; }
+    re_api('/cabinet/api/devices/' + id + '/detail').then(r => r.json()).then(d => {
+        if (!d.success) { re_toast('danger', d.message); return; }
+        re_fillDeviceFields(d.device, positionU);
+    }).catch(e => re_toast('danger', '加载设备信息失败: ' + e.message));
+}
+
+function re_showEditForm(deviceId, positionU) {
+    document.getElementById('panelTitle').textContent = '编辑设备';
+    re_api('/cabinet/api/devices/' + deviceId + '/detail').then(r => r.json()).then(d => {
+        if (!d.success) { re_toast('danger', d.message); return; }
+        const dev = d.device;
+        document.getElementById('infoPanel').innerHTML = `
+            <div class="form-hint mb-2"><i class="fas fa-info-circle me-1"></i>
+                当前位于 U${dev.position_u}（${dev.height_u}U）。修改 U 位 / 高度将自动校验冲突。</div>
+            <form id="devForm" onsubmit="return re_updateDevice(event, ${deviceId})">
+                ${re_deviceFieldsHTML(dev, dev.position_u)}
+                <div class="d-flex gap-2 mt-3">
+                    <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-save me-1"></i>保存修改</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="re_removeDevice(${deviceId})"><i class="fas fa-sign-out-alt me-1"></i>从机柜移除</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="re_showBasicInfo()"><i class="fas fa-times me-1"></i>取消</button>
+                </div>
+            </form>`;
+    }).catch(e => re_toast('danger', '加载设备失败: ' + e.message));
+}
+
+function re_deviceFieldsHTML(dev, positionU) {
+    dev = dev || {};
+    const name = dev.name || '';
+    const dtype = dev.device_type || 'server';
+    const brand = dev.brand || '';
+    const model = dev.model || '';
+    const serial = dev.serial_number || '';
+    const asset = dev.asset_number || '';
+    const mip = dev.management_ip || '';
+    const bip = dev.ip_address || '';
+    const mac = dev.mac_address || '';
+    const status = (dev.status === 'active' ? 'online' : (dev.status || 'unknown'));
+    const hu = dev.height_u || 1;
+    const pu = (positionU != null ? positionU : (dev.position_u || 1));
+    const owner = dev.owner || '';
+    const dept = dev.department || '';
+    const desc = dev.description || '';
+    return `
+        <input type="hidden" id="f_device_id" value="${dev.id || ''}">
+        <div class="row g-2">
+            <div class="col-md-6 mb-2"><label class="form-label">设备名称 *</label><input class="form-control form-control-sm" id="f_name" value="${re_escapeHtml(name)}" required></div>
+            <div class="col-md-6 mb-2"><label class="form-label">管理IP *</label><input class="form-control form-control-sm" id="f_management_ip" value="${re_escapeHtml(mip)}" required placeholder="如 192.168.1.1"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">设备类型</label><select class="form-select form-select-sm" id="f_device_type">${re_optHtml(re_TYPE_OPTIONS, dtype)}</select></div>
+            <div class="col-md-6 mb-2"><label class="form-label">状态</label><select class="form-select form-select-sm" id="f_status">${re_optHtml(re_STATUS_OPTIONS, status)}</select></div>
+            <div class="col-md-6 mb-2"><label class="form-label">厂商</label><input class="form-control form-control-sm" id="f_brand" value="${re_escapeHtml(brand)}"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">型号</label><input class="form-control form-control-sm" id="f_model" value="${re_escapeHtml(model)}"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">序列号</label><input class="form-control form-control-sm" id="f_serial_number" value="${re_escapeHtml(serial)}"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">资产编号</label><input class="form-control form-control-sm" id="f_asset_number" value="${re_escapeHtml(asset)}"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">业务IP</label><input class="form-control form-control-sm" id="f_ip_address" value="${re_escapeHtml(bip)}"></div>
+            <div class="col-md-6 mb-2"><label class="form-label">MAC地址</label><input class="form-control form-control-sm" id="f_mac_address" value="${re_escapeHtml(mac)}" placeholder="00:1A:2B:3C:4D:5E"></div>
+            <div class="col-md-4 mb-2"><label class="form-label">起始U位 *</label><input type="number" class="form-control form-control-sm" id="f_position_u" value="${pu}" min="1" max="${re_rackState.total_u}" required></div>
+            <div class="col-md-4 mb-2"><label class="form-label">高度(U) *</label><select class="form-select form-select-sm" id="f_height_u">${re_heightOpts(hu)}</select></div>
+            <div class="col-md-4 mb-2"><label class="form-label">责任人</label><input class="form-control form-control-sm" id="f_owner" value="${re_escapeHtml(owner)}"></div>
+            <div class="col-md-12 mb-2"><label class="form-label">所属部门</label><input class="form-control form-control-sm" id="f_department" value="${re_escapeHtml(dept)}"></div>
+            <div class="col-md-12 mb-2"><label class="form-label">描述</label><textarea class="form-control form-control-sm" id="f_description" rows="2">${re_escapeHtml(desc)}</textarea></div>
+        </div>`;
+}
+
+function re_collectFields() {
+    return {
+        name: document.getElementById('f_name').value.trim(),
+        device_type: document.getElementById('f_device_type').value,
+        brand: document.getElementById('f_brand').value.trim(),
+        model: document.getElementById('f_model').value.trim(),
+        serial_number: document.getElementById('f_serial_number').value.trim(),
+        asset_number: document.getElementById('f_asset_number').value.trim(),
+        management_ip: document.getElementById('f_management_ip').value.trim(),
+        ip_address: document.getElementById('f_ip_address').value.trim(),
+        mac_address: document.getElementById('f_mac_address').value.trim(),
+        status: document.getElementById('f_status').value,
+        height_u: parseInt(document.getElementById('f_height_u').value) || 1,
+        position_u: parseInt(document.getElementById('f_position_u').value) || 1,
+        owner: document.getElementById('f_owner').value.trim(),
+        department: document.getElementById('f_department').value.trim(),
+        description: document.getElementById('f_description').value.trim(),
+    };
+}
+function re_fillDeviceFields(dev, positionU) {
+    document.getElementById('f_name').value = dev.name || '';
+    document.getElementById('f_device_type').value = dev.device_type || 'server';
+    document.getElementById('f_brand').value = dev.brand || '';
+    document.getElementById('f_model').value = dev.model || '';
+    document.getElementById('f_serial_number').value = dev.serial_number || '';
+    document.getElementById('f_asset_number').value = dev.asset_number || '';
+    document.getElementById('f_management_ip').value = dev.management_ip || '';
+    document.getElementById('f_ip_address').value = dev.ip_address || '';
+    document.getElementById('f_mac_address').value = dev.mac_address || '';
+    document.getElementById('f_status').value = (dev.status === 'active' ? 'online' : (dev.status || 'unknown'));
+    document.getElementById('f_height_u').value = dev.height_u || 1;
+    document.getElementById('f_position_u').value = (positionU != null ? positionU : (dev.position_u || 1));
+    document.getElementById('f_owner').value = dev.owner || '';
+    document.getElementById('f_department').value = dev.department || '';
+    document.getElementById('f_description').value = dev.description || '';
+}
+function re_clearDeviceFields() {
+    ['f_name','f_brand','f_model','f_serial_number','f_asset_number','f_management_ip','f_ip_address','f_mac_address','f_owner','f_department','f_description'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('f_device_type').value = 'server';
+    document.getElementById('f_status').value = 'online';
+}
+
+function re_submitDevice(e, positionU) {
+    e.preventDefault();
+    const data = re_collectFields();
+    data.position_u = positionU;
+    if (re_currentSource === 'lib') {
+        const lid = document.getElementById('libSelect').value;
+        if (!lid) { re_toast('warning', '请先从设备库选择一台设备'); return false; }
+        data.device_id = parseInt(lid);
+    }
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
+    re_api('/cabinet/api/cabinet/' + RE_CABINET_ID + '/assign', { method: 'POST', body: JSON.stringify(data) })
+        .then(r => r.json()).then(d => {
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>确认添加';
+            if (d.success) { re_toast('success', d.message); setTimeout(function () { window.location.reload(); }, 700); }
+            else re_toast('danger', d.message || '添加失败');
+        }).catch(function (err) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>确认添加'; re_toast('danger', '请求失败: ' + err.message); });
+    return false;
+}
+
+function re_updateDevice(e, deviceId) {
+    e.preventDefault();
+    const data = re_collectFields();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+    re_api('/cabinet/api/devices/' + deviceId, { method: 'PUT', body: JSON.stringify(data) })
+        .then(r => r.json()).then(d => {
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>保存修改';
+            if (d.success) { re_toast('success', d.message); setTimeout(function () { window.location.reload(); }, 700); }
+            else re_toast('danger', d.message || '保存失败');
+        }).catch(function (err) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>保存修改'; re_toast('danger', '请求失败: ' + err.message); });
+    return false;
+}
+
+function re_removeDevice(deviceId) {
+    if (!confirm('确定将该设备从机柜移除吗？（保留设备，仅解除机柜绑定）')) return;
+    re_api('/cabinet/api/cabinets/' + RE_CABINET_ID + '/remove-device/' + deviceId, { method: 'POST' })
+        .then(r => r.json()).then(d => {
+            if (d.success) { re_toast('success', d.message); setTimeout(function () { window.location.reload(); }, 700); }
+            else re_toast('danger', d.message || '移除失败');
+        }).catch(function (err) { re_toast('danger', '请求失败: ' + err.message); });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    re_renderRack();
+    re_showBasicInfo();
+});
+</script>
+{% endblock %}

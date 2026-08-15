@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}资产清单 - 资产管理{% endblock %}
+
+{% block page_title %}资产清单{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">
+    总计 <strong>{{ assets|length }}</strong> 项资产，
+    总价值 <strong>¥ {{ "{:,.2f}".format(total_value) }}</strong>
+</p>
+{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group" role="group">
+    <a href="{{ url_for('asset.asset_add') }}" class="btn btn-primary">
+        <i class="fas fa-plus-circle"></i> 新增资产
+    </a>
+    <a href="{{ url_for('asset.asset_export') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-file-export"></i> 导出
+    </a>
+    <a href="{{ url_for('asset.asset_import') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-file-import"></i> 导入
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- 搜索/筛选工具栏 -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="searchInput" class="form-control" placeholder="搜索资产编号、名称、型号...">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select id="typeFilter" class="form-select">
+            <option value="">所有类型</option>
+            {% set types = assets|map(attribute='asset_type')|unique|list %}
+            {% for type in types %}
+                <option value="{{ type }}">{{ type }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="statusFilter" class="form-select">
+            <option value="">所有状态</option>
+            <option value="active">使用中</option>
+            <option value="inactive">闲置</option>
+            <option value="maintenance">维护中</option>
+            <option value="retired">已报废</option>
+            <option value="lost">丢失</option>
+        </select>
+    </div>
+</div>
+
+<!-- 资产列表表格 -->
+<div class="table-responsive">
+    <table class="table table-hover align-middle" id="assetTable">
+        <thead class="table-light">
+            <tr>
+                <th>资产编号</th>
+                <th>资产名称</th>
+                <th>类型</th>
+                <th>品牌/型号</th>
+                <th>状态</th>
+                <th>当前价值 (¥)</th>
+                <th>位置</th>
+                <th>责任人</th>
+                <th class="text-center">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for asset in assets %}
+            <tr data-asset-id="{{ asset.id }}">
+                <td><strong>{{ asset.asset_number }}</strong></td>
+                <td>{{ asset.asset_name }}</td>
+                <td>{{ asset.asset_type }}</td>
+                <td>
+                    {% if asset.brand or asset.model %}
+                        {{ asset.brand or '' }} {{ asset.model or '' }}
+                    {% else %}
+                        <span class="text-muted">--</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% set status_class = asset.get_status_badge_class() %}
+                    <span class="badge bg-{{ status_class }}">
+                        {% if asset.status == 'active' %}使用中
+                        {% elif asset.status == 'inactive' %}闲置
+                        {% elif asset.status == 'maintenance' %}维护中
+                        {% elif asset.status == 'retired' %}已报废
+                        {% elif asset.status == 'lost' %}丢失
+                        {% else %}{{ asset.status }}
+                        {% endif %}
+                    </span>
+                </td>
+                <td>
+                    {% if asset.current_value %}
+                        {{ "{:,.2f}".format(asset.current_value) }}
+                    {% else %}
+                        <span class="text-muted">--</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if asset.location %}
+                        {{ asset.location.name }}
+                        {% if asset.cabinet %} / {{ asset.cabinet.name }}{% endif %}
+                    {% else %}
+                        <span class="text-muted">--</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if asset.owner_person %}
+                        {{ asset.owner_person }}
+                        {% if asset.owner_department %}<br><small class="text-muted">{{ asset.owner_department }}</small>{% endif %}
+                    {% else %}
+                        <span class="text-muted">--</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    <div class="btn-group btn-group-sm">
+                        <a href="{{ url_for('asset.asset_detail', id=asset.id) }}" class="btn btn-outline-info" data-bs-toggle="tooltip" title="查看详情">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="{{ url_for('asset.asset_edit', id=asset.id) }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" title="编辑">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button type="button" class="btn btn-outline-danger btn-delete" data-url="{{ url_for('asset.asset_delete', id=asset.id) }}" data-name="{{ asset.asset_name }}" data-bs-toggle="tooltip" title="删除">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="text-center py-5 text-muted">
+                    <i class="fas fa-box-open fa-3x mb-3"></i>
+                    <p>暂无资产记录</p>
+                    <a href="{{ url_for('asset.asset_add') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus-circle"></i> 立即添加
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+    // 初始化工具提示 (base.html 已包含 initTooltips, 但以防重复)
+    if (typeof initTooltips === 'function') {
+        initTooltips();
+    }
+
+    // 获取表格和过滤元素
+    const table = document.getElementById('assetTable');
+    const tbody = table.querySelector('tbody');
+    const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-asset-id]')) : [];
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    const statusFilter = document.getElementById('statusFilter');
+
+    // 过滤函数
+    function filterTable() {
+        const searchTerm = searchInput.value.toLowerCase().trim();
+        const selectedType = typeFilter.value;
+        const selectedStatus = statusFilter.value;
+
+        rows.forEach(row => {
+            const assetId = row.dataset.assetId;
+            // 从单元格中提取文本内容用于搜索
+            const cells = row.querySelectorAll('td');
+            if (cells.length < 8) return; // 跳过无效行
+
+            const assetNumber = cells[0].innerText.toLowerCase();
+            const assetName = cells[1].innerText.toLowerCase();
+            const assetType = cells[2].innerText.trim();
+            const modelText = cells[3].innerText.toLowerCase();
+            // 状态单元格内有 badge，提取文本时需要去除图标等，简单取 innerText
+            const statusSpan = cells[4].querySelector('.badge');
+            const statusText = statusSpan ? statusSpan.innerText.trim() : '';
+
+            // 搜索匹配
+            const matchesSearch = searchTerm === '' ||
+                assetNumber.includes(searchTerm) ||
+                assetName.includes(searchTerm) ||
+                modelText.includes(searchTerm);
+
+            // 类型匹配
+            const matchesType = selectedType === '' || assetType === selectedType;
+
+            // 状态匹配 (需要将状态文本映射为英文值，但状态筛选框用的是英文值，这里简单判断)
+            // 由于状态筛选框的值是 active, inactive 等，而单元格内显示中文，需要映射
+            let statusValue = '';
+            if (statusText.includes('使用中')) statusValue = 'active';
+            else if (statusText.includes('闲置')) statusValue = 'inactive';
+            else if (statusText.includes('维护中')) statusValue = 'maintenance';
+            else if (statusText.includes('已报废')) statusValue = 'retired';
+            else if (statusText.includes('丢失')) statusValue = 'lost';
+            const matchesStatus = selectedStatus === '' || statusValue === selectedStatus;
+
+            if (matchesSearch && matchesType && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // 绑定事件
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (typeFilter) typeFilter.addEventListener('change', filterTable);
+    if (statusFilter) statusFilter.addEventListener('change', filterTable);
+
+    // 删除功能
+    const deleteButtons = document.querySelectorAll('.btn-delete');
+    deleteButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const url = this.dataset.url;
+            const assetName = this.dataset.name || '此资产';
+            const row = this.closest('tr[data-asset-id]');
+
+            // 使用 base.html 提供的确认对话框
+            if (typeof confirmAction === 'function') {
+                confirmAction(`确定要删除资产 “${assetName}” 吗？此操作不可撤销。`, function() {
+                    // 用户确认后调用删除API
+                    if (typeof makeAjaxRequest === 'function') {
+                        // 显示加载状态
+                        const originalHtml = btn.innerHTML;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                        btn.disabled = true;
+
+                        makeAjaxRequest(url, 'DELETE')
+                            .then(response => {
+                                // 删除成功，移除行
+                                if (row) {
+                                    row.remove();
+                                }
+                                // 可选：显示成功提示
+                                if (typeof showToast === 'function') {
+                                    showToast('success', '资产删除成功');
+                                }
+                                // 如果表格无数据，可刷新或显示空状态
+                                if (tbody && tbody.querySelectorAll('tr[data-asset-id]').length === 0) {
+                                    // 简单处理：刷新页面或添加空行
+                                    location.reload(); // 或者更优雅地添加空行
+                                }
+                            })
+                            .catch(error => {
+                                console.error('删除失败:', error);
+                                if (typeof showErrorAlert === 'function') {
+                                    showErrorAlert('删除失败：' + (error.message || '未知错误'));
+                                }
+                                btn.innerHTML = originalHtml;
+                                btn.disabled = false;
+                            });
+                    } else {
+                        alert('删除功能不可用，请刷新页面重试');
+                    }
+                });
+            } else {
+                // 降级处理
+                if (confirm(`确定要删除资产 “${assetName}” 吗？`)) {
+                    window.location.href = url; // 使用GET删除不安全，仅作备选
+                }
+            }
+        });
+    });
+
+    // 如果表格为空，隐藏过滤器等（可选）
+    if (rows.length === 0) {
+        const filterRow = document.querySelector('.row.mb-3');
+        if (filterRow) filterRow.style.display = 'none';
+    }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,941 @@
+{% extends "base.html" %}
+
+{% block title %}历史数据查询 - 网络设备监控系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-history text-primary mr-2"></i>历史数据查询
+            </h1>
+            <p class="text-muted mb-0">查询和分析设备的历史监控数据</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="refreshData()">
+                <i class="fas fa-sync-alt mr-2"></i>刷新
+            </button>
+            <button class="btn btn-outline-info" onclick="exportData()">
+                <i class="fas fa-download mr-2"></i>导出数据
+            </button>
+        </div>
+    </div>
+
+    <!-- 查询条件卡片 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">查询条件</h6>
+            <button class="btn btn-sm btn-outline-primary" onclick="toggleAdvancedFilter()">
+                <i class="fas fa-filter mr-1"></i>高级筛选
+            </button>
+        </div>
+        <div class="card-body">
+            <form id="queryForm" method="GET" action="{{ url_for('monitoring.history_data') }}">
+                <div class="row">
+                    <!-- 设备选择 -->
+                    <div class="col-md-4 mb-3">
+                        <label for="deviceSelect" class="form-label">选择设备</label>
+                        <select class="form-control select2" id="deviceSelect" name="device_id">
+                            <option value="">-- 所有设备 --</option>
+                            {% for device in devices %}
+                            <option value="{{ device.id }}" {% if device_id == device.id %}selected{% endif %}>
+                                {{ device.name }} ({{ device.management_ip or device.ip_address }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- 指标类型选择 -->
+                    <div class="col-md-4 mb-3">
+                        <label for="metricSelect" class="form-label">指标类型</label>
+                        <select class="form-control" id="metricSelect" name="metric_type">
+                            <option value="cpu" {% if metric_type == 'cpu' %}selected{% endif %}>CPU使用率</option>
+                            <option value="memory" {% if metric_type == 'memory' %}selected{% endif %}>内存使用率</option>
+                            <option value="disk" {% if metric_type == 'disk' %}selected{% endif %}>磁盘使用率</option>
+                            <option value="ping" {% if metric_type == 'ping' %}selected{% endif %}>Ping延迟</option>
+                            <option value="network" {% if metric_type == 'network' %}selected{% endif %}>网络流量</option>
+                            <option value="temperature" {% if metric_type == 'temperature' %}selected{% endif %}>温度</option>
+                            <option value="power" {% if metric_type == 'power' %}selected{% endif %}>功耗</option>
+                        </select>
+                    </div>
+
+                    <!-- 时间范围选择 -->
+                    <div class="col-md-4 mb-3">
+                        <label for="dateRange" class="form-label">时间范围</label>
+                        <input type="text" class="form-control" id="dateRange" name="date_range"
+                               placeholder="选择日期范围..."
+                               value="{{ start_date }} 至 {{ end_date }}">
+                        <input type="hidden" id="startDate" name="start_date" value="{{ start_date }}">
+                        <input type="hidden" id="endDate" name="end_date" value="{{ end_date }}">
+                    </div>
+                </div>
+
+                <!-- 高级筛选条件（默认隐藏） -->
+                <div id="advancedFilter" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="minValue" class="form-label">最小值</label>
+                            <input type="number" class="form-control" id="minValue" name="min_value" 
+                                   placeholder="最小值" step="0.01">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="maxValue" class="form-label">最大值</label>
+                            <input type="number" class="form-control" id="maxValue" name="max_value" 
+                                   placeholder="最大值" step="0.01">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="aggregation" class="form-label">聚合方式</label>
+                            <select class="form-control" id="aggregation" name="aggregation">
+                                <option value="raw">原始数据</option>
+                                <option value="hourly">每小时平均</option>
+                                <option value="daily">每日平均</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="limit" class="form-label">数据点限制</label>
+                            <select class="form-control" id="limit" name="limit">
+                                <option value="1000">1000个点</option>
+                                <option value="5000">5000个点</option>
+                                <option value="10000">10000个点</option>
+                                <option value="0">无限制</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 查询按钮 -->
+                <div class="row">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search mr-2"></i>查询
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetForm()">
+                            <i class="fas fa-redo mr-2"></i>重置
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 数据统计卡片 -->
+    {% if device_id %}
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                数据点数</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.count|default(0) }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-database fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                平均值</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.avg|default(0)|round(2) }}{% if metric_type in ['cpu', 'memory', 'disk'] %}%{% elif metric_type == 'ping' %}ms{% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                最大值</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.max|default(0)|round(2) }}{% if metric_type in ['cpu', 'memory', 'disk'] %}%{% elif metric_type == 'ping' %}ms{% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-arrow-up fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                最小值</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.min|default(0)|round(2) }}{% if metric_type in ['cpu', 'memory', 'disk'] %}%{% elif metric_type == 'ping' %}ms{% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-arrow-down fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if device_id %}
+        <!-- 图表展示 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            历史数据趋势图
+                            {% for device in devices %}
+                                {% if device.id == device_id %}
+                                    - {{ device.name }}
+                                {% endif %}
+                            {% endfor %}
+                        </h6>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomChart('1h')">
+                                1小时
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomChart('24h')">
+                                24小时
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomChart('7d')">
+                                7天
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="zoomChart('30d')">
+                                30天
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="resetZoom()">
+                                <i class="fas fa-search-minus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="position: relative; height: 400px;">
+                            <canvas id="historyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold text-primary">详细数据</h6>
+                        <div>
+                            <span class="badge badge-info mr-2">
+                                共 {{ history_data|length }} 条记录
+                            </span>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="downloadChart()">
+                                    <i class="fas fa-image mr-1"></i>下载图表
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="showDataTable()">
+                                    <i class="fas fa-table mr-1"></i>全屏表格
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="dataTable" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>设备</th>
+                                        {% if metric_type == 'cpu' %}
+                                        <th>CPU使用率 (%)</th>
+                                        {% elif metric_type == 'memory' %}
+                                        <th>内存使用率 (%)</th>
+                                        {% elif metric_type == 'disk' %}
+                                        <th>磁盘使用率 (%)</th>
+                                        {% elif metric_type == 'ping' %}
+                                        <th>Ping延迟 (ms)</th>
+                                        {% elif metric_type == 'network' %}
+                                        <th>网络流入</th>
+                                        <th>网络流出</th>
+                                        {% elif metric_type == 'temperature' %}
+                                        <th>温度 (°C)</th>
+                                        {% elif metric_type == 'power' %}
+                                        <th>功耗 (W)</th>
+                                        {% endif %}
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for data in history_data %}
+                                    <tr>
+                                        <td>
+                                            <span data-toggle="tooltip" title="{{ data.collected_at.strftime('%Y-%m-%d %H:%M:%S') }}">
+                                                {{ data.collected_at.strftime('%m-%d %H:%M') }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if data.device %}
+                                            {{ data.device.name|truncate(20) }}
+                                            {% else %}
+                                            未知设备
+                                            {% endif %}
+                                        </td>
+                                        {% if metric_type == 'cpu' %}
+                                        <td>
+                                            <div class="progress" style="height: 6px; width: 80px;">
+                                                <div class="progress-bar bg-{{ 'success' if data.cpu_usage < 50 else 'warning' if data.cpu_usage < 80 else 'danger' }}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ data.cpu_usage|default(0) }}%">
+                                                </div>
+                                            </div>
+                                            <small>{{ data.cpu_usage|default(0)|round(2) }}%</small>
+                                        </td>
+                                        {% elif metric_type == 'memory' %}
+                                        <td>
+                                            <div class="progress" style="height: 6px; width: 80px;">
+                                                <div class="progress-bar bg-{{ 'success' if data.memory_usage < 50 else 'warning' if data.memory_usage < 80 else 'danger' }}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ data.memory_usage|default(0) }}%">
+                                                </div>
+                                            </div>
+                                            <small>{{ data.memory_usage|default(0)|round(2) }}%</small>
+                                        </td>
+                                        {% elif metric_type == 'disk' %}
+                                        <td>
+                                            <div class="progress" style="height: 6px; width: 80px;">
+                                                <div class="progress-bar bg-{{ 'success' if data.disk_usage < 50 else 'warning' if data.disk_usage < 80 else 'danger' }}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ data.disk_usage|default(0) }}%">
+                                                </div>
+                                            </div>
+                                            <small>{{ data.disk_usage|default(0)|round(2) }}%</small>
+                                        </td>
+                                        {% elif metric_type == 'ping' %}
+                                        <td>
+                                            <span class="badge badge-{{ 'success' if data.ping_time < 100 else 'warning' if data.ping_time < 500 else 'danger' }}">
+                                                {{ data.ping_time|default(0)|round(2) }} ms
+                                            </span>
+                                        </td>
+                                        {% elif metric_type == 'network' %}
+                                        <td>{{ data.network_in|filesizeformat if data.network_in else '-' }}</td>
+                                        <td>{{ data.network_out|filesizeformat if data.network_out else '-' }}</td>
+                                        {% elif metric_type == 'temperature' %}
+                                        <td>
+                                            <span class="badge badge-{{ 'success' if data.temperature < 40 else 'warning' if data.temperature < 60 else 'danger' }}">
+                                                {{ data.temperature|default(0)|round(1) }}°C
+                                            </span>
+                                        </td>
+                                        {% elif metric_type == 'power' %}
+                                        <td>
+                                            <span class="badge badge-{{ 'success' if data.power_consumption < 100 else 'warning' if data.power_consumption < 300 else 'danger' }}">
+                                                {{ data.power_consumption|default(0)|round(1) }}W
+                                            </span>
+                                        </td>
+                                        {% endif %}
+                                        <td>
+                                            <span class="badge badge-{{ 'success' if data.is_reachable else 'danger' }}">
+                                                {{ '在线' if data.is_reachable else '离线' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info" onclick="showDetail({{ data.id }})">
+                                                <i class="fas fa-info-circle"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">
+                                            <i class="fas fa-database fa-2x text-muted mb-3"></i>
+                                            <p class="text-muted">未找到历史数据</p>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页 -->
+                        {% if history_data|length > 0 %}
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                显示第 1 到 {{ history_data|length }} 条记录，共 {{ history_data|length }} 条
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#" tabindex="-1">上一页</a>
+                                    </li>
+                                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#">下一页</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <!-- 未选择设备时的提示 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-chart-line fa-4x text-muted mb-4"></i>
+                        <h4 class="text-muted mb-3">请选择查询条件</h4>
+                        <p class="text-muted mb-4">选择设备和时间范围以查看历史数据图表</p>
+                        <div class="mt-4">
+                            <button class="btn btn-primary" onclick="focusOnForm()">
+                                <i class="fas fa-search mr-2"></i>开始查询
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- 数据详情模态框 -->
+<div class="modal fade" id="detailModal" tabindex="-1" role="dialog" aria-labelledby="detailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailModalLabel">监控数据详情</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="detailContent">
+                <!-- 内容将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 数据表格全屏模态框 -->
+<div class="modal fade" id="tableModal" tabindex="-1" role="dialog" aria-labelledby="tableModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tableModalLabel">详细数据表格</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="fullDataTable">
+                        <!-- 表格内容将通过JavaScript动态生成 -->
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="exportFullTable()">导出表格</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+<script src="{{ url_for('static', filename='vendor/chart.js/Chart.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/history-data.js') }}"></script>
+
+<script>
+// 图表实例
+let historyChart = null;
+
+// 初始化日期选择器
+document.addEventListener('DOMContentLoaded', function() {
+    // 日期范围选择器
+    flatpickr("#dateRange", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        defaultDate: ["{{ start_date }}", "{{ end_date }}"],
+        locale: "zh",
+        onChange: function(selectedDates, dateStr, instance) {
+            if (selectedDates.length === 2) {
+                const startDate = selectedDates[0].toISOString().split('T')[0];
+                const endDate = selectedDates[1].toISOString().split('T')[0];
+                document.getElementById('startDate').value = startDate;
+                document.getElementById('endDate').value = endDate;
+            }
+        }
+    });
+
+    // 初始化工具提示
+    $('[data-toggle="tooltip"]').tooltip();
+
+    // 如果选择了设备，初始化图表
+    {% if device_id and history_data %}
+    initializeChart();
+    {% endif %}
+});
+
+// 切换高级筛选显示
+function toggleAdvancedFilter() {
+    const filterDiv = document.getElementById('advancedFilter');
+    const btn = event.target;
+    if (filterDiv.style.display === 'none') {
+        filterDiv.style.display = 'block';
+        btn.innerHTML = '<i class="fas fa-filter mr-1"></i>隐藏高级筛选';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-primary');
+    } else {
+        filterDiv.style.display = 'none';
+        btn.innerHTML = '<i class="fas fa-filter mr-1"></i>高级筛选';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-outline-primary');
+    }
+}
+
+// 重置表单
+function resetForm() {
+    document.getElementById('queryForm').reset();
+    document.getElementById('startDate').value = '';
+    document.getElementById('endDate').value = '';
+    document.getElementById('dateRange').value = '';
+    document.getElementById('advancedFilter').style.display = 'none';
+}
+
+// 刷新数据
+function refreshData() {
+    window.location.reload();
+}
+
+// 导出数据
+function exportData() {
+    if (!{{ device_id|default('false') }}) {
+        alert('请先选择设备并查询数据');
+        return;
+    }
+    
+    const params = new URLSearchParams();
+    params.append('device_id', '{{ device_id }}');
+    params.append('metric_type', '{{ metric_type }}');
+    params.append('start_date', '{{ start_date }}');
+    params.append('end_date', '{{ end_date }}');
+    params.append('format', 'csv');
+    
+    window.location.href = `/api/export/history-data?${params.toString()}`;
+}
+
+// 聚焦到查询表单
+function focusOnForm() {
+    document.getElementById('deviceSelect').focus();
+}
+
+// 初始化图表
+function initializeChart() {
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    
+    // 准备数据
+    const labels = [];
+    const dataValues = [];
+    
+    {% for data in history_data|reverse %}
+        labels.push('{{ data.collected_at.strftime("%m-%d %H:%M") }}');
+        {% if metric_type == 'cpu' %}
+            dataValues.push({{ data.cpu_usage|default(0) }});
+        {% elif metric_type == 'memory' %}
+            dataValues.push({{ data.memory_usage|default(0) }});
+        {% elif metric_type == 'disk' %}
+            dataValues.push({{ data.disk_usage|default(0) }});
+        {% elif metric_type == 'ping' %}
+            dataValues.push({{ data.ping_time|default(0) }});
+        {% elif metric_type == 'network' %}
+            // 网络流量需要特殊处理
+        {% elif metric_type == 'temperature' %}
+            dataValues.push({{ data.temperature|default(0) }});
+        {% elif metric_type == 'power' %}
+            dataValues.push({{ data.power_consumption|default(0) }});
+        {% endif %}
+    {% endfor %}
+    
+    // 确定图表类型和配置
+    let chartType = 'line';
+    let yAxisLabel = '';
+    let backgroundColor = 'rgba(78, 115, 223, 0.1)';
+    let borderColor = 'rgba(78, 115, 223, 1)';
+    
+    {% if metric_type == 'cpu' %}
+        yAxisLabel = 'CPU使用率 (%)';
+    {% elif metric_type == 'memory' %}
+        yAxisLabel = '内存使用率 (%)';
+    {% elif metric_type == 'disk' %}
+        yAxisLabel = '磁盘使用率 (%)';
+    {% elif metric_type == 'ping' %}
+        yAxisLabel = 'Ping延迟 (ms)';
+        backgroundColor = 'rgba(28, 200, 138, 0.1)';
+        borderColor = 'rgba(28, 200, 138, 1)';
+    {% elif metric_type == 'temperature' %}
+        yAxisLabel = '温度 (°C)';
+        backgroundColor = 'rgba(246, 194, 62, 0.1)';
+        borderColor = 'rgba(246, 194, 62, 1)';
+    {% elif metric_type == 'power' %}
+        yAxisLabel = '功耗 (W)';
+        backgroundColor = 'rgba(231, 74, 59, 0.1)';
+        borderColor = 'rgba(231, 74, 59, 1)';
+    {% endif %}
+    
+    // 创建图表
+    historyChart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels: labels,
+            datasets: [{
+                label: yAxisLabel,
+                data: dataValues,
+                backgroundColor: backgroundColor,
+                borderColor: borderColor,
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    title: {
+                        display: true,
+                        text: yAxisLabel
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                },
+                zoom: {
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'x',
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'nearest'
+            }
+        }
+    });
+}
+
+// 缩放图表
+function zoomChart(range) {
+    if (!historyChart) return;
+    
+    const now = Date.now();
+    let min = now;
+    let max = now;
+    
+    switch (range) {
+        case '1h':
+            min = now - 60 * 60 * 1000;
+            break;
+        case '24h':
+            min = now - 24 * 60 * 60 * 1000;
+            break;
+        case '7d':
+            min = now - 7 * 24 * 60 * 60 * 1000;
+            break;
+        case '30d':
+            min = now - 30 * 24 * 60 * 60 * 1000;
+            break;
+    }
+    
+    // 这里需要根据实际数据进行缩放
+    // 由于我们使用的是静态数据，这里只是示例
+    historyChart.resetZoom();
+}
+
+// 重置缩放
+function resetZoom() {
+    if (historyChart && historyChart.resetZoom) {
+        historyChart.resetZoom();
+    }
+}
+
+// 下载图表
+function downloadChart() {
+    if (!historyChart) {
+        alert('没有图表可下载');
+        return;
+    }
+    
+    const link = document.createElement('a');
+    link.download = `历史数据图表-{{ metric_type }}-{{ start_date }}至{{ end_date }}.png`;
+    link.href = historyChart.toBase64Image();
+    link.click();
+}
+
+// 显示数据详情
+function showDetail(dataId) {
+    fetch(`/api/monitor-data/${dataId}`)
+        .then(response => response.json())
+        .then(data => {
+            let content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>基本信息</h6>
+                        <dl class="row">
+                            <dt class="col-sm-4">设备名称:</dt>
+                            <dd class="col-sm-8">${data.device_name || '-'}</dd>
+                            
+                            <dt class="col-sm-4">采集时间:</dt>
+                            <dd class="col-sm-8">${data.collected_at || '-'}</dd>
+                            
+                            <dt class="col-sm-4">监控类型:</dt>
+                            <dd class="col-sm-8">${data.monitor_type || '-'}</dd>
+                            
+                            <dt class="col-sm-4">连通状态:</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge badge-${data.is_reachable ? 'success' : 'danger'}">
+                                    ${data.is_reachable ? '在线' : '离线'}
+                                </span>
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>性能指标</h6>
+                        <dl class="row">
+            `;
+            
+            if (data.cpu_usage !== null) {
+                content += `
+                    <dt class="col-sm-4">CPU使用率:</dt>
+                    <dd class="col-sm-8">
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-${data.cpu_usage < 50 ? 'success' : data.cpu_usage < 80 ? 'warning' : 'danger'}" 
+                                 style="width: ${data.cpu_usage}%">
+                            </div>
+                        </div>
+                        <small>${data.cpu_usage.toFixed(2)}%</small>
+                    </dd>
+                `;
+            }
+            
+            if (data.memory_usage !== null) {
+                content += `
+                    <dt class="col-sm-4">内存使用率:</dt>
+                    <dd class="col-sm-8">
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-${data.memory_usage < 50 ? 'success' : data.memory_usage < 80 ? 'warning' : 'danger'}" 
+                                 style="width: ${data.memory_usage}%">
+                            </div>
+                        </div>
+                        <small>${data.memory_usage.toFixed(2)}%</small>
+                    </dd>
+                `;
+            }
+            
+            if (data.disk_usage !== null) {
+                content += `
+                    <dt class="col-sm-4">磁盘使用率:</dt>
+                    <dd class="col-sm-8">
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-${data.disk_usage < 50 ? 'success' : data.disk_usage < 80 ? 'warning' : 'danger'}" 
+                                 style="width: ${data.disk_usage}%">
+                            </div>
+                        </div>
+                        <small>${data.disk_usage.toFixed(2)}%</small>
+                    </dd>
+                `;
+            }
+            
+            if (data.ping_time !== null) {
+                content += `
+                    <dt class="col-sm-4">Ping延迟:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge badge-${data.ping_time < 100 ? 'success' : data.ping_time < 500 ? 'warning' : 'danger'}">
+                            ${data.ping_time.toFixed(2)} ms
+                        </span>
+                    </dd>
+                `;
+            }
+            
+            if (data.temperature !== null) {
+                content += `
+                    <dt class="col-sm-4">温度:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge badge-${data.temperature < 40 ? 'success' : data.temperature < 60 ? 'warning' : 'danger'}">
+                            ${data.temperature.toFixed(1)}°C
+                        </span>
+                    </dd>
+                `;
+            }
+            
+            if (data.power_consumption !== null) {
+                content += `
+                    <dt class="col-sm-4">功耗:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge badge-${data.power_consumption < 100 ? 'success' : data.power_consumption < 300 ? 'warning' : 'danger'}">
+                            ${data.power_consumption.toFixed(1)}W
+                        </span>
+                    </dd>
+                `;
+            }
+            
+            content += `
+                        </dl>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('detailContent').innerHTML = content;
+            $('#detailModal').modal('show');
+        })
+        .catch(error => {
+            console.error('Error fetching data detail:', error);
+            alert('获取数据详情失败');
+        });
+}
+
+// 显示全屏数据表格
+function showDataTable() {
+    const table = document.getElementById('fullDataTable');
+    
+    // 复制表格内容
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>设备</th>
+                {% if metric_type == 'cpu' %}
+                <th>CPU使用率 (%)</th>
+                {% elif metric_type == 'memory' %}
+                <th>内存使用率 (%)</th>
+                {% elif metric_type == 'disk' %}
+                <th>磁盘使用率 (%)</th>
+                {% elif metric_type == 'ping' %}
+                <th>Ping延迟 (ms)</th>
+                {% elif metric_type == 'network' %}
+                <th>网络流入</th>
+                <th>网络流出</th>
+                {% elif metric_type == 'temperature' %}
+                <th>温度 (°C)</th>
+                {% elif metric_type == 'power' %}
+                <th>功耗 (W)</th>
+                {% endif %}
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for data in history_data %}
+            <tr>
+                <td>{{ data.collected_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>
+                    {% if data.device %}
+                    {{ data.device.name }}
+                    {% else %}
+                    未知设备
+                    {% endif %}
+                </td>
+                {% if metric_type == 'cpu' %}
+                <td>{{ data.cpu_usage|default(0)|round(2) }}</td>
+                {% elif metric_type == 'memory' %}
+                <td>{{ data.memory_usage|default(0)|round(2) }}</td>
+                {% elif metric_type == 'disk' %}
+                <td>{{ data.disk_usage|default(0)|round(2) }}</td>
+                {% elif metric_type == 'ping' %}
+                <td>{{ data.ping_time|default(0)|round(2) }}</td>
+                {% elif metric_type == 'network' %}
+                <td>{{ data.network_in|default(0) }}</td>
+                <td>{{ data.network_out|default(0) }}</td>
+                {% elif metric_type == 'temperature' %}
+                <td>{{ data.temperature|default(0)|round(1) }}</td>
+                {% elif metric_type == 'power' %}
+                <td>{{ data.power_consumption|default(0)|round(1) }}</td>
+                {% endif %}
+                <td>
+                    <span class="badge badge-{{ 'success' if data.is_reachable else 'danger' }}">
+                        {{ '在线' if data.is_reachable else '离线' }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    `;
+    
+    $('#tableModal').modal('show');
+}
+
+// 导出全屏表格
+function exportFullTable() {
+    // 这里可以实现导出表格数据的功能
+    alert('导出功能正在开发中...');
+}
+</script>
+{% endblock %}

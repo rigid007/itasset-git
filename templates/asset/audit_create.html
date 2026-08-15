@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}创建盘点任务{% endblock %}
+{% block page_title %}创建盘点任务{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="POST" class="row g-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="col-md-6">
+                <label class="form-label">盘点名称 <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control" required
+                       placeholder="如: 2024年度资产盘点">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">盘点类型</label>
+                <select name="audit_type" class="form-select">
+                    <option value="annual">年度盘点</option>
+                    <option value="quarterly">季度盘点</option>
+                    <option value="monthly">月度盘点</option>
+                    <option value="random">随机抽查</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">计划日期</label>
+                <input type="date" name="scheduled_date" class="form-control">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">盘点范围 - 位置</label>
+                <select name="scope_location_ids" class="form-select" multiple style="height:120px">
+                    {% for loc in locations %}
+                    <option value="{{ loc.id }}">{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">按住Ctrl选择多个位置，不选则盘点全部</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">盘点范围 - 部门</label>
+                <select name="scope_department" class="form-select">
+                    <option value="">全部部门</option>
+                    {% for d in departments %}
+                    <option value="{{ d }}">{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">备注</label>
+                <textarea name="notes" class="form-control" rows="2"></textarea>
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-play"></i> 创建盘点任务</button>
+                <a href="{{ url_for('asset_extra.audit_list') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}合规报告{% endblock %}
+{% block page_title %}合规报告{% endblock %}
+{% block page_subtitle %}合规检查结果总览与分析{% endblock %}
+
+{% block content %}
+<!-- KPI -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary text-center"><div class="card-body"><h3 class="text-primary">{{ devices }}</h3><small>设备总数</small></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info text-center"><div class="card-body"><h3 class="text-info">{{ total_checks }}</h3><small>检查总数</small></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success text-center"><div class="card-body"><h3 class="text-success">{{ passed_checks }}</h3><small>通过</small></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-{% if overall_rate >= 90 %}success{% elif overall_rate >= 70 %}warning{% else %}danger{% endif %} text-center">
+            <div class="card-body"><h3 class="{% if overall_rate >= 90 %}text-success{% elif overall_rate >= 70 %}text-warning{% else %}text-danger{% endif %}">{{ overall_rate }}%</h3><small>总体通过率</small></div>
+        </div>
+    </div>
+</div>
+
+<!-- 通过率进度条 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="progress" style="height:30px">
+            <div class="progress-bar bg-success" style="width:{{ overall_rate }}%">{{ overall_rate }}% 通过</div>
+            {% if failed_count > 0 %}
+            <div class="progress-bar bg-danger" style="width:{{ (100 - overall_rate)|round }}%">{{ (100 - overall_rate)|round }}% 失败</div>
+            {% endif %}
+        </div>
+        <small class="text-muted mt-1">{{ passed_checks }} 通过 / {{ total_checks - passed_checks }} 未通过 / {{ total_checks }} 总计</small>
+    </div>
+</div>
+
+<!-- 各策略通过率 -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">各策略检查通过率</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr><th>策略名称</th><th>分类</th><th>检查次数</th><th>通过率</th><th>进度</th></tr>
+            </thead>
+            <tbody>
+                {% for s in summary %}
+                <tr>
+                    <td>{{ s.policy.name }}</td>
+                    <td>
+                        {% if s.policy.category == 'security' %}<span class="badge bg-danger">安全</span>
+                        {% elif s.policy.category == 'network' %}<span class="badge bg-info">网络</span>
+                        {% else %}<span class="badge bg-secondary">系统</span>{% endif %}
+                    </td>
+                    <td>{{ s.total }}</td>
+                    <td>
+                        {% if s.pass_rate >= 90 %}<span class="text-success">{{ s.pass_rate }}%</span>
+                        {% elif s.pass_rate >= 70 %}<span class="text-warning">{{ s.pass_rate }}%</span>
+                        {% else %}<span class="text-danger">{{ s.pass_rate }}%</span>{% endif %}
+                    </td>
+                    <td style="width:200px">
+                        {% if s.total > 0 %}
+                        <div class="progress" style="height:15px">
+                            <div class="progress-bar {% if s.pass_rate >= 90 %}bg-success{% elif s.pass_rate >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 style="width:{{ s.pass_rate }}%">{{ s.pass_rate }}%</div>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted py-4">暂无检查数据，请先执行合规检查</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

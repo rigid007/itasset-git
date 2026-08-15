@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}巡检任务详情 - {{ task.title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 导航/标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-clipboard-list"></i> 巡检任务详情</h2>
+        <a href="{{ url_for('maintenance.inspection_tasks') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <!-- 基本信息卡片 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-info-circle"></i> 基本信息
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>任务编号：</strong> {{ task.task_number }}</p>
+                    <p><strong>标题：</strong> {{ task.title }}</p>
+                    <p><strong>巡检类型：</strong>
+                        {% if task.inspection_type == 'daily' %}每日
+                        {% elif task.inspection_type == 'weekly' %}每周
+                        {% elif task.inspection_type == 'monthly' %}每月
+                        {% elif task.inspection_type == 'quarterly' %}每季度
+                        {% elif task.inspection_type == 'annual' %}年度
+                        {% elif task.inspection_type == 'special' %}专项
+                        {% else %}{{ task.inspection_type }}{% endif %}
+                    </p>
+                    <p><strong>计划日期：</strong> {{ task.scheduled_date }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>到期日期：</strong> {{ task.due_date or '无' }}</p>
+                    <p><strong>负责人：</strong> {{ task.assigned_to_name or '未分配' }}</p>
+                    <p><strong>状态：</strong>
+                        {% if task.status == 'pending' %}
+                            <span class="badge bg-warning">待处理</span>
+                        {% elif task.status == 'in_progress' %}
+                            <span class="badge bg-info">进行中</span>
+                        {% elif task.status == 'completed' %}
+                            <span class="badge bg-success">已完成</span>
+                        {% elif task.status == 'overdue' %}
+                            <span class="badge bg-danger">逾期</span>
+                        {% elif task.status == 'cancelled' %}
+                            <span class="badge bg-secondary">已取消</span>
+                        {% else %}
+                            <span class="badge bg-light">{{ task.status }}</span>
+                        {% endif %}
+                    </p>
+                    <p><strong>完成进度：</strong> {{ task.completion_percentage }}%</p>
+                </div>
+            </div>
+            {% if task.description %}
+            <div class="row mt-3">
+                <div class="col-12">
+                    <p><strong>描述：</strong></p>
+                    <div class="border p-3 bg-light">
+                        {{ task.description | nl2br | safe }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 巡检项列表（如果存在关联的巡检项） -->
+    {% if task.items %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-check-circle"></i> 巡检项
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>项目名称</th>
+                            <th>标准/要求</th>
+                            <th>结果</th>
+                            <th>状态</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in task.items %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.standard }}</td>
+                            <td>{{ item.result or '未填写' }}</td>
+                            <td>
+                                {% if item.status == 'pass' %}
+                                    <span class="badge bg-success">通过</span>
+                                {% elif item.status == 'fail' %}
+                                    <span class="badge bg-danger">不通过</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">待检</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.remark or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 执行记录/日志（可选） -->
+    {% if task.logs %}
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-history"></i> 执行记录
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                {% for log in task.logs %}
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between">
+                        <span>{{ log.action }}</span>
+                        <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    {% if log.remark %}
+                    <div class="mt-1">{{ log.remark }}</div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 底部操作按钮 -->
+    <div class="mt-4">
+        {% if task.status in ['pending', 'in_progress'] %}
+            <a href="{{ url_for('maintenance.process_inspection_task', task_id=task.id) }}" class="btn btn-success">
+                <i class="fas fa-play"></i> 继续执行
+            </a>
+        {% endif %}
+        <a href="{{ url_for('maintenance.inspection_tasks') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 返回列表
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- 如果使用了 nl2br 过滤器，需要定义它，或者直接替换为普通换行处理 -->
+{% endblock %}

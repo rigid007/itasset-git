@@ -1,0 +1,976 @@
+{% extends "base.html" %}
+
+{% block title %}维护计划 - 资产管理系统{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<style>
+    /* 自定义样式 */
+    .fc-event {
+        cursor: pointer;
+        border-radius: 4px;
+        padding: 2px 4px;
+    }
+    
+    .task-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #6c757d;
+    }
+    
+    .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .task-high { border-left-color: #dc3545 !important; }
+    .task-medium { border-left-color: #ffc107 !important; }
+    .task-low { border-left-color: #28a745 !important; }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .type-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+    
+    .device-chip {
+        display: inline-block;
+        background-color: #e9ecef;
+        border-radius: 15px;
+        padding: 2px 10px;
+        margin: 2px;
+        font-size: 0.85rem;
+    }
+    
+    .calendar-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        padding: 20px;
+    }
+    
+    .task-list-container {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    
+    .priority-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+    
+    .priority-high { background-color: #dc3545; }
+    .priority-medium { background-color: #ffc107; }
+    .priority-low { background-color: #28a745; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">首页</a></li>
+                      <li class="breadcrumb-item"><a href="{{ url_for('maintenance.maintenance_dashboard') }}">设备维护</a></li>
+            <li class="breadcrumb-item active">维护计划</li>
+        </ol>
+    </nav>
+
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">维护计划</h1>
+        <div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTaskModal">
+                <i class="bi bi-plus-circle"></i> 新建维护任务
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="printSchedule()">
+                <i class="bi bi-printer"></i> 打印
+            </button>
+        </div>
+    </div>
+
+    <!-- 筛选工具栏 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="filterStatus" class="form-label">状态</label>
+                    <select class="form-select" id="filterStatus" onchange="filterTasks()">
+                        <option value="all">全部状态</option>
+                        <option value="scheduled">已计划</option>
+                        <option value="in_progress">进行中</option>
+                        <option value="completed">已完成</option>
+                        <option value="cancelled">已取消</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterType" class="form-label">维护类型</label>
+                    <select class="form-select" id="filterType" onchange="filterTasks()">
+                        <option value="all">全部类型</option>
+                        <option value="preventive">预防性维护</option>
+                        <option value="corrective">纠正性维护</option>
+                        <option value="emergency">紧急维护</option>
+                        <option value="upgrade">升级维护</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterPriority" class="form-label">优先级</label>
+                    <select class="form-select" id="filterPriority" onchange="filterTasks()">
+                        <option value="all">全部优先级</option>
+                        <option value="high">高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterMonth" class="form-label">月份</label>
+                    <input type="month" class="form-control" id="filterMonth" onchange="filterTasks()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 左侧：日历视图 -->
+        <div class="col-lg-8">
+            <div class="calendar-container mb-4">
+                <div id="maintenanceCalendar"></div>
+            </div>
+            
+            <!-- 月度统计 -->
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-title mb-0">本月计划</h6>
+                                    <h2 class="mb-0" id="monthScheduled">0</h2>
+                                </div>
+                                <i class="bi bi-calendar-check display-6 opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-title mb-0">进行中</h6>
+                                    <h2 class="mb-0" id="monthInProgress">0</h2>
+                                </div>
+                                <i class="bi bi-clock-history display-6 opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="card-title mb-0">已完成</h6>
+                                    <h2 class="mb-0" id="monthCompleted">0</h2>
+                                </div>
+                                <i class="bi bi-check-circle display-6 opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：任务列表 -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">近期维护任务</h5>
+                    <span class="badge bg-secondary" id="taskCount">0 个任务</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="task-list-container">
+                        <div id="taskList">
+                            <!-- 任务列表将通过JavaScript动态生成 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer text-center">
+                    <small class="text-muted">点击任务查看详情</small>
+                </div>
+            </div>
+            
+            <!-- 维护类型分布 -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">维护类型分布</h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 200px;">
+                        <canvas id="typeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建任务模态框 -->
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建维护任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newTaskForm">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label for="taskName" class="form-label">任务名称</label>
+                            <input type="text" class="form-control" id="taskName" name="name" required>
+                        </div>
+                        <div class="col-md-12">
+                            <label for="taskDescription" class="form-label">任务描述</label>
+                            <textarea class="form-control" id="taskDescription" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="taskType" class="form-label">维护类型</label>
+                            <select class="form-select" id="taskType" name="maintenance_type" required>
+                                <option value="preventive">预防性维护</option>
+                                <option value="corrective">纠正性维护</option>
+                                <option value="emergency">紧急维护</option>
+                                <option value="upgrade">升级维护</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="taskPriority" class="form-label">优先级</label>
+                            <select class="form-select" id="taskPriority" name="priority" required>
+                                <option value="low">低</option>
+                                <option value="medium" selected>中</option>
+                                <option value="high">高</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="scheduledDate" class="form-label">计划日期</label>
+                            <input type="datetime-local" class="form-control" id="scheduledDate" name="scheduled_date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="estimatedDuration" class="form-label">预计时长(分钟)</label>
+                            <input type="number" class="form-control" id="estimatedDuration" name="estimated_duration" min="1" value="60">
+                        </div>
+                        <div class="col-md-12">
+                            <label for="deviceSelection" class="form-label">选择设备</label>
+                            <div id="deviceSelection">
+                                <!-- 设备选择将通过JavaScript动态生成 -->
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="approvalRequired" name="approval_required">
+                                <label class="form-check-label" for="approvalRequired">
+                                    需要审批
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="createNewTask()">创建任务</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 任务详情模态框 -->
+<div class="modal fade" id="taskDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">维护任务详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="taskDetailContent">
+                <!-- 任务详情将通过JavaScript动态生成 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="taskActionBtn">操作</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.2.1/build/global/luxon.min.js"></script>
+
+<script>
+// 初始化变量
+let calendar;
+let allTasks = [];
+let currentFilter = {};
+let deviceList = [];
+let typeChart;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化任务数据
+    initializeTasks();
+    
+    // 初始化日历
+    initializeCalendar();
+    
+    // 获取设备列表
+    fetchDeviceList();
+    
+    // 初始化图表
+    initializeTypeChart();
+    
+    // 设置默认月份筛选
+    const now = new Date();
+    document.getElementById('filterMonth').value = now.toISOString().slice(0, 7);
+});
+
+// 初始化任务数据
+function initializeTasks() {
+    // 从模板变量获取任务数据
+    const tasksData = {{ tasks | tojson | safe }};
+    
+    // 转换任务数据格式
+    allTasks = tasksData.map(task => {
+        // 解析设备ID列表
+        let deviceIds = [];
+        if (task.device_ids) {
+            try {
+                if (typeof task.device_ids === 'string') {
+                    deviceIds = JSON.parse(task.device_ids);
+                } else {
+                    deviceIds = task.device_ids;
+                }
+            } catch (e) {
+                console.error('解析设备ID失败:', e);
+            }
+        }
+        
+        // 计算任务颜色
+        const color = getTaskColor(task);
+        
+        // 格式化日期
+        const startDate = new Date(task.scheduled_date);
+        const endDate = new Date(startDate.getTime() + (task.estimated_duration || 60) * 60000);
+        
+        return {
+            ...task,
+            deviceIds: deviceIds,
+            color: color,
+            start: startDate,
+            end: endDate,
+            title: task.name,
+            extendedProps: {
+                description: task.description,
+                maintenance_type: task.maintenance_type,
+                priority: task.priority,
+                status: task.status,
+                estimated_duration: task.estimated_duration
+            }
+        };
+    });
+    
+    // 更新任务列表
+    updateTaskList(allTasks);
+    updateMonthlyStats();
+}
+
+// 获取任务颜色
+function getTaskColor(task) {
+    if (task.status === 'completed') return '#28a745';
+    if (task.status === 'cancelled') return '#6c757d';
+    if (task.status === 'in_progress') return '#17a2b8';
+    
+    // 根据优先级设置颜色
+    switch(task.priority) {
+        case 'high': return '#dc3545';
+        case 'medium': return '#ffc107';
+        case 'low': return '#20c997';
+        default: return '#6f42c1';
+    }
+}
+
+// 初始化日历
+function initializeCalendar() {
+    const calendarEl = document.getElementById('maintenanceCalendar');
+    
+    calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        events: allTasks,
+        eventTimeFormat: {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        },
+        eventClick: function(info) {
+            showTaskDetail(info.event.extendedProps, info.event.id);
+            info.jsEvent.preventDefault();
+        },
+        eventMouseEnter: function(info) {
+            info.el.style.opacity = 0.8;
+        },
+        eventMouseLeave: function(info) {
+            info.el.style.opacity = 1;
+        },
+        eventContent: function(arg) {
+            const status = arg.event.extendedProps.status;
+            const type = arg.event.extendedProps.maintenance_type;
+            
+            let statusIcon = '📅';
+            if (status === 'in_progress') statusIcon = '⏳';
+            if (status === 'completed') statusIcon = '✅';
+            if (status === 'cancelled') statusIcon = '❌';
+            
+            let typeIcon = '🔧';
+            if (type === 'preventive') typeIcon = '🛡️';
+            if (type === 'emergency') typeIcon = '🚨';
+            if (type === 'upgrade') typeIcon = '⬆️';
+            
+            return {
+                html: `
+                    <div class="d-flex align-items-center">
+                        <span class="me-1">${statusIcon}</span>
+                        <span class="me-1">${typeIcon}</span>
+                        <small class="text-truncate" style="max-width: 120px;">${arg.event.title}</small>
+                    </div>
+                `
+            };
+        }
+    });
+    
+    calendar.render();
+}
+
+// 更新任务列表
+function updateTaskList(tasks) {
+    const taskListEl = document.getElementById('taskList');
+    const taskCountEl = document.getElementById('taskCount');
+    
+    // 按日期排序
+    const sortedTasks = [...tasks].sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+    
+    if (sortedTasks.length === 0) {
+        taskListEl.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-calendar-x display-6"></i>
+                <p class="mt-3">暂无维护任务</p>
+            </div>
+        `;
+        taskCountEl.textContent = '0 个任务';
+        return;
+    }
+    
+    let html = '';
+    
+    sortedTasks.slice(0, 10).forEach(task => {
+        const scheduledDate = new Date(task.scheduled_date);
+        const now = new Date();
+        const daysDiff = Math.ceil((scheduledDate - now) / (1000 * 60 * 60 * 24));
+        
+        let daysText = '';
+        if (daysDiff === 0) daysText = '今天';
+        else if (daysDiff === 1) daysText = '明天';
+        else if (daysDiff > 1 && daysDiff <= 7) daysText = `${daysDiff}天后`;
+        else if (daysDiff < 0) daysText = `${Math.abs(daysDiff)}天前`;
+        
+        const priorityClass = `priority-${task.priority}`;
+        const taskCardClass = `task-${task.priority}`;
+        
+        html += `
+            <div class="card border-0 rounded-0 task-card ${taskCardClass}" onclick="showTaskDetail(${JSON.stringify(task).replace(/"/g, '&quot;')}, ${task.id})" style="cursor: pointer;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1 me-3">
+                            <div class="d-flex align-items-center mb-1">
+                                <span class="${priorityClass} priority-dot"></span>
+                                <h6 class="card-title mb-0">${task.name}</h6>
+                            </div>
+                            <p class="card-text text-muted small mb-1">
+                                <i class="bi bi-calendar"></i> ${scheduledDate.toLocaleDateString()} ${scheduledDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                ${daysText ? `<span class="badge bg-info ms-2">${daysText}</span>` : ''}
+                            </p>
+                            <div class="d-flex flex-wrap align-items-center">
+                                <span class="badge ${getStatusBadgeClass(task.status)} me-2">${getStatusText(task.status)}</span>
+                                <span class="badge bg-secondary me-2">${getTypeText(task.maintenance_type)}</span>
+                                ${task.estimated_duration ? `<small class="text-muted"><i class="bi bi-clock"></i> ${task.estimated_duration}分钟</small>` : ''}
+                            </div>
+                        </div>
+                        <div>
+                            <i class="bi bi-chevron-right text-muted"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr class="my-0">
+        `;
+    });
+    
+    taskListEl.innerHTML = html;
+    taskCountEl.textContent = `${sortedTasks.length} 个任务`;
+}
+
+// 筛选任务
+function filterTasks() {
+    const status = document.getElementById('filterStatus').value;
+    const type = document.getElementById('filterType').value;
+    const priority = document.getElementById('filterPriority').value;
+    const month = document.getElementById('filterMonth').value;
+    
+    currentFilter = { status, type, priority, month };
+    
+    const filteredTasks = allTasks.filter(task => {
+        // 状态筛选
+        if (status !== 'all' && task.status !== status) return false;
+        
+        // 类型筛选
+        if (type !== 'all' && task.maintenance_type !== type) return false;
+        
+        // 优先级筛选
+        if (priority !== 'all' && task.priority !== priority) return false;
+        
+        // 月份筛选
+        if (month) {
+            const taskMonth = new Date(task.scheduled_date).toISOString().slice(0, 7);
+            if (taskMonth !== month) return false;
+        }
+        
+        return true;
+    });
+    
+    // 更新日历
+    calendar.removeAllEvents();
+    calendar.addEventSource(filteredTasks);
+    
+    // 更新任务列表
+    updateTaskList(filteredTasks);
+    updateMonthlyStats(filteredTasks);
+    updateTypeChart(filteredTasks);
+}
+
+// 获取设备列表
+function fetchDeviceList() {
+    // 这里应该调用API获取设备列表
+    // 暂时使用模拟数据
+    deviceList = [
+        { id: 1, hostname: '服务器-001', ip_address: '192.168.1.101' },
+        { id: 2, hostname: '服务器-002', ip_address: '192.168.1.102' },
+        { id: 3, hostname: '交换机-001', ip_address: '192.168.1.201' },
+        { id: 4, hostname: '路由器-001', ip_address: '192.168.1.1' },
+        { id: 5, hostname: '存储设备-001', ip_address: '192.168.1.151' }
+    ];
+    
+    // 更新设备选择UI
+    updateDeviceSelection();
+}
+
+// 更新设备选择UI
+function updateDeviceSelection() {
+    const deviceSelectionEl = document.getElementById('deviceSelection');
+    let html = '<div class="row g-2">';
+    
+    deviceList.forEach(device => {
+        html += `
+            <div class="col-md-6">
+                <div class="form-check">
+                    <input class="form-check-input device-checkbox" type="checkbox" value="${device.id}" id="device${device.id}" name="device_ids">
+                    <label class="form-check-label" for="device${device.id}">
+                        ${device.hostname}
+                        <small class="text-muted d-block">${device.ip_address}</small>
+                    </label>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    deviceSelectionEl.innerHTML = html;
+}
+
+// 创建新任务
+function createNewTask() {
+    const form = document.getElementById('newTaskForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const formData = new FormData(form);
+    const taskData = {
+        name: formData.get('name'),
+        description: formData.get('description'),
+        maintenance_type: formData.get('maintenance_type'),
+        priority: formData.get('priority'),
+        scheduled_date: formData.get('scheduled_date'),
+        estimated_duration: parseInt(formData.get('estimated_duration')),
+        approval_required: formData.get('approval_required') === 'on'
+    };
+    
+    // 获取选中的设备ID
+    const deviceCheckboxes = document.querySelectorAll('.device-checkbox:checked');
+    const deviceIds = Array.from(deviceCheckboxes).map(cb => parseInt(cb.value));
+    taskData.device_ids = JSON.stringify(deviceIds);
+    
+    // 这里应该调用API创建任务
+    console.log('创建任务:', taskData);
+    
+    // 模拟API调用
+    fetch('/api/maintenance/tasks', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCSRFToken()
+        },
+        body: JSON.stringify(taskData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('任务创建成功！');
+            location.reload();
+        } else {
+            alert('创建失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('创建任务失败:', error);
+        alert('创建失败，请稍后重试');
+    });
+}
+
+// 显示任务详情
+function showTaskDetail(task, taskId) {
+    const modalContentEl = document.getElementById('taskDetailContent');
+    const actionBtnEl = document.getElementById('taskActionBtn');
+    
+    // 格式化日期
+    const scheduledDate = new Date(task.scheduled_date);
+    const createdDate = new Date(task.created_at);
+    
+    // 获取状态文本和按钮文本
+    const statusText = getStatusText(task.status);
+    const typeText = getTypeText(task.maintenance_type);
+    const priorityText = getPriorityText(task.priority);
+    
+    // 获取设备信息
+    let deviceInfo = '';
+    if (task.deviceIds && task.deviceIds.length > 0) {
+        const selectedDevices = deviceList.filter(device => task.deviceIds.includes(device.id));
+        selectedDevices.forEach(device => {
+            deviceInfo += `<span class="device-chip">${device.hostname} (${device.ip_address})</span>`;
+        });
+    }
+    
+    // 构建详情HTML
+    let html = `
+        <div class="row">
+            <div class="col-md-12">
+                <h4 class="mb-3">${task.name}</h4>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge ${getStatusBadgeClass(task.status)}">${statusText}</span>
+                    <span class="badge bg-secondary">${typeText}</span>
+                    <span class="badge ${getPriorityBadgeClass(task.priority)}">${priorityText}优先级</span>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">基本信息</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">计划时间</dt>
+                            <dd class="col-sm-8">${scheduledDate.toLocaleString()}</dd>
+                            
+                            <dt class="col-sm-4">预计时长</dt>
+                            <dd class="col-sm-8">${task.estimated_duration || '未设置'} 分钟</dd>
+                            
+                            <dt class="col-sm-4">实际时长</dt>
+                            <dd class="col-sm-8">${task.actual_duration ? task.actual_duration + ' 分钟' : '未记录'}</dd>
+                            
+                            <dt class="col-sm-4">创建时间</dt>
+                            <dd class="col-sm-8">${createdDate.toLocaleString()}</dd>
+                            
+                            <dt class="col-sm-4">创建人</dt>
+                            <dd class="col-sm-8">${task.created_by_name || '系统'}</dd>
+                        </dl>
+                    </div>
+                </div>
+                
+                ${task.description ? `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">任务描述</h6>
+                        <p>${task.description}</p>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${deviceInfo ? `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">相关设备</h6>
+                        <div>${deviceInfo}</div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${task.notes ? `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">备注</h6>
+                        <p>${task.notes}</p>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    modalContentEl.innerHTML = html;
+    
+    // 设置操作按钮
+    if (task.status === 'scheduled') {
+        actionBtnEl.textContent = '开始任务';
+        actionBtnEl.className = 'btn btn-success';
+        actionBtnEl.onclick = function() { startTask(taskId); };
+    } else if (task.status === 'in_progress') {
+        actionBtnEl.textContent = '完成任务';
+        actionBtnEl.className = 'btn btn-primary';
+        actionBtnEl.onclick = function() { completeTask(taskId); };
+    } else {
+        actionBtnEl.style.display = 'none';
+    }
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('taskDetailModal'));
+    modal.show();
+}
+
+// 开始任务
+function startTask(taskId) {
+    if (confirm('确定要开始这个维护任务吗？')) {
+        fetch(`/api/maintenance/tasks/${taskId}/start`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('任务已开始！');
+                location.reload();
+            } else {
+                alert('操作失败：' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('开始任务失败:', error);
+            alert('操作失败，请稍后重试');
+        });
+    }
+}
+
+// 完成任务
+function completeTask(taskId) {
+    const duration = prompt('请输入实际完成时长（分钟）：');
+    if (duration === null) return;
+    
+    if (!duration || isNaN(duration) || parseInt(duration) <= 0) {
+        alert('请输入有效的时长！');
+        return;
+    }
+    
+    const notes = prompt('请输入完成备注（可选）：');
+    
+    fetch(`/api/maintenance/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCSRFToken()
+        },
+        body: JSON.stringify({
+            actual_duration: parseInt(duration),
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('任务已完成！');
+            location.reload();
+        } else {
+            alert('操作失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('完成任务失败:', error);
+        alert('操作失败，请稍后重试');
+    });
+}
+
+// 更新月度统计
+function updateMonthlyStats(tasks = allTasks) {
+    const month = document.getElementById('filterMonth').value || new Date().toISOString().slice(0, 7);
+    
+    const monthTasks = tasks.filter(task => {
+        const taskMonth = new Date(task.scheduled_date).toISOString().slice(0, 7);
+        return taskMonth === month;
+    });
+    
+    const scheduled = monthTasks.filter(task => task.status === 'scheduled').length;
+    const inProgress = monthTasks.filter(task => task.status === 'in_progress').length;
+    const completed = monthTasks.filter(task => task.status === 'completed').length;
+    
+    document.getElementById('monthScheduled').textContent = scheduled;
+    document.getElementById('monthInProgress').textContent = inProgress;
+    document.getElementById('monthCompleted').textContent = completed;
+}
+
+// 初始化类型图表
+function initializeTypeChart() {
+    const ctx = document.getElementById('typeChart').getContext('2d');
+    
+    typeChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['预防性', '纠正性', '紧急', '升级'],
+            datasets: [{
+                data: [0, 0, 0, 0],
+                backgroundColor: [
+                    '#4e73df',
+                    '#1cc88a',
+                    '#e74a3b',
+                    '#f6c23e'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+// 更新类型图表
+function updateTypeChart(tasks = allTasks) {
+    const typeCounts = {
+        preventive: 0,
+        corrective: 0,
+        emergency: 0,
+        upgrade: 0
+    };
+    
+    tasks.forEach(task => {
+        if (typeCounts[task.maintenance_type] !== undefined) {
+            typeCounts[task.maintenance_type]++;
+        }
+    });
+    
+    typeChart.data.datasets[0].data = [
+        typeCounts.preventive,
+        typeCounts.corrective,
+        typeCounts.emergency,
+        typeCounts.upgrade
+    ];
+    
+    typeChart.update();
+}
+
+// 辅助函数
+function getStatusText(status) {
+    const statusMap = {
+        'scheduled': '已计划',
+        'in_progress': '进行中',
+        'completed': '已完成',
+        'cancelled': '已取消'
+    };
+    return statusMap[status] || status;
+}
+
+function getTypeText(type) {
+    const typeMap = {
+        'preventive': '预防性',
+        'corrective': '纠正性',
+        'emergency': '紧急',
+        'upgrade': '升级'
+    };
+    return typeMap[type] || type;
+}
+
+function getPriorityText(priority) {
+    const priorityMap = {
+        'high': '高',
+        'medium': '中',
+        'low': '低'
+    };
+    return priorityMap[priority] || priority;
+}
+
+function getStatusBadgeClass(status) {
+    const classMap = {
+        'scheduled': 'bg-secondary',
+        'in_progress': 'bg-info',
+        'completed': 'bg-success',
+        'cancelled': 'bg-dark'
+    };
+    return classMap[status] || 'bg-secondary';
+}
+
+function getPriorityBadgeClass(priority) {
+    const classMap = {
+        'high': 'bg-danger',
+        'medium': 'bg-warning',
+        'low': 'bg-success'
+    };
+    return classMap[priority] || 'bg-secondary';
+}
+
+function getCSRFToken() {
+    // 从meta标签获取CSRF令牌
+    const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+    return csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
+}
+
+function printSchedule() {
+    window.print();
+}
+
+// 设置计划日期默认值为明天
+window.onload = function() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    
+    const scheduledDateInput = document.getElementById('scheduledDate');
+    scheduledDateInput.value = tomorrow.toISOString().slice(0, 16);
+};
+</script>
+{% endblock %}

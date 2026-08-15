@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据中心机柜可视化系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+        }
+        
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .logo {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .header-info h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+            color: #f1f5f9;
+        }
+        
+        .header-info p {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        
+        .search-area {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-box {
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: #e2e8f0;
+            width: 250px;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        .btn {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background-color: #2563eb;
+            transform: translateY(-2px);
+        }
+        
+        /* 主要内容区域 */
+        .main-content {
+            display: flex;
+            gap: 20px;
+            height: 600px;
+        }
+        
+        /* 左侧机柜可视化区域 */
+        .cabinet-visualization {
+            flex: 3;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .cabinet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        
+        .cabinet-header h2 {
+            font-size: 20px;
+            color: #f1f5f9;
+        }
+        
+        .cabinet-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background-color: #334155;
+            border: 1px solid #475569;
+            color: #cbd5e1;
+            border-radius: 6px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        
+        .control-btn:hover {
+            background-color: #475569;
+            color: white;
+        }
+        
+        .cabinet-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        .cabinet-3d {
+            width: 320px;
+            height: 500px;
+            background: linear-gradient(to bottom, #0f172a, #1e293b);
+            border: 2px solid #475569;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        
+        .cabinet-top {
+            height: 20px;
+            background: #475569;
+            border-bottom: 2px solid #64748b;
+        }
+        
+        .cabinet-bottom {
+            height: 30px;
+            background: #334155;
+            border-top: 2px solid #475569;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .u-slots {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            height: calc(100% - 50px);
+        }
+        
+        .u-slot {
+            height: 20px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 3px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .u-slot:hover {
+            border-color: #3b82f6;
+            transform: scale(1.02);
+        }
+        
+        .u-slot.active {
+            background-color: #1e3a8a;
+            border-color: #3b82f6;
+        }
+        
+        .u-number {
+            position: absolute;
+            left: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #94a3b8;
+        }
+        
+        .device {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 80%;
+            height: 14px;
+            border-radius: 2px;
+        }
+        
+        .device.server {
+            background: linear-gradient(90deg, #10b981, #059669);
+        }
+        
+        .device.network {
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+        }
+        
+        .device.storage {
+            background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+        }
+        
+        .device.power {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        
+        .cabinet-label {
+            position: absolute;
+            top: 50%;
+            left: -40px;
+            transform: translateY(-50%) rotate(-90deg);
+            font-weight: bold;
+            font-size: 18px;
+            color: #cbd5e1;
+            letter-spacing: 2px;
+        }
+        
+        /* 右侧信息面板 */
+        .cabinet-info {
+            flex: 2;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-header {
+            margin-bottom: 25px;
+        }
+        
+        .info-header h2 {
+            font-size: 20px;
+            color: #f1f5f9;
+            margin-bottom: 10px;
+        }
+        
+        .cabinet-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #10b981;
+        }
+        
+        .status-indicator.warning {
+            background-color: #f59e0b;
+        }
+        
+        .status-indicator.critical {
+            background-color: #ef4444;
+        }
+        
+        .info-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .info-card {
+            background-color: #0f172a;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .info-card h3 {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+        
+        .info-card p {
+            font-size: 20px;
+            font-weight: bold;
+            color: #f1f5f9;
+        }
+        
+        .device-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .device-list h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #f1f5f9;
+        }
+        
+        .device-item {
+            background-color: #0f172a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #10b981;
+            transition: all 0.3s ease;
+        }
+        
+        .device-item:hover {
+            transform: translateX(5px);
+            background-color: #1e293b;
+        }
+        
+        .device-item.network {
+            border-left-color: #3b82f6;
+        }
+        
+        .device-item.storage {
+            border-left-color: #8b5cf6;
+        }
+        
+        .device-item.power {
+            border-left-color: #f59e0b;
+        }
+        
+        .device-details h4 {
+            font-size: 16px;
+            margin-bottom: 5px;
+            color: #f1f5f9;
+        }
+        
+        .device-details p {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        
+        .device-status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background-color: #1e3a8a;
+            color: #60a5fa;
+        }
+        
+        /* 底部监控面板 */
+        .monitoring-panel {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+        }
+        
+        .monitoring-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .monitoring-header h2 {
+            font-size: 20px;
+            color: #f1f5f9;
+        }
+        
+        .monitoring-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+        
+        .stat-item {
+            background-color: #0f172a;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        
+        .stat-icon.temp {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+        
+        .stat-icon.power {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+        }
+        
+        .stat-icon.network {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+        }
+        
+        .stat-icon.health {
+            background-color: rgba(139, 92, 246, 0.2);
+            color: #a78bfa;
+        }
+        
+        .stat-info h3 {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+        
+        .stat-info p {
+            font-size: 24px;
+            font-weight: bold;
+            color: #f1f5f9;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            .main-content {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .monitoring-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+            
+            .search-area {
+                width: 100%;
+            }
+            
+            .search-box {
+                width: 100%;
+            }
+            
+            .info-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .monitoring-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .cabinet-3d {
+                width: 250px;
+                height: 400px;
+            }
+        }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部区域 -->
+        <header>
+            <div class="logo-area">
+                <div class="logo">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="header-info">
+                    <h1>数据中心机柜可视化系统</h1>
+                    <p>数据中心 A区 • 机柜监控与管理</p>
+                </div>
+            </div>
+            <div class="search-area">
+                <input type="text" class="search-box" placeholder="搜索机柜编号或设备...">
+                <button class="btn"><i class="fas fa-search"></i> 搜索</button>
+            </div>
+        </header>
+        
+        <!-- 主要内容区域 -->
+        <div class="main-content">
+            <!-- 左侧机柜可视化区域 -->
+            <div class="cabinet-visualization">
+                <div class="cabinet-header">
+                    <h2>机柜 3D 可视化视图</h2>
+                    <div class="cabinet-controls">
+                        <button class="control-btn" id="prev-cabinet"><i class="fas fa-chevron-left"></i> 上一个</button>
+                        <button class="control-btn" id="next-cabinet">下一个 <i class="fas fa-chevron-right"></i></button>
+                        <button class="control-btn" id="reset-view"><i class="fas fa-sync-alt"></i> 重置视图</button>
+                    </div>
+                </div>
+                <div class="cabinet-container">
+                    <div class="cabinet-label">机柜 #A-12</div>
+                    <div class="cabinet-3d">
+                        <div class="cabinet-top"></div>
+                        <div class="u-slots" id="u-slots">
+                            <!-- U位将通过JavaScript动态生成 -->
+                        </div>
+                        <div class="cabinet-bottom"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧机柜信息面板 -->
+            <div class="cabinet-info">
+                <div class="info-header">
+                    <h2>机柜详细信息</h2>
+                    <div class="cabinet-status">
+                        <div class="status-indicator"></div>
+                        <span>状态: 运行正常</span>
+                    </div>
+                </div>
+                
+                <div class="info-cards">
+                    <div class="info-card">
+                        <h3>机柜编号</h3>
+                        <p>A-12</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>总U位数</h3>
+                        <p>42U</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>已用U位</h3>
+                        <p>28U</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>空闲U位</h3>
+                        <p>14U</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>所在位置</h3>
+                        <p>数据中心 A区</p>
+                    </div>
+                    <div class="info-card">
+                        <h3>责任部门</h3>
+                        <p>IT基础设施部</p>
+                    </div>
+                </div>
+                
+                <div class="device-list">
+                    <h3>设备清单</h3>
+                    <div class="device-item">
+                        <div class="device-details">
+                            <h4>主数据库服务器</h4>
+                            <p>U位: 10-12 • 型号: Dell PowerEdge R740</p>
+                        </div>
+                        <div class="device-status">运行中</div>
+                    </div>
+                    <div class="device-item network">
+                        <div class="device-details">
+                            <h4>核心交换机</h4>
+                            <p>U位: 20-21 • 型号: Cisco Nexus 93180YC-EX</p>
+                        </div>
+                        <div class="device-status">运行中</div>
+                    </div>
+                    <div class="device-item storage">
+                        <div class="device-details">
+                            <h4>存储阵列</h4>
+                            <p>U位: 30-35 • 型号: NetApp AFF A800</p>
+                        </div>
+                        <div class="device-status">运行中</div>
+                    </div>
+                    <div class="device-item power">
+                        <div class="device-details">
+                            <h4>UPS电源模块</h4>
+                            <p>U位: 40-41 • 型号: APC Symmetra PX 100kW</p>
+                        </div>
+                        <div class="device-status">运行中</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部监控面板 -->
+        <div class="monitoring-panel">
+            <div class="monitoring-header">
+                <h2>实时监控数据</h2>
+                <div class="cabinet-status">
+                    <div class="status-indicator"></div>
+                    <span>最后更新: <span id="last-update">刚刚</span></span>
+                </div>
+            </div>
+            
+            <div class="monitoring-stats">
+                <div class="stat-item">
+                    <div class="stat-icon temp">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>机柜温度</h3>
+                        <p>23.5°C</p>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon power">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>功耗</h3>
+                        <p>4.2 kW</p>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon network">
+                        <i class="fas fa-network-wired"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>网络流量</h3>
+                        <p>1.2 Gbps</p>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon health">
+                        <i class="fas fa-heartbeat"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>健康指数</h3>
+                        <p>98%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 动态生成U位
+        document.addEventListener('DOMContentLoaded', function() {
+            const uSlotsContainer = document.getElementById('u-slots');
+            const totalUSlots = 42;
+            
+            // 模拟机柜中设备的位置和类型
+            const devices = [
+                { start: 1, end: 2, type: 'network', name: '路由器' },
+                { start: 4, end: 6, type: 'server', name: 'Web服务器' },
+                { start: 10, end: 12, type: 'server', name: '数据库服务器' },
+                { start: 15, end: 16, type: 'network', name: '交换机' },
+                { start: 20, end: 21, type: 'network', name: '核心交换机' },
+                { start: 24, end: 26, type: 'server', name: '应用服务器' },
+                { start: 30, end: 35, type: 'storage', name: '存储阵列' },
+                { start: 38, end: 39, type: 'server', name: '备份服务器' },
+                { start: 40, end: 41, type: 'power', name: 'UPS电源' }
+            ];
+            
+            // 生成U位
+            for (let i = 1; i <= totalUSlots; i++) {
+                const uSlot = document.createElement('div');
+                uSlot.className = 'u-slot';
+                uSlot.id = `u-slot-${i}`;
+                
+                // 添加U位编号
+                const uNumber = document.createElement('div');
+                uNumber.className = 'u-number';
+                uNumber.textContent = `${i}U`;
+                uSlot.appendChild(uNumber);
+                
+                // 检查此U位是否有设备
+                let devicePlaced = false;
+                for (const device of devices) {
+                    if (i >= device.start && i <= device.end) {
+                        const deviceEl = document.createElement('div');
+                        deviceEl.className = `device ${device.type}`;
+                        deviceEl.title = `${device.name} (${device.start}U-${device.end}U)`;
+                        uSlot.appendChild(deviceEl);
+                        uSlot.classList.add('active');
+                        devicePlaced = true;
+                        break;
+                    }
+                }
+                
+                uSlotsContainer.appendChild(uSlot);
+                
+                // 添加点击事件
+                uSlot.addEventListener('click', function() {
+                    // 移除所有选中状态
+                    document.querySelectorAll('.u-slot').forEach(slot => {
+                        slot.style.backgroundColor = '';
+                    });
+                    
+                    // 设置当前选中状态
+                    this.style.backgroundColor = '#1e3a8a';
+                    
+                    // 显示设备信息
+                    if (devicePlaced) {
+                        const deviceInfo = this.querySelector('.device').title;
+                        alert(`选中的U位: ${i}U\n设备: ${deviceInfo}`);
+                    } else {
+                        alert(`选中的U位: ${i}U\n状态: 空闲`);
+                    }
+                });
+            }
+            
+            // 模拟实时数据更新
+            function updateMonitoringData() {
+                const lastUpdateEl = document.getElementById('last-update');
+                const now = new Date();
+                const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+                lastUpdateEl.textContent = timeStr;
+                
+                // 随机更新一些监控数据
+                const tempEl = document.querySelector('.stat-item:nth-child(1) p');
+                const powerEl = document.querySelector('.stat-item:nth-child(2) p');
+                const networkEl = document.querySelector('.stat-item:nth-child(3) p');
+                
+                // 生成随机但合理的数据
+                const newTemp = (22 + Math.random() * 3).toFixed(1);
+                const newPower = (3.8 + Math.random() * 1.5).toFixed(1);
+                const newNetwork = (0.8 + Math.random() * 1.5).toFixed(1);
+                
+                tempEl.textContent = `${newTemp}°C`;
+                powerEl.textContent = `${newPower} kW`;
+                networkEl.textContent = `${newNetwork} Gbps`;
+            }
+            
+            // 初始更新
+            updateMonitoringData();
+            
+            // 每10秒更新一次监控数据
+            setInterval(updateMonitoringData, 10000);
+            
+            // 按钮事件处理
+            document.getElementById('prev-cabinet').addEventListener('click', function() {
+                alert('切换到上一个机柜');
+                // 这里可以添加实际的机柜切换逻辑
+            });
+            
+            document.getElementById('next-cabinet').addEventListener('click', function() {
+                alert('切换到下一个机柜');
+                // 这里可以添加实际的机柜切换逻辑
+            });
+            
+            document.getElementById('reset-view').addEventListener('click', function() {
+                // 重置所有U位的选中状态
+                document.querySelectorAll('.u-slot').forEach(slot => {
+                    slot.style.backgroundColor = '';
+                });
+                
+                // 平滑滚动到顶部
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            
+            // 搜索功能
+            document.querySelector('.btn').addEventListener('click', function() {
+                const searchTerm = document.querySelector('.search-box').value;
+                if (searchTerm.trim() !== '') {
+                    alert(`搜索: ${searchTerm}\n此功能将在完整版本中实现`);
+                }
+            });
+            
+            // 搜索框回车键支持
+            document.querySelector('.search-box').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.querySelector('.btn').click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

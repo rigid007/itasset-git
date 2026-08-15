@@ -1,0 +1,1427 @@
+{% extends "base.html" %}
+
+{% block title %}拓扑设置 - 网络拓扑系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    :root {
+        --primary-color: #2c3e50;
+        --secondary-color: #3498db;
+        --success-color: #27ae60;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --light-bg: #f8f9fa;
+        --dark-bg: #343a40;
+    }
+    
+    .main-header {
+        background: linear-gradient(135deg, var(--primary-color), #1a2530);
+        color: white;
+        padding: 1.5rem 0;
+        margin-bottom: 2rem;
+    }
+    
+    .settings-container {
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+    
+    .settings-sidebar {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e9ecef;
+        padding: 0;
+    }
+    
+    .settings-nav {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .settings-nav-item {
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .settings-nav-link {
+        display: block;
+        padding: 1rem 1.5rem;
+        color: #495057;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        border-left: 4px solid transparent;
+    }
+    
+    .settings-nav-link:hover {
+        background-color: #e9ecef;
+        color: var(--primary-color);
+        border-left-color: var(--secondary-color);
+    }
+    
+    .settings-nav-link.active {
+        background-color: white;
+        color: var(--primary-color);
+        font-weight: 600;
+        border-left-color: var(--secondary-color);
+    }
+    
+    .settings-nav-link i {
+        width: 20px;
+        text-align: center;
+        margin-right: 10px;
+    }
+    
+    .settings-content {
+        padding: 2rem;
+        min-height: 600px;
+    }
+    
+    .category-header {
+        border-bottom: 2px solid var(--secondary-color);
+        padding-bottom: 0.75rem;
+        margin-bottom: 2rem;
+        color: var(--primary-color);
+    }
+    
+    .setting-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        transition: all 0.2s ease;
+    }
+    
+    .setting-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: #adb5bd;
+    }
+    
+    .setting-header {
+        background-color: #f8f9fa;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 8px 8px 0 0;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .setting-header.collapsed {
+        border-radius: 8px;
+        border-bottom: none;
+    }
+    
+    .setting-title {
+        font-weight: 600;
+        color: var(--primary-color);
+        margin: 0;
+        font-size: 1rem;
+    }
+    
+    .setting-key {
+        color: #6c757d;
+        font-size: 0.85rem;
+        font-family: 'Courier New', monospace;
+        background-color: #e9ecef;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        margin-left: 0.5rem;
+    }
+    
+    .setting-body {
+        padding: 1.5rem 1.25rem;
+    }
+    
+    .setting-description {
+        color: #6c757d;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .setting-control {
+        margin-bottom: 1rem;
+    }
+    
+    .setting-value-display {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.5rem;
+        font-family: 'Courier New', monospace;
+        word-break: break-all;
+    }
+    
+    .setting-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .layout-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+    }
+    
+    .layout-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: #adb5bd;
+    }
+    
+    .layout-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .layout-title {
+        font-weight: 600;
+        color: var(--primary-color);
+        margin: 0;
+    }
+    
+    .layout-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .layout-description {
+        color: #6c757d;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .layout-properties {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .layout-property {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .property-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+    }
+    
+    .property-value {
+        font-weight: 500;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .settings-tabs {
+        display: none;
+    }
+    
+    @media (max-width: 768px) {
+        .settings-sidebar {
+            display: none;
+        }
+        
+        .settings-tabs {
+            display: flex;
+            overflow-x: auto;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .settings-tab {
+            padding: 0.75rem 1rem;
+            white-space: nowrap;
+            border-bottom: 3px solid transparent;
+            color: #6c757d;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .settings-tab.active {
+            color: var(--secondary-color);
+            border-bottom-color: var(--secondary-color);
+        }
+        
+        .settings-content {
+            padding: 1rem;
+        }
+        
+        .layout-properties {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .search-box {
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+    
+    .search-box i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .search-box input {
+        padding-left: 40px;
+    }
+    
+    .save-all-btn {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 30px;
+    }
+    
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+    
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 22px;
+        width: 22px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+        background-color: var(--success-color);
+    }
+    
+    input:checked + .toggle-slider:before {
+        transform: translateX(30px);
+    }
+    
+    .category-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        color: white;
+    }
+    
+    .category-display {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 主标题区域 -->
+<div class="main-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1><i class="fas fa-sliders-h me-2"></i>拓扑设置</h1>
+                <p class="lead mb-0">配置和管理网络拓扑系统的各项参数和布局设置</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-light me-2" onclick="window.location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i>刷新
+                </button>
+                <button class="btn btn-primary" onclick="saveAllSettings()">
+                    <i class="fas fa-save me-1"></i>保存所有更改
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 设置主容器 -->
+<div class="container">
+    <div class="row">
+        <!-- 桌面端侧边栏 -->
+        <div class="col-lg-3 d-none d-lg-block">
+            <div class="settings-container settings-sidebar">
+                <div class="p-3 border-bottom">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" class="form-control" id="settingsSearch" placeholder="搜索设置项...">
+                    </div>
+                </div>
+                
+                <ul class="settings-nav">
+                    {% for category, settings in settings_by_category.items() %}
+                    <li class="settings-nav-item">
+                        <a href="#category-{{ category|replace(' ', '-')|lower }}" 
+                           class="settings-nav-link {% if loop.first %}active{% endif %}" 
+                           data-category="{{ category }}">
+                            {% if category == 'General' %}
+                            <i class="fas fa-cog"></i>
+                            {% elif category == 'Discovery' %}
+                            <i class="fas fa-search"></i>
+                            {% elif category == 'Visualization' %}
+                            <i class="fas fa-eye"></i>
+                            {% elif category == 'Performance' %}
+                            <i class="fas fa-tachometer-alt"></i>
+                            {% elif category == 'Security' %}
+                            <i class="fas fa-shield-alt"></i>
+                            {% elif category == 'Network' %}
+                            <i class="fas fa-network-wired"></i>
+                            {% elif category == 'Layout' %}
+                            <i class="fas fa-object-group"></i>
+                            {% else %}
+                            <i class="fas fa-sliders-h"></i>
+                            {% endif %}
+                            {{ category }}
+                            <span class="badge bg-secondary float-end">{{ settings|length }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                    
+                    <!-- 布局设置 -->
+                    <li class="settings-nav-item">
+                        <a href="#category-layouts" class="settings-nav-link" data-category="layouts">
+                            <i class="fas fa-object-group"></i>
+                            布局配置
+                            <span class="badge bg-secondary float-end">{{ default_layouts|length }}</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- 移动端标签页 -->
+        <div class="col-12 d-lg-none mb-3">
+            <div class="settings-tabs">
+                {% for category, settings in settings_by_category.items() %}
+                <a href="#category-{{ category|replace(' ', '-')|lower }}" 
+                   class="settings-tab {% if loop.first %}active{% endif %}">
+                    {{ category }}
+                </a>
+                {% endfor %}
+                <a href="#category-layouts" class="settings-tab">布局配置</a>
+            </div>
+        </div>
+        
+        <!-- 设置内容区域 -->
+        <div class="col-lg-9 col-12">
+            <div class="settings-container">
+                <div class="settings-content">
+                    <!-- 搜索提示 -->
+                    <div id="searchResultsInfo" class="alert alert-info d-none">
+                        搜索到 <span id="matchCount">0</span> 个匹配的设置项
+                    </div>
+                    
+                    {% for category, settings in settings_by_category.items() %}
+                    <div id="category-{{ category|replace(' ', '-')|lower }}" class="settings-category">
+                        <div class="category-display">
+                            <div class="category-icon" 
+                                 style="background-color: {{ ['#3498db', '#2ecc71', '#9b59b6', '#e74c3c', '#f39c12', '#1abc9c', '#34495e'][loop.index0 % 7] }};">
+                                {% if category == 'General' %}
+                                <i class="fas fa-cog fa-lg"></i>
+                                {% elif category == 'Discovery' %}
+                                <i class="fas fa-search fa-lg"></i>
+                                {% elif category == 'Visualization' %}
+                                <i class="fas fa-eye fa-lg"></i>
+                                {% elif category == 'Performance' %}
+                                <i class="fas fa-tachometer-alt fa-lg"></i>
+                                {% elif category == 'Security' %}
+                                <i class="fas fa-shield-alt fa-lg"></i>
+                                {% elif category == 'Network' %}
+                                <i class="fas fa-network-wired fa-lg"></i>
+                                {% elif category == 'Layout' %}
+                                <i class="fas fa-object-group fa-lg"></i>
+                                {% else %}
+                                <i class="fas fa-sliders-h fa-lg"></i>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <h3 class="category-header mb-0">{{ category }} 设置</h3>
+                                <p class="text-muted mb-0">{{ settings|length }} 个设置项</p>
+                            </div>
+                        </div>
+                        
+                        {% for setting in settings %}
+                        <div class="setting-card" data-setting-key="{{ setting.setting_key }}" data-category="{{ category }}">
+                            <div class="setting-header {% if not loop.first %}collapsed{% endif %}" 
+                                 data-bs-toggle="collapse" 
+                                 data-bs-target="#setting-{{ setting.id }}">
+                                <div>
+                                    <h4 class="setting-title">
+                                        {{ setting.display_name or setting.setting_key }}
+                                        <small class="setting-key">{{ setting.setting_key }}</small>
+                                    </h4>
+                                </div>
+                                <div>
+                                    <i class="fas fa-chevron-down toggle-icon"></i>
+                                </div>
+                            </div>
+                            <div class="collapse {% if loop.first %}show{% endif %}" id="setting-{{ setting.id }}">
+                                <div class="setting-body">
+                                    {% if setting.description %}
+                                    <p class="setting-description">{{ setting.description }}</p>
+                                    {% endif %}
+                                    
+                                    <div class="setting-control">
+                                        {% if setting.data_type == 'boolean' %}
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input setting-input" 
+                                                   type="checkbox" 
+                                                   id="setting-{{ setting.id }}-input"
+                                                   data-setting-id="{{ setting.id }}"
+                                                   data-original-value="{{ setting.setting_value }}"
+                                                   {% if setting.setting_value == 'true' or setting.setting_value == '1' %}checked{% endif %}>
+                                            <label class="form-check-label" for="setting-{{ setting.id }}-input">
+                                                {% if setting.setting_value == 'true' or setting.setting_value == '1' %}
+                                                已启用
+                                                {% else %}
+                                                已禁用
+                                                {% endif %}
+                                            </label>
+                                        </div>
+                                        {% elif setting.data_type == 'integer' or setting.data_type == 'number' %}
+                                        <input type="number" 
+                                               class="form-control setting-input"
+                                               id="setting-{{ setting.id }}-input"
+                                               data-setting-id="{{ setting.id }}"
+                                               data-original-value="{{ setting.setting_value }}"
+                                               value="{{ setting.setting_value }}"
+                                               {% if setting.min_value %}min="{{ setting.min_value }}"{% endif %}
+                                               {% if setting.max_value %}max="{{ setting.max_value }}"{% endif %}>
+                                        {% elif setting.data_type == 'select' %}
+                                        <select class="form-control setting-input"
+                                                id="setting-{{ setting.id }}-input"
+                                                data-setting-id="{{ setting.id }}"
+                                                data-original-value="{{ setting.setting_value }}">
+                                            {% if setting.options %}
+                                                {% for option in setting.options.split(',') %}
+                                                <option value="{{ option.strip() }}" 
+                                                        {% if option.strip() == setting.setting_value %}selected{% endif %}>
+                                                    {{ option.strip() }}
+                                                </option>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </select>
+                                        {% elif setting.data_type == 'json' or setting.data_type == 'array' %}
+                                        <textarea class="form-control setting-input" 
+                                                  id="setting-{{ setting.id }}-input"
+                                                  data-setting-id="{{ setting.id }}"
+                                                  data-original-value="{{ setting.setting_value }}"
+                                                  rows="4">{{ setting.setting_value }}</textarea>
+                                        <small class="text-muted">请输入有效的JSON格式数据</small>
+                                        {% else %}
+                                        <input type="text" 
+                                               class="form-control setting-input"
+                                               id="setting-{{ setting.id }}-input"
+                                               data-setting-id="{{ setting.id }}"
+                                               data-original-value="{{ setting.setting_value }}"
+                                               value="{{ setting.setting_value }}">
+                                        {% endif %}
+                                        
+                                        {% if setting.data_type == 'password' %}
+                                        <div class="input-group mt-2">
+                                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('setting-{{ setting.id }}-input')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-secondary" type="button" onclick="generatePassword('setting-{{ setting.id }}-input')">
+                                                <i class="fas fa-key"></i> 生成密码
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="setting-info">
+                                        <small class="text-muted">
+                                            类型: <strong>{{ setting.data_type or 'string' }}</strong> | 
+                                            最后更新: <strong>{{ setting.updated_at.strftime('%Y-%m-%d %H:%M') if setting.updated_at else 'N/A' }}</strong>
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="setting-actions">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetSetting({{ setting.id }})">
+                                            <i class="fas fa-undo me-1"></i>重置
+                                        </button>
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="saveSetting({{ setting.id }})">
+                                            <i class="fas fa-save me-1"></i>保存
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- 布局配置部分 -->
+                    <div id="category-layouts" class="settings-category">
+                        <div class="category-display">
+                            <div class="category-icon" style="background-color: #9b59b6;">
+                                <i class="fas fa-object-group fa-lg"></i>
+                            </div>
+                            <div>
+                                <h3 class="category-header mb-0">默认布局配置</h3>
+                                <p class="text-muted mb-0">{{ default_layouts|length }} 个默认布局</p>
+                            </div>
+                        </div>
+                        
+                        {% if default_layouts %}
+                            {% for layout in default_layouts %}
+                            <div class="layout-card">
+                                <div class="layout-header">
+                                    <h4 class="layout-title">{{ layout.name }}</h4>
+                                    <div>
+                                        <span class="badge bg-success layout-badge">
+                                            <i class="fas fa-check-circle me-1"></i>已启用
+                                        </span>
+                                        <span class="badge bg-primary layout-badge">
+                                            <i class="fas fa-star me-1"></i>默认
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                {% if layout.description %}
+                                <p class="layout-description">{{ layout.description }}</p>
+                                {% endif %}
+                                
+                                <div class="layout-properties">
+                                    <div class="layout-property">
+                                        <span class="property-label">布局类型</span>
+                                        <span class="property-value">{{ layout.layout_type }}</span>
+                                    </div>
+                                    <div class="layout-property">
+                                        <span class="property-label">设备间距</span>
+                                        <span class="property-value">{{ layout.node_spacing }}px</span>
+                                    </div>
+                                    <div class="layout-property">
+                                        <span class="property-label">层级间距</span>
+                                        <span class="property-value">{{ layout.level_spacing }}px</span>
+                                    </div>
+                                    <div class="layout-property">
+                                        <span class="property-label">方向</span>
+                                        <span class="property-value">{{ layout.direction }}</span>
+                                    </div>
+                                    <div class="layout-property">
+                                        <span class="property-label">创建时间</span>
+                                        <span class="property-value">{{ layout.created_at.strftime('%Y-%m-%d') if layout.created_at else 'N/A' }}</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="editLayout({{ layout.id }})">
+                                            <i class="fas fa-edit me-1"></i>编辑布局
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success btn-sm" onclick="applyLayout({{ layout.id }})">
+                                            <i class="fas fa-play me-1"></i>应用布局
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="exportLayout({{ layout.id }})">
+                                            <i class="fas fa-download me-1"></i>导出
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            
+                            <div class="text-center mt-4">
+                                <button type="button" class="btn btn-primary" onclick="createNewLayout()">
+                                    <i class="fas fa-plus me-1"></i>创建新布局
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="manageLayouts()">
+                                    <i class="fas fa-list me-1"></i>管理所有布局
+                                </button>
+                            </div>
+                        {% else %}
+                            <div class="empty-state">
+                                <i class="fas fa-object-group"></i>
+                                <h4>暂无默认布局</h4>
+                                <p>当前没有配置默认布局，请创建一个新的布局。</p>
+                                <button type="button" class="btn btn-primary" onclick="createNewLayout()">
+                                    <i class="fas fa-plus me-1"></i>创建新布局
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 保存所有更改按钮（固定在右下角） -->
+<button id="saveAllBtn" class="btn btn-success save-all-btn d-none" onclick="saveAllSettings()">
+    <i class="fas fa-save me-1"></i>保存所有更改
+</button>
+
+<!-- 创建新布局模态框 -->
+<div class="modal fade" id="createLayoutModal" tabindex="-1" aria-labelledby="createLayoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createLayoutModalLabel">
+                    <i class="fas fa-plus-circle me-2"></i>创建新布局
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createLayoutForm" method="POST" action="{{ url_for('topology.create_layout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="layoutName" class="form-label">布局名称 *</label>
+                            <input type="text" class="form-control" id="layoutName" name="name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="layoutType" class="form-label">布局类型 *</label>
+                            <select class="form-select" id="layoutType" name="layout_type" required>
+                                <option value="hierarchical">层次布局</option>
+                                <option value="force">力导向布局</option>
+                                <option value="grid">网格布局</option>
+                                <option value="circular">环形布局</option>
+                                <option value="radial">辐射布局</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="nodeSpacing" class="form-label">设备间距 (px)</label>
+                            <input type="number" class="form-control" id="nodeSpacing" name="node_spacing" value="100" min="50" max="500">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="levelSpacing" class="form-label">层级间距 (px)</label>
+                            <input type="number" class="form-control" id="levelSpacing" name="level_spacing" value="150" min="50" max="500">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="direction" class="form-label">方向</label>
+                            <select class="form-select" id="direction" name="direction">
+                                <option value="LR">从左到右</option>
+                                <option value="RL">从右到左</option>
+                                <option value="TB">从上到下</option>
+                                <option value="BT">从下到上</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="isDefault" class="form-label">设为默认布局</label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="isDefault" name="is_default">
+                                <label class="form-check-label" for="isDefault">
+                                    设置为默认布局
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <label for="layoutDescription" class="form-label">布局描述</label>
+                            <textarea class="form-control" id="layoutDescription" name="description" rows="3" placeholder="请输入布局描述信息..."></textarea>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableLayout" name="enabled" checked>
+                                <label class="form-check-label" for="enableLayout">
+                                    启用此布局
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建布局</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 导入设置模态框 -->
+<div class="modal fade" id="importSettingsModal" tabindex="-1" aria-labelledby="importSettingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importSettingsModalLabel">
+                    <i class="fas fa-file-import me-2"></i>导入设置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    请上传设置配置文件 (JSON格式)
+                </div>
+                <div class="mb-3">
+                    <input class="form-control" type="file" id="settingsFile" accept=".json">
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="overwriteExisting" checked>
+                    <label class="form-check-label" for="overwriteExisting">
+                        覆盖现有设置
+                    </label>
+                </div>
+                <div id="importPreview" class="d-none">
+                    <h6>导入预览:</h6>
+                    <pre id="settingsPreview" class="bg-light p-2" style="max-height: 200px; overflow-y: auto;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="importSettings()">导入设置</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化侧边栏导航
+        initSettingsNavigation();
+        
+        // 初始化搜索功能
+        initSearch();
+        
+        // 监听设置值变化
+        initSettingChangeListeners();
+        
+        // 初始化折叠面板
+        initCollapsePanels();
+        
+        // 显示第一个分类
+        showCategory(getFirstCategory());
+    });
+    
+    // 获取第一个分类
+    function getFirstCategory() {
+        const navLinks = document.querySelectorAll('.settings-nav-link[data-category]');
+        if (navLinks.length > 0) {
+            return navLinks[0].getAttribute('data-category');
+        }
+        return null;
+    }
+    
+    // 显示指定分类
+    function showCategory(category) {
+        // 隐藏所有分类
+        document.querySelectorAll('.settings-category').forEach(cat => {
+            cat.style.display = 'none';
+        });
+        
+        // 显示指定分类
+        const targetCategory = document.getElementById(`category-${category.toLowerCase().replace(/ /g, '-')}`);
+        if (targetCategory) {
+            targetCategory.style.display = 'block';
+        }
+        
+        // 更新导航激活状态
+        document.querySelectorAll('.settings-nav-link, .settings-tab').forEach(link => {
+            link.classList.remove('active');
+        });
+        
+        // 激活对应的导航链接
+        const navLink = document.querySelector(`.settings-nav-link[data-category="${category}"]`);
+        const tabLink = document.querySelector(`.settings-tab[href="#category-${category.toLowerCase().replace(/ /g, '-')}"]`);
+        
+        if (navLink) navLink.classList.add('active');
+        if (tabLink) tabLink.classList.add('active');
+    }
+    
+    // 初始化导航
+    function initSettingsNavigation() {
+        // 桌面端侧边栏导航
+        document.querySelectorAll('.settings-nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const category = this.getAttribute('data-category');
+                const targetId = this.getAttribute('href');
+                
+                // 更新激活状态
+                document.querySelectorAll('.settings-nav-link').forEach(item => {
+                    item.classList.remove('active');
+                });
+                this.classList.add('active');
+                
+                // 显示对应分类
+                showCategory(category);
+                
+                // 滚动到顶部
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+        
+        // 移动端标签页导航
+        document.querySelectorAll('.settings-tab').forEach(tab => {
+            tab.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const targetId = this.getAttribute('href');
+                const category = targetId.replace('#category-', '').replace(/-/g, ' ');
+                
+                // 更新激活状态
+                document.querySelectorAll('.settings-tab').forEach(item => {
+                    item.classList.remove('active');
+                });
+                this.classList.add('active');
+                
+                // 显示对应分类
+                showCategory(category);
+                
+                // 滚动到顶部
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+    }
+    
+    // 初始化搜索功能
+    function initSearch() {
+        const searchInput = document.getElementById('settingsSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase().trim();
+                const resultsInfo = document.getElementById('searchResultsInfo');
+                
+                if (searchTerm.length < 2) {
+                    // 显示所有设置项
+                    document.querySelectorAll('.setting-card').forEach(card => {
+                        card.style.display = 'block';
+                    });
+                    
+                    // 显示所有分类
+                    document.querySelectorAll('.settings-category').forEach(cat => {
+                        cat.style.display = 'block';
+                    });
+                    
+                    // 隐藏搜索结果信息
+                    resultsInfo.classList.add('d-none');
+                    return;
+                }
+                
+                let matchCount = 0;
+                
+                // 遍历所有设置项
+                document.querySelectorAll('.setting-card').forEach(card => {
+                    const title = card.querySelector('.setting-title').textContent.toLowerCase();
+                    const key = card.querySelector('.setting-key').textContent.toLowerCase();
+                    const description = card.querySelector('.setting-description')?.textContent.toLowerCase() || '';
+                    
+                    if (title.includes(searchTerm) || key.includes(searchTerm) || description.includes(searchTerm)) {
+                        card.style.display = 'block';
+                        matchCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+                
+                // 更新搜索结果信息
+                document.getElementById('matchCount').textContent = matchCount;
+                resultsInfo.classList.remove('d-none');
+                
+                // 显示有匹配项的分类
+                document.querySelectorAll('.settings-category').forEach(cat => {
+                    const hasVisibleSettings = cat.querySelectorAll('.setting-card[style="display: block"]').length > 0;
+                    cat.style.display = hasVisibleSettings ? 'block' : 'none';
+                });
+            });
+        }
+    }
+    
+    // 初始化设置变更监听
+    function initSettingChangeListeners() {
+        let changedSettings = new Set();
+        
+        document.querySelectorAll('.setting-input').forEach(input => {
+            input.addEventListener('change', function() {
+                const settingId = this.getAttribute('data-setting-id');
+                const originalValue = this.getAttribute('data-original-value');
+                let currentValue;
+                
+                if (this.type === 'checkbox') {
+                    currentValue = this.checked ? 'true' : 'false';
+                } else {
+                    currentValue = this.value;
+                }
+                
+                // 检查值是否已更改
+                if (currentValue !== originalValue) {
+                    changedSettings.add(settingId);
+                    this.classList.add('is-changed');
+                } else {
+                    changedSettings.delete(settingId);
+                    this.classList.remove('is-changed');
+                }
+                
+                // 显示或隐藏"保存所有更改"按钮
+                const saveAllBtn = document.getElementById('saveAllBtn');
+                if (changedSettings.size > 0) {
+                    saveAllBtn.classList.remove('d-none');
+                } else {
+                    saveAllBtn.classList.add('d-none');
+                }
+            });
+        });
+    }
+    
+    // 初始化折叠面板
+    function initCollapsePanels() {
+        document.querySelectorAll('.setting-header').forEach(header => {
+            header.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-bs-target');
+                const target = document.querySelector(targetId);
+                const icon = this.querySelector('.toggle-icon');
+                
+                if (target.classList.contains('show')) {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                    this.classList.add('collapsed');
+                } else {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                    this.classList.remove('collapsed');
+                }
+            });
+        });
+    }
+    
+    // 保存单个设置
+    function saveSetting(settingId) {
+        const input = document.getElementById(`setting-${settingId}-input`);
+        let value;
+        
+        if (input.type === 'checkbox') {
+            value = input.checked ? 'true' : 'false';
+        } else {
+            value = input.value;
+        }
+        
+        // 验证JSON格式
+        if (input.classList.contains('json-input') || input.tagName === 'TEXTAREA') {
+            try {
+                if (value.trim()) {
+                    JSON.parse(value);
+                }
+            } catch (e) {
+                alert('错误：请输入有效的JSON格式数据');
+                return;
+            }
+        }
+        
+        // 发送保存请求
+        fetch(`/topology/settings/${settingId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                value: value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 更新原始值标记
+                input.setAttribute('data-original-value', value);
+                input.classList.remove('is-changed');
+                
+                // 显示成功消息
+                showNotification('设置保存成功', 'success');
+                
+                // 更新页面显示（如需要）
+                if (input.type === 'checkbox') {
+                    const label = input.nextElementSibling;
+                    if (label) {
+                        label.textContent = input.checked ? '已启用' : '已禁用';
+                    }
+                }
+                
+                // 检查是否还有未保存的更改
+                checkUnsavedChanges();
+            } else {
+                showNotification('保存失败: ' + (data.message || '未知错误'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('保存设置时出错:', error);
+            showNotification('保存设置时发生错误', 'error');
+        });
+    }
+    
+    // 重置单个设置
+    function resetSetting(settingId) {
+        const input = document.getElementById(`setting-${settingId}-input`);
+        const originalValue = input.getAttribute('data-original-value');
+        
+        if (confirm('确定要重置此设置吗？')) {
+            if (input.type === 'checkbox') {
+                input.checked = originalValue === 'true' || originalValue === '1';
+            } else {
+                input.value = originalValue;
+            }
+            
+            input.dispatchEvent(new Event('change'));
+            showNotification('设置已重置', 'info');
+        }
+    }
+    
+    // 保存所有更改
+    function saveAllSettings() {
+        const changedInputs = document.querySelectorAll('.setting-input.is-changed');
+        
+        if (changedInputs.length === 0) {
+            showNotification('没有需要保存的更改', 'info');
+            return;
+        }
+        
+        if (!confirm(`确定要保存 ${changedInputs.length} 个设置的更改吗？`)) {
+            return;
+        }
+        
+        const updates = [];
+        changedInputs.forEach(input => {
+            const settingId = input.getAttribute('data-setting-id');
+            let value;
+            
+            if (input.type === 'checkbox') {
+                value = input.checked ? 'true' : 'false';
+            } else {
+                value = input.value;
+            }
+            
+            updates.push({
+                id: settingId,
+                value: value
+            });
+        });
+        
+        // 发送批量保存请求
+        fetch('/topology/settings/batch-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ updates: updates })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 更新所有输入的原始值标记
+                changedInputs.forEach(input => {
+                    let value;
+                    
+                    if (input.type === 'checkbox') {
+                        value = input.checked ? 'true' : 'false';
+                    } else {
+                        value = input.value;
+                    }
+                    
+                    input.setAttribute('data-original-value', value);
+                    input.classList.remove('is-changed');
+                    
+                    // 更新标签显示
+                    if (input.type === 'checkbox') {
+                        const label = input.nextElementSibling;
+                        if (label) {
+                            label.textContent = input.checked ? '已启用' : '已禁用';
+                        }
+                    }
+                });
+                
+                // 隐藏"保存所有更改"按钮
+                document.getElementById('saveAllBtn').classList.add('d-none');
+                
+                showNotification(`${data.saved_count} 个设置保存成功`, 'success');
+            } else {
+                showNotification('保存失败: ' + (data.message || '未知错误'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('批量保存设置时出错:', error);
+            showNotification('批量保存设置时发生错误', 'error');
+        });
+    }
+    
+    // 检查未保存的更改
+    function checkUnsavedChanges() {
+        const changedInputs = document.querySelectorAll('.setting-input.is-changed');
+        const saveAllBtn = document.getElementById('saveAllBtn');
+        
+        if (changedInputs.length > 0) {
+            saveAllBtn.classList.remove('d-none');
+        } else {
+            saveAllBtn.classList.add('d-none');
+        }
+    }
+    
+    // 创建新布局
+    function createNewLayout() {
+        const modal = new bootstrap.Modal(document.getElementById('createLayoutModal'));
+        modal.show();
+    }
+    
+    // 编辑布局
+    function editLayout(layoutId) {
+        alert(`编辑布局 ID: ${layoutId}\n此功能需要后端API支持`);
+    }
+    
+    // 应用布局
+    function applyLayout(layoutId) {
+        if (confirm('确定要应用此布局吗？当前拓扑图将重新布局。')) {
+            fetch(`/topology/layouts/${layoutId}/apply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('布局应用成功', 'success');
+                } else {
+                    showNotification('应用布局失败: ' + (data.message || '未知错误'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('应用布局时出错:', error);
+                showNotification('应用布局时发生错误', 'error');
+            });
+        }
+    }
+    
+    // 导出布局
+    function exportLayout(layoutId) {
+        window.location.href = `/topology/layouts/${layoutId}/export`;
+    }
+    
+    // 管理布局
+    function manageLayouts() {
+        window.location.href = '/topology/layouts';
+    }
+    
+    // 切换密码可见性
+    function togglePasswordVisibility(inputId) {
+        const input = document.getElementById(inputId);
+        const button = event.target.closest('button');
+        const icon = button.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+            button.title = '隐藏密码';
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+            button.title = '显示密码';
+        }
+    }
+    
+    // 生成密码
+    function generatePassword(inputId) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
+        let password = '';
+        
+        for (let i = 0; i < 16; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        
+        const input = document.getElementById(inputId);
+        input.value = password;
+        input.dispatchEvent(new Event('change'));
+        
+        showNotification('密码已生成', 'success');
+    }
+    
+    // 显示通知
+    function showNotification(message, type = 'info') {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show`;
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        // 添加到页面
+        document.body.appendChild(notification);
+        
+        // 自动移除通知
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+    
+    // 获取CSRF令牌
+    function getCsrfToken() {
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        return metaTag ? metaTag.getAttribute('content') : '';
+    }
+    
+    // 导出设置
+    function exportSettings() {
+        fetch('/topology/settings/export')
+        .then(response => response.json())
+        .then(data => {
+            const dataStr = JSON.stringify(data, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `topology-settings-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            
+            showNotification('设置导出成功', 'success');
+        })
+        .catch(error => {
+            console.error('导出设置时出错:', error);
+            showNotification('导出设置时发生错误', 'error');
+        });
+    }
+    
+    // 导入设置
+    function openImportModal() {
+        const modal = new bootstrap.Modal(document.getElementById('importSettingsModal'));
+        const fileInput = document.getElementById('settingsFile');
+        const previewDiv = document.getElementById('importPreview');
+        const previewContent = document.getElementById('settingsPreview');
+        
+        // 重置文件输入
+        fileInput.value = '';
+        previewDiv.classList.add('d-none');
+        
+        // 监听文件选择
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const file = this.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const jsonData = JSON.parse(e.target.result);
+                        previewContent.textContent = JSON.stringify(jsonData, null, 2);
+                        previewDiv.classList.remove('d-none');
+                    } catch (error) {
+                        alert('错误：文件格式无效，请选择有效的JSON文件');
+                        this.value = '';
+                        previewDiv.classList.add('d-none');
+                    }
+                };
+                
+                reader.readAsText(file);
+            }
+        });
+        
+        modal.show();
+    }
+    
+    // 执行导入
+    function importSettings() {
+        const fileInput = document.getElementById('settingsFile');
+        const overwriteCheckbox = document.getElementById('overwriteExisting');
+        
+        if (fileInput.files.length === 0) {
+            alert('请选择要导入的文件');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const settingsData = JSON.parse(e.target.result);
+                
+                fetch('/topology/settings/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        settings: settingsData,
+                        overwrite: overwriteCheckbox.checked
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(`成功导入 ${data.imported_count} 个设置`, 'success');
+                        
+                        // 关闭模态框
+                        bootstrap.Modal.getInstance(document.getElementById('importSettingsModal')).hide();
+                        
+                        // 重新加载页面
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('导入失败: ' + (data.message || '未知错误'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('导入设置时出错:', error);
+                    showNotification('导入设置时发生错误', 'error');
+                });
+            } catch (error) {
+                alert('错误：文件格式无效，请选择有效的JSON文件');
+            }
+        };
+        
+        reader.readAsText(file);
+    }
+</script>
+{% endblock %}

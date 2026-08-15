@@ -1,0 +1,1082 @@
+{% extends 'base.html' %}
+
+{% block title %}机柜视图 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    .cabinet-rack {
+        display: flex;
+        flex-direction: column;
+        border: 2px solid #6c757d;
+        border-radius: 5px;
+        overflow: hidden;
+        margin-bottom: 20px;
+        background: #f8f9fa;
+        min-height: 200px;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    
+    .cabinet-slot {
+        flex-shrink: 0;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        padding: 8px 15px;
+        font-size: 14px;
+        min-height: 40px;
+        transition: all 0.2s;
+        position: relative;
+    }
+    
+    .cabinet-slot:last-child {
+        border-bottom: none;
+    }
+    
+    .cabinet-slot.occupied {
+        background-color: #28a745;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .cabinet-slot.occupied:hover {
+        background-color: #218838;
+        transform: scale(1.02);
+        z-index: 10;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .cabinet-slot.reserved {
+        background-color: #ffc107;
+        color: #212529;
+        font-weight: bold;
+    }
+    
+    .cabinet-slot.available {
+        background-color: #ffffff;
+        color: #6c757d;
+    }
+    
+    .cabinet-slot.available:hover {
+        background-color: #e9ecef;
+    }
+    
+    .cabinet-slot.warning {
+        background-color: #fd7e14;
+        color: white;
+    }
+    
+    .cabinet-slot.danger {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .cabinet-header {
+        background: #007bff;
+        color: white;
+        padding: 15px;
+        border-radius: 5px 5px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .cabinet-info {
+        flex: 1;
+    }
+    
+    .cabinet-stats {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+    
+    .cabinet-stat-item {
+        text-align: center;
+        padding: 5px 15px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 4px;
+    }
+    
+    .cabinet-stat-label {
+        font-size: 12px;
+        opacity: 0.9;
+    }
+    
+    .cabinet-stat-value {
+        font-size: 18px;
+        font-weight: bold;
+    }
+    
+    .device-info {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .device-type-icon {
+        margin-right: 10px;
+        font-size: 16px;
+    }
+    
+    .device-details {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .device-name {
+        font-weight: bold;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .device-meta {
+        font-size: 12px;
+        opacity: 0.9;
+    }
+    
+    .device-status-badge {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+    }
+    
+    .rack-container {
+        margin-top: 20px;
+    }
+    
+    .rack-section {
+        margin-bottom: 40px;
+    }
+    
+    .rack-section-title {
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+        color: #343a40;
+    }
+    
+    .rack-empty-state {
+        text-align: center;
+        padding: 40px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin: 20px 0;
+    }
+    
+    .rack-empty-state i {
+        font-size: 48px;
+        color: #6c757d;
+        margin-bottom: 15px;
+    }
+    
+    .rack-empty-state h4 {
+        color: #495057;
+        margin-bottom: 10px;
+    }
+    
+    .filter-bar {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+    
+    .rack-controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .view-toggle {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .rack-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 25px;
+        margin-top: 20px;
+    }
+    
+    .rack-card {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.3s, box-shadow 0.3s;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .rack-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+    }
+    
+    .rack-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        padding: 15px;
+        background: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        margin-top: auto;
+    }
+    
+    .usage-progress {
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #e9ecef;
+        margin: 10px 0;
+    }
+    
+    .usage-bar {
+        height: 100%;
+        transition: width 0.3s;
+    }
+    
+    .usage-text {
+        font-size: 12px;
+        color: #6c757d;
+        text-align: right;
+    }
+    
+    .rack-card-header {
+        padding: 15px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .rack-card-body {
+        flex: 1;
+        padding: 15px;
+    }
+    
+    /* 新增：简洁U位视图样式 */
+    .compact-u-view {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+        gap: 5px;
+        margin-top: 10px;
+    }
+    
+    .compact-u-slot {
+        height: 40px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    
+    .compact-u-slot.occupied {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .compact-u-slot.available {
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+    
+    .compact-u-slot.occupied:hover {
+        transform: scale(1.05);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    .compact-u-slot.available:hover {
+        background-color: #e9ecef;
+    }
+    
+    .compact-u-number {
+        font-weight: bold;
+        font-size: 11px;
+    }
+    
+    .compact-u-status {
+        font-size: 10px;
+        margin-top: 2px;
+    }
+    
+    /* 新增：机柜视图切换按钮 */
+    .view-mode-switcher {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+    
+    .view-mode-btn {
+        padding: 5px 15px;
+        border: 1px solid #dee2e6;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .view-mode-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .view-mode-btn:hover:not(.active) {
+        background: #f8f9fa;
+    }
+    
+    @media (max-width: 768px) {
+        .rack-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .rack-controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .view-toggle {
+            justify-content: center;
+        }
+        
+        .compact-u-view {
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 3px;
+        }
+        
+        .compact-u-slot {
+            height: 35px;
+            font-size: 11px;
+        }
+        
+        .cabinet-rack {
+            max-height: 400px;
+        }
+    }
+    
+    /* 新增：U位显示优化 */
+    .u-slot-container {
+        position: relative;
+        margin-top: 10px;
+    }
+    
+    .u-slot-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .u-slot-column {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    
+    .u-slot-item {
+        padding: 6px 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 35px;
+    }
+    
+    .u-slot-item.occupied {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+    }
+    
+    .u-slot-item.available {
+        background-color: #f8f9fa;
+    }
+    
+    .device-type-badge {
+        font-size: 10px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        margin-right: 5px;
+    }
+    
+    /* 新增：折叠/展开功能 */
+    .expand-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 10px;
+        padding: 5px;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        color: #6c757d;
+        transition: all 0.2s;
+    }
+    
+    .expand-toggle:hover {
+        background: #e9ecef;
+    }
+    
+    .expand-toggle i {
+        margin-right: 5px;
+        transition: transform 0.3s;
+    }
+    
+    .expand-toggle.collapsed i {
+        transform: rotate(180deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作按钮 -->
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-2"><i class="fas fa-project-diagram me-2"></i>机柜视图</h1>
+                    <p class="text-muted">可视化查看所有机柜的设备布局和U位使用情况</p>
+                </div>
+                <div class="btn-group">
+                    <a href="{{ url_for('cabinet.cabinet_list') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-list me-1"></i> 列表视图
+                    </a>
+                    <a href="{{ url_for('cabinet.export_rack_view_excel') }}?location_id={{ selected_location_id }}&search={{ search_query }}" 
+                       class="btn btn-success" target="_blank">
+                        <i class="fas fa-file-excel me-1"></i> 导出Excel
+                    </a>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assignDeviceModal">
+                        <i class="fas fa-plus me-1"></i> 分配设备
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+        <form method="get" action="{{ url_for('cabinet.cabinet_rack_view') }}" class="row g-3">
+            <div class="col-md-4">
+                <label for="location_id" class="form-label">按位置筛选</label>
+                <select class="form-select" id="location_id" name="location_id">
+                    <option value="">所有位置</option>
+                    {% for location in locations %}
+                    <option value="{{ location.id }}" {% if selected_location_id == location.id %}selected{% endif %}>
+                        {{ location.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="search" class="form-label">搜索机柜</label>
+                <input type="text" class="form-control" id="search" name="search" 
+                       placeholder="输入机柜名称..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search me-1"></i> 筛选
+                    </button>
+                    <a href="{{ url_for('cabinet.cabinet_rack_view') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-redo me-1"></i> 重置
+                    </a>
+                </div>
+            </div>
+        </form>
+        
+        <!-- 视图模式切换 -->
+        <!-- 在筛选栏中添加导出选项 -->
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="view-mode-switcher">
+                        <button class="view-mode-btn active" data-view-mode="detailed">
+                            <i class="fas fa-list me-1"></i> 详细视图
+                        </button>
+                        <button class="view-mode-btn" data-view-mode="compact">
+                            <i class="fas fa-th me-1"></i> 紧凑视图
+                        </button>
+                    </div>
+                    <div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-success dropdown-toggle" 
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-file-export me-1"></i> 导出
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" 
+                                       href="{{ url_for('cabinet.export_rack_view_excel') }}?location_id={{ selected_location_id }}&search={{ search_query }}">
+                                        <i class="fas fa-file-excel text-success me-2"></i> 导出Excel (当前筛选)
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" 
+                                       href="{{ url_for('cabinet.export_rack_view_excel') }}">
+                                        <i class="fas fa-file-excel text-success me-2"></i> 导出全部机柜
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="#" id="exportWithStats">
+                                        <i class="fas fa-chart-pie text-primary me-2"></i> 导出含统计报表
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not cabinets %}
+    <!-- 空状态 -->
+    <div class="rack-empty-state">
+        <i class="fas fa-server fa-3x mb-3"></i>
+        <h4>暂无机柜数据</h4>
+        <p class="text-muted mb-4">当前没有可显示的机柜信息，请先添加机柜</p>
+        <a href="{{ url_for('cabinet.cabinet_add') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i> 添加机柜
+        </a>
+    </div>
+    {% else %}
+    
+    <!-- 机柜网格 -->
+    <div class="rack-grid">
+        {% for cabinet in cabinets %}
+        <div class="rack-card">
+            <!-- 机柜头部 -->
+            <div class="cabinet-header">
+                <div class="cabinet-info">
+                    <h5 class="mb-1">{{ cabinet.name }}</h5>
+                    <small>
+                        <i class="fas fa-map-marker-alt me-1"></i>{{ cabinet.location }}
+                    </small>
+                </div>
+                <div class="cabinet-stats">
+                    <div class="cabinet-stat-item">
+                        <div class="cabinet-stat-label">总U位</div>
+                        <div class="cabinet-stat-value">{{ cabinet.total_u }}</div>
+                    </div>
+                    <div class="cabinet-stat-item">
+                        <div class="cabinet-stat-label">已用</div>
+                        <div class="cabinet-stat-value">{{ cabinet.used_u }}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 使用率进度条 -->
+            <div class="p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small text-muted">U位使用率</span>
+                    <span class="small fw-bold text-{{ 'success' if cabinet.usage_percent < 70 else 'warning' if cabinet.usage_percent < 90 else 'danger' }}">
+                        {{ cabinet.usage_percent }}%
+                    </span>
+                </div>
+                <div class="usage-progress">
+                    <div class="usage-bar bg-{{ 'success' if cabinet.usage_percent < 70 else 'warning' if cabinet.usage_percent < 90 else 'danger' }}" 
+                         style="width: {{ cabinet.usage_percent }}%"></div>
+                </div>
+            </div>
+            
+            <!-- 详细视图模式 -->
+            <div class="view-mode-content detailed-mode">
+                <!-- 机柜U位 - 详细视图 -->
+                <div class="cabinet-rack">
+                    {% for u in range(1, cabinet.total_u + 1) %}
+                        {% set slot = cabinet.u_slots.get(u) %}
+                        <div class="cabinet-slot {% if slot %}occupied{% else %}available{% endif %}"
+                             data-bs-toggle="tooltip" 
+                             title="{% if slot %}设备: {{ slot.device_name }}{% else %}U位 {{ u }}: 可用{% endif %}">
+                            <div class="d-flex justify-content-between align-items-center w-100">
+                                <div class="u-number">
+                                    <span class="badge bg-secondary">U{{ u }}</span>
+                                </div>
+                                {% if slot %}
+                                <div class="device-info">
+                                    <div class="device-details">
+                                        <div class="device-name text-truncate">
+                                            {% if slot.device_type == 'router' %}
+                                            <i class="fas fa-router device-type-icon"></i>
+                                            {% elif slot.device_type == 'switch' %}
+                                            <i class="fas fa-network-wired device-type-icon"></i>
+                                            {% elif slot.device_type == 'firewall' %}
+                                            <i class="fas fa-shield-alt device-type-icon"></i>
+                                            {% elif slot.device_type == 'server' %}
+                                            <i class="fas fa-server device-type-icon"></i>
+                                            {% else %}
+                                            <i class="fas fa-cube device-type-icon"></i>
+                                            {% endif %}
+                                            {{ slot.device_name }}
+                                        </div>
+                                        <div class="device-meta">
+                                            {% if slot.height > 1 %}
+                                            <span class="badge bg-info">{{ slot.height }}U</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span class="device-status-badge bg-{{ 'success' if slot.status == 'online' else 'danger' if slot.status == 'offline' else 'warning' }}">
+                                            {{ slot.status }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="text-muted small">可用</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- 紧凑视图模式 -->
+            <div class="view-mode-content compact-mode d-none p-3">
+                <div class="compact-u-view">
+                    {% for u in range(1, cabinet.total_u + 1) %}
+                        {% set slot = cabinet.u_slots.get(u) %}
+                        <div class="compact-u-slot {% if slot %}occupied{% else %}available{% endif %}"
+                             data-bs-toggle="tooltip" 
+                             title="{% if slot %}设备: {{ slot.device_name }}{% else %}U位 {{ u }}: 可用{% endif %}">
+                            <div class="compact-u-number">U{{ u }}</div>
+                            {% if slot %}
+                            <div class="compact-u-status">
+                                {% if slot.device_type == 'router' %}
+                                <i class="fas fa-router"></i>
+                                {% elif slot.device_type == 'switch' %}
+                                <i class="fas fa-network-wired"></i>
+                                {% elif slot.device_type == 'firewall' %}
+                                <i class="fas fa-shield-alt"></i>
+                                {% elif slot.device_type == 'server' %}
+                                <i class="fas fa-server"></i>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- 机柜操作按钮 -->
+            <div class="rack-actions">
+                <a href="{{ url_for('cabinet.cabinet_rack_editor', id=cabinet.id) }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-th me-1"></i> 机柜视图
+                </a>
+                <a href="{{ url_for('cabinet.cabinet_detail', id=cabinet.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-info-circle me-1"></i> 详情
+                </a>
+                <a href="{{ url_for('cabinet.cabinet_visual', id=cabinet.id) }}" class="btn btn-sm btn-outline-info">
+                    <i class="fas fa-eye me-1"></i> 可视化
+                </a>
+                <button class="btn btn-sm btn-outline-success assign-device-btn" 
+                        data-cabinet-id="{{ cabinet.id }}"
+                        data-cabinet-name="{{ cabinet.name }}">
+                    <i class="fas fa-plus me-1"></i> 分配设备
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- 统计信息 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">机柜统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h3 class="text-primary">{{ cabinets|length }}</h3>
+                                    <p class="text-muted mb-0">机柜总数</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h3 class="text-success">{{ cabinets|map(attribute='used_u')|sum }}</h3>
+                                    <p class="text-muted mb-0">已使用U位</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h3 class="text-info">{{ cabinets|map(attribute='available_u')|sum }}</h3>
+                                    <p class="text-muted mb-0">可用U位</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h3 class="text-warning">
+                                        {{ (cabinets|map(attribute='usage_percent')|sum / cabinets|length)|round(1) if cabinets else 0 }}%
+                                    </h3>
+                                    <p class="text-muted mb-0">平均使用率</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 分配设备模态框 -->
+<div class="modal fade" id="assignDeviceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">分配设备到机柜</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="assignCabinetSelect" class="form-label">选择机柜</label>
+                            <select class="form-select" id="assignCabinetSelect">
+                                <option value="">请选择机柜</option>
+                                {% for cabinet in cabinets %}
+                                <option value="{{ cabinet.id }}">{{ cabinet.name }} ({{ cabinet.location }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="assignDeviceSelect" class="form-label">选择设备</label>
+                            <select class="form-select" id="assignDeviceSelect">
+                                <option value="">请选择设备</option>
+                                <!-- 设备将通过AJAX加载 -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="assignPositionU" class="form-label">起始U位</label>
+                            <input type="number" class="form-control" id="assignPositionU" min="1" value="1">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="assignHeightU" class="form-label">设备高度(U)</label>
+                            <input type="number" class="form-control" id="assignHeightU" min="1" value="1">
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    选择机柜后，系统会自动显示该机柜的U位占用情况。请确保选择的U位是空闲的。
+                </div>
+                <div id="cabinetUPreview" class="d-none">
+                    <h6 class="mb-3">机柜U位预览</h6>
+                    <div id="uSlotsPreview" class="d-flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmAssignBtn">
+                    <i class="fas fa-check me-1"></i> 确认分配
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化工具提示
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // 视图模式切换
+    document.querySelectorAll('.view-mode-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const viewMode = this.dataset.viewMode;
+            document.querySelectorAll('.view-mode-btn').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            document.querySelectorAll('.rack-card').forEach(card => {
+                const detailed = card.querySelector('.detailed-mode');
+                const compact = card.querySelector('.compact-mode');
+                if (viewMode === 'detailed') {
+                    detailed.classList.remove('d-none');
+                    compact.classList.add('d-none');
+                } else {
+                    detailed.classList.add('d-none');
+                    compact.classList.remove('d-none');
+                }
+            });
+        });
+    });
+    
+        // 在 scripts 中添加导出功能
+        // 带统计报表的导出（通过JS触发带额外参数）
+        document.getElementById('exportWithStats')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            const url = `{{ url_for('cabinet.export_rack_view_excel') }}?location_id={{ selected_location_id }}&search={{ search_query }}&with_stats=true`;
+            window.location.href = url;
+        });
+
+        // 导出当前视图（保持筛选条件）
+        document.querySelectorAll('.export-current-view').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const url = this.href;
+                // 显示加载状态
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> 导出中...';
+                // 通过创建隐藏iframe下载
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = url;
+                document.body.appendChild(iframe);
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    document.body.removeChild(iframe);
+                }, 3000);
+            });
+        });
+
+    // 显示提示消息
+    function showToast(type, message) {
+        const toastId = 'toast-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0 position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 1060;" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+        toast.show();
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+    
+    // 存储当前机柜的U位数据（用于高亮）
+    let currentUSlots = [];
+    
+    // 加载可用设备（传入 cabinetId）
+    async function loadAvailableDevices(cabinetId) {
+        if (!cabinetId) return;
+        const select = document.getElementById('assignDeviceSelect');
+        select.innerHTML = '<option value="">加载中...</option>';
+        try {
+            const resp = await fetch(`/cabinet/api/devices/available?cabinet_id=${cabinetId}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.message || '接口返回失败');
+            select.innerHTML = '<option value="">请选择设备</option>';
+            if (data.devices && data.devices.length > 0) {
+                data.devices.forEach(dev => {
+                    const option = document.createElement('option');
+                    option.value = dev.id;
+                    option.textContent = `${dev.name} (${dev.management_ip || '无IP'})`;
+                    select.appendChild(option);
+                });
+            } else {
+                const opt = document.createElement('option');
+                opt.textContent = '没有可用的设备';
+                opt.disabled = true;
+                select.appendChild(opt);
+            }
+        } catch (err) {
+            console.error('加载设备失败:', err);
+            select.innerHTML = '<option value="">加载失败，请检查网络或联系管理员</option>';
+            showToast('danger', `加载设备失败: ${err.message}`);
+        }
+    }
+    
+    // 加载机柜U位信息
+    async function loadCabinetUSlots(cabinetId) {
+        try {
+            const resp = await fetch(`/cabinet/api/cabinets/${cabinetId}/rack-detail`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.message || '接口返回失败');
+            currentUSlots = data.u_slots;
+            renderUSlotPreview(currentUSlots);
+            document.getElementById('cabinetUPreview').classList.remove('d-none');
+        } catch (err) {
+            console.error('加载U位信息失败:', err);
+            showToast('danger', `加载机柜U位信息失败: ${err.message}`);
+            document.getElementById('cabinetUPreview').classList.add('d-none');
+        }
+    }
+    
+    // 渲染U位预览小方块
+    function renderUSlotPreview(uSlots) {
+        const container = document.getElementById('uSlotsPreview');
+        container.innerHTML = '';
+        uSlots.forEach(slot => {
+            const div = document.createElement('div');
+            div.className = `slot-preview ${slot.status}`;
+            div.setAttribute('data-position', slot.position);
+            div.style.cssText = `
+                width: 40px; height: 30px; border: 1px solid #ddd;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 12px; cursor: pointer; margin: 2px;
+                background-color: ${slot.status === 'occupied' ? '#28a745' : '#f8f9fa'};
+                color: ${slot.status === 'occupied' ? 'white' : '#6c757d'};
+            `;
+            div.textContent = slot.position;
+            div.title = slot.device ? `设备: ${slot.device.device_name}` : `U位 ${slot.position}: 可用`;
+            if (slot.status === 'available') {
+                div.addEventListener('click', () => {
+                    document.getElementById('assignPositionU').value = slot.position;
+                    updateUSlotPreview();
+                });
+            }
+            container.appendChild(div);
+        });
+        updateUSlotPreview();
+    }
+    
+    // 更新U位高亮（根据起始U位和高度）
+    function updateUSlotPreview() {
+        const startU = parseInt(document.getElementById('assignPositionU').value) || 1;
+        const heightU = parseInt(document.getElementById('assignHeightU').value) || 1;
+        const slots = document.querySelectorAll('#uSlotsPreview .slot-preview');
+        slots.forEach(slot => {
+            const pos = parseInt(slot.getAttribute('data-position'));
+            const inRange = (pos >= startU && pos < startU + heightU);
+            const slotData = currentUSlots.find(s => s.position === pos);
+            if (inRange) {
+                if (slotData && slotData.status === 'available') {
+                    slot.style.backgroundColor = '#007bff';
+                    slot.style.color = 'white';
+                } else {
+                    slot.style.backgroundColor = '#dc3545';
+                    slot.style.color = 'white';
+                }
+            } else {
+                if (slotData && slotData.status === 'occupied') {
+                    slot.style.backgroundColor = '#28a745';
+                    slot.style.color = 'white';
+                } else {
+                    slot.style.backgroundColor = '#f8f9fa';
+                    slot.style.color = '#6c757d';
+                }
+            }
+        });
+    }
+    
+    // 打开分配模态框
+    document.querySelectorAll('.assign-device-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const cabinetId = this.dataset.cabinetId;
+            document.getElementById('assignCabinetSelect').value = cabinetId;
+            // 加载设备和U位信息
+            await loadAvailableDevices(cabinetId);
+            await loadCabinetUSlots(cabinetId);
+            const modal = new bootstrap.Modal(document.getElementById('assignDeviceModal'));
+            modal.show();
+        });
+    });
+    
+    // 机柜下拉选择变化
+    document.getElementById('assignCabinetSelect').addEventListener('change', async function() {
+        if (this.value) {
+            await loadAvailableDevices(this.value);
+            await loadCabinetUSlots(this.value);
+        } else {
+            document.getElementById('cabinetUPreview').classList.add('d-none');
+            document.getElementById('assignDeviceSelect').innerHTML = '<option value="">请选择设备</option>';
+        }
+    });
+    
+    // 起始U位和高度变化时更新预览
+    document.getElementById('assignPositionU').addEventListener('input', updateUSlotPreview);
+    document.getElementById('assignHeightU').addEventListener('input', updateUSlotPreview);
+    
+    // 确认分配设备
+    document.getElementById('confirmAssignBtn').addEventListener('click', async function() {
+        const cabinetId = document.getElementById('assignCabinetSelect').value;
+        const deviceId = document.getElementById('assignDeviceSelect').value;
+        const positionU = document.getElementById('assignPositionU').value;
+        const heightU = document.getElementById('assignHeightU').value;
+        
+        if (!cabinetId || !deviceId || !positionU || !heightU) {
+            showToast('warning', '请填写完整的分配信息');
+            return;
+        }
+        
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分配中...';
+        
+        try {
+            const resp = await fetch(`/cabinet/api/cabinets/${cabinetId}/assign-device`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device_id: parseInt(deviceId),
+                    position_u: parseInt(positionU),
+                    height_u: parseInt(heightU)
+                })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('success', data.message);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('danger', data.message);
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        } catch (err) {
+            console.error('分配请求失败:', err);
+            showToast('danger', '网络错误，请重试');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    });
+    
+    // 自动调整机柜高度
+    function adjustRackHeights() {
+        document.querySelectorAll('.cabinet-rack').forEach(rack => {
+            const slots = rack.querySelectorAll('.cabinet-slot');
+            if (slots.length > 0) {
+                rack.style.minHeight = `${slots.length * 40}px`;
+            }
+        });
+    }
+    setTimeout(adjustRackHeights, 100);
+});
+</script>
+{% endblock %}

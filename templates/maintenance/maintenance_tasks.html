@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block title %}维护任务管理 - IT资产管理系统{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* 自定义样式 */
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .status-scheduled {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .status-in_progress {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .status-completed {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .status-cancelled {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .priority-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .priority-low {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .priority-medium {
+        background-color: #0dcaf0;
+        color: #212529;
+    }
+    
+    .priority-high {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .priority-critical {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .maintenance-type-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .type-preventive {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .type-corrective {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .type-emergency {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .type-upgrade {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    .task-card {
+        border-left: 4px solid #dee2e6;
+        transition: all 0.2s;
+    }
+    
+    .task-card:hover {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        transform: translateY(-1px);
+    }
+    
+    .task-overdue {
+        border-left-color: #dc3545;
+        background-color: #fff5f5;
+    }
+    
+    .task-in-progress {
+        border-left-color: #0dcaf0;
+        background-color: #f5fdff;
+    }
+    
+    .task-completed {
+        border-left-color: #198754;
+        background-color: #f5fff9;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+    }
+    
+    .stat-card {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+    
+    .stat-card:hover {
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: bold;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .duration-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        background-color: #e9ecef;
+        color: #495057;
+    }
+    
+    .device-count-badge {
+        font-size: 0.75rem;
+        padding: 0.125rem 0.375rem;
+        border-radius: 50%;
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .approval-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+    
+    .approval-required {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .approval-approved {
+        background-color: #198754;
+        color: white;
+    }
+    
+    .approval-pending {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .timeline-item:before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.5rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #dee2e6;
+    }
+    
+    .timeline-item.completed:before {
+        background-color: #198754;
+    }
+    
+    .timeline-item.in-progress:before {
+        background-color: #0dcaf0;
+    }
+    
+    .timeline-item.cancelled:before {
+        background-color: #dc3545;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题和操作按钮 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">维护任务管理</h1>
+            <p class="text-muted mb-0">管理设备维护任务，包括预防性维护、修复性维护等</p>
+        </div>
+        <div class="action-buttons">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal">
+                <i class="fas fa-plus me-2"></i>创建新任务
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+        </div>
+    </div>
+    
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">总任务数</h6>
+                        <div class="stat-number">{{ tasks|length }}</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-tools text-primary" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">活动任务</h6>
+                        <div class="stat-number text-info">{{ active_tasks }}</div>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-clock text-info" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">今日任务</h6>
+                        <div class="stat-number text-warning" id="todayTasksCount">0</div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-calendar-day text-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">需要审批</h6>
+                        <div class="stat-number text-danger" id="approvalTasksCount">0</div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 p-3 rounded-circle">
+                        <i class="fas fa-check-circle text-danger" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 筛选和搜索区域 -->
+    <div class="filter-section mb-4">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="statusFilter" class="form-label">状态筛选</label>
+                <select class="form-select" id="statusFilter">
+                    <option value="">全部状态</option>
+                    <option value="scheduled">已计划</option>
+                    <option value="in_progress">进行中</option>
+                    <option value="completed">已完成</option>
+                    <option value="cancelled">已取消</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="typeFilter" class="form-label">维护类型</label>
+                <select class="form-select" id="typeFilter">
+                    <option value="">全部类型</option>
+                    <option value="preventive">预防性维护</option>
+                    <option value="corrective">修复性维护</option>
+                    <option value="emergency">紧急维护</option>
+                    <option value="upgrade">升级维护</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="dateFilter" class="form-label">计划日期</label>
+                <select class="form-select" id="dateFilter">
+                    <option value="">全部日期</option>
+                    <option value="today">今日</option>
+                    <option value="week">本周</option>
+                    <option value="month">本月</option>
+                    <option value="overdue">已逾期</option>
+                    <option value="future">未来计划</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="searchInput" class="form-label">搜索任务</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索任务名称、描述...">
+                    <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 任务列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">维护任务列表</h5>
+            <div class="text-muted small">
+                共 <span id="taskCount">{{ tasks|length }}</span> 个任务
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if tasks %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>任务名称</th>
+                            <th>维护类型</th>
+                            <th>设备数量</th>
+                            <th>计划日期</th>
+                            <th>状态</th>
+                            <th>优先级</th>
+                            <th>负责人</th>
+                            <th>审批状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+
+{% for task in tasks %}
+    {% set is_overdue = task.is_overdue %}
+    {% set device_count = task.device_count %}
+    
+    <tr class="{% if is_overdue %}table-danger{% elif task.status == 'completed' %}table-success{% elif task.status == 'in_progress' %}table-info{% endif %}">
+        <td>{{ loop.index }}</td>
+        <td>
+            <div class="fw-semibold">{{ task.name }}</div>
+            {% if task.description %}
+            <div class="text-muted small text-truncate" style="max-width: 200px;">
+                {{ task.description }}
+            </div>
+            {% endif %}
+        </td>
+        <td>
+            <!-- 维护类型徽章 -->
+            {% set type_class = {
+                'preventive': 'type-preventive',
+                'corrective': 'type-corrective',
+                'emergency': 'type-emergency',
+                'upgrade': 'type-upgrade'
+            } %}
+            <span class="maintenance-type-badge {{ type_class.get(task.maintenance_type, 'type-preventive') }}">
+                {% if task.maintenance_type == 'preventive' %}
+                    预防性维护
+                {% elif task.maintenance_type == 'corrective' %}
+                    修复性维护
+                {% elif task.maintenance_type == 'emergency' %}
+                    紧急维护
+                {% elif task.maintenance_type == 'upgrade' %}
+                    升级维护
+                {% else %}
+                    {{ task.maintenance_type|default('未指定') }}
+                {% endif %}
+            </span>
+        </td>
+        <td>
+            {% if device_count > 0 %}
+            <span class="device-count-badge">{{ device_count }}</span>
+            <span class="text-muted small ms-1">台设备</span>
+            {% else %}
+            <span class="text-muted">未指定设备</span>
+            {% endif %}
+        </td>
+    
+
+                        <td>
+                                <div class="fw-medium">{{ task.scheduled_date.strftime('%Y-%m-%d') if task.scheduled_date else '未设置' }}</div>
+                                <div class="text-muted small">
+                                    {% if task.scheduled_date %}
+                                        {{ task.scheduled_date.strftime('%H:%M') }}
+                                        {% if task.estimated_duration %}
+                                        <div class="duration-badge mt-1">预计: {{ task.estimated_duration }}分钟</div>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% set status_class = {
+                                    'scheduled': 'status-scheduled',
+                                    'in_progress': 'status-in_progress',
+                                    'completed': 'status-completed',
+                                    'cancelled': 'status-cancelled'
+                                } %}
+                                <span class="status-badge {{ status_class.get(task.status, 'status-scheduled') }} {% if is_overdue %}status-overdue{% endif %}">
+                                    {% if is_overdue %}
+                                        已逾期
+                                    {% else %}
+                                        {{ task.status|replace('_', ' ')|title }}
+                                    {% endif %}
+                                </span>
+                                {% if task.completed_at %}
+                                <div class="text-muted small mt-1">
+                                    {{ task.completed_at.strftime('%Y-%m-%d') }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set priority_class = {
+                                    'low': 'priority-low',
+                                    'medium': 'priority-medium',
+                                    'high': 'priority-high',
+                                    'critical': 'priority-critical'
+                                } %}
+                                <span class="priority-badge {{ priority_class.get(task.priority, 'priority-medium') }}">
+                                    {% if task.priority == 'low' %}
+                                        低
+                                    {% elif task.priority == 'medium' %}
+                                        中
+                                    {% elif task.priority == 'high' %}
+                                        高
+                                    {% elif task.priority == 'critical' %}
+                                        紧急
+                                    {% else %}
+                                        {{ task.priority|default('中') }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                {% if task.assigned_to_user %}
+                                {{ task.assigned_to_user.name|default(task.assigned_to_user.username) }}
+                                {% else %}
+                                <span class="text-muted">未分配</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.approval_required %}
+                                    {% if task.approved_by %}
+                                    <span class="approval-badge approval-approved">
+                                        <i class="fas fa-check me-1"></i>已批准
+                                    </span>
+                                    <div class="text-muted small mt-1">
+                                        {{ task.approved_at.strftime('%m-%d') if task.approved_at else '' }}
+                                    </div>
+                                    {% else %}
+                                    <span class="approval-badge approval-pending">
+                                        <i class="fas fa-clock me-1"></i>待批准
+                                    </span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">无需审批</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-primary" data-task-id="{{ task.id }}" onclick="viewTask({{ task.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% if task.status != 'completed' and task.status != 'cancelled' %}
+                                    <button type="button" class="btn btn-outline-secondary" data-task-id="{{ task.id }}" onclick="editTask({{ task.id }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-outline-danger" data-task-id="{{ task.id }}" onclick="deleteTask({{ task.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-tools"></i>
+                </div>
+                <h4 class="mb-3">暂无维护任务</h4>
+                <p class="text-muted mb-4">您还没有创建任何维护任务，点击右上角按钮创建第一个任务</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal">
+                    <i class="fas fa-plus me-2"></i>创建维护任务
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% if tasks %}
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                显示 {{ tasks|length }} 个任务中的 {{ tasks|length }} 个
+            </div>
+            <nav aria-label="任务分页">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item disabled"><a class="page-link" href="#">下一页</a></li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 创建任务模态框 -->
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-labelledby="createTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTaskModalLabel">创建维护任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createTaskForm" method="POST" action="{{ url_for('maintenance.create_maintenance_task') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="taskName" class="form-label">任务名称 *</label>
+                            <input type="text" class="form-control" id="taskName" name="name" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="taskType" class="form-label">维护类型 *</label>
+                            <select class="form-select" id="taskType" name="maintenance_type" required>
+                                <option value="preventive">预防性维护</option>
+                                <option value="corrective">修复性维护</option>
+                                <option value="emergency">紧急维护</option>
+                                <option value="upgrade">升级维护</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="taskDescription" class="form-label">任务描述</label>
+                        <textarea class="form-control" id="taskDescription" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="taskDevices" class="form-label">关联设备</label>
+                            <select class="form-select" id="taskDevices" name="device_ids" multiple>
+                                <!-- 设备选项将通过JavaScript动态加载 -->
+                            </select>
+                            <div class="form-text">按住Ctrl键可多选设备</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="taskAssignee" class="form-label">负责人</label>
+                            <select class="form-select" id="taskAssignee" name="assigned_to">
+                                <option value="">选择负责人...</option>
+                                <!-- 用户选项将通过JavaScript动态加载 -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="taskScheduledDate" class="form-label">计划日期 *</label>
+                            <input type="datetime-local" class="form-control" id="taskScheduledDate" name="scheduled_date" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="taskEstimatedDuration" class="form-label">预计持续时间 (分钟)</label>
+                            <input type="number" class="form-control" id="taskEstimatedDuration" name="estimated_duration" min="1" max="1440">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="taskPriority" class="form-label">优先级</label>
+                            <select class="form-select" id="taskPriority" name="priority">
+                                <option value="low">低</option>
+                                <option value="medium" selected>中</option>
+                                <option value="high">高</option>
+                                <option value="critical">紧急</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="taskStatus" class="form-label">初始状态</label>
+                            <select class="form-select" id="taskStatus" name="status">
+                                <option value="scheduled" selected>已计划</option>
+                                <option value="in_progress">进行中</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="taskApprovalRequired" name="approval_required">
+                                <label class="form-check-label" for="taskApprovalRequired">
+                                    需要审批
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="taskNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="taskNotes" name="notes" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建任务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 任务详情模态框 -->
+<div class="modal fade" id="taskDetailModal" tabindex="-1" aria-labelledby="taskDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskDetailModalLabel">维护任务详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="taskDetailContent">
+                <!-- 任务详情将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="markAsCompleteBtn" style="display: none;">标记为完成</button>
+                <button type="button" class="btn btn-warning" id="startTaskBtn" style="display: none;">开始任务</button>
+                <button type="button" class="btn btn-success" id="approveTaskBtn" style="display: none;">批准任务</button>
+                <button type="button" class="btn btn-danger" id="cancelTaskBtn" style="display: none;">取消任务</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑任务模态框 -->
+<div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editTaskModalLabel">编辑维护任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editTaskForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body" id="editTaskContent">
+                    <!-- 编辑表单将通过JavaScript动态加载 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 时间线详情模态框 -->
+<div class="modal fade" id="timelineModal" tabindex="-1" aria-labelledby="timelineModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="timelineModalLabel">任务时间线</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="timelineContent">
+                <!-- 时间线内容将通过JavaScript动态加载 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // 设置当前日期时间为计划日期的最小值
+    document.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 16);
+        const scheduledDateInput = document.getElementById('taskScheduledDate');
+        if (scheduledDateInput) {
+            scheduledDateInput.min = todayStr;
+            scheduledDateInput.value = todayStr;
+        }
+        
+        // 添加刷新按钮事件
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 初始化筛选功能
+        initializeFilters();
+        
+        // 统计今日任务和需要审批的任务
+        countTasks();
+        
+        // 加载设备和用户数据
+        loadDevices();
+        loadUsers();
+        
+        // 设置创建表单提交事件
+        const createForm = document.getElementById('createTaskForm');
+        if (createForm) {
+            createForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                createMaintenanceTask();
+            });
+        }
+    });
+    
+    // 初始化筛选功能
+    function initializeFilters() {
+        const statusFilter = document.getElementById('statusFilter');
+        const typeFilter = document.getElementById('typeFilter');
+        const dateFilter = document.getElementById('dateFilter');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        
+        // 状态筛选
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterTasks);
+        }
+        
+        // 类型筛选
+        if (typeFilter) {
+            typeFilter.addEventListener('change', filterTasks);
+        }
+        
+        // 日期筛选
+        if (dateFilter) {
+            dateFilter.addEventListener('change', filterTasks);
+        }
+        
+        // 搜索功能
+        if (searchBtn) {
+            searchBtn.addEventListener('click', filterTasks);
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    filterTasks();
+                }
+            });
+        }
+    }
+    
+    // 筛选任务
+    function filterTasks() {
+        const statusFilter = document.getElementById('statusFilter').value;
+        const typeFilter = document.getElementById('typeFilter').value;
+        const dateFilter = document.getElementById('dateFilter').value;
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        rows.forEach(row => {
+            let showRow = true;
+            
+            // 状态筛选
+            if (statusFilter) {
+                const statusBadge = row.querySelector('.status-badge');
+                let status = '';
+                
+                if (statusBadge.textContent.includes('逾期')) {
+                    status = 'overdue';
+                } else if (statusBadge.textContent.includes('已计划')) {
+                    status = 'scheduled';
+                } else if (statusBadge.textContent.includes('进行中')) {
+                    status = 'in_progress';
+                } else if (statusBadge.textContent.includes('已完成')) {
+                    status = 'completed';
+                } else if (statusBadge.textContent.includes('已取消')) {
+                    status = 'cancelled';
+                }
+                
+                if (statusFilter !== status) {
+                    showRow = false;
+                }
+            }
+            
+            // 类型筛选
+            if (typeFilter && showRow) {
+                const typeBadge = row.querySelector('.maintenance-type-badge');
+                let type = '';
+                
+                if (typeBadge.textContent.includes('预防性')) {
+                    type = 'preventive';
+                } else if (typeBadge.textContent.includes('修复性')) {
+                    type = 'corrective';
+                } else if (typeBadge.textContent.includes('紧急')) {
+                    type = 'emergency';
+                } else if (typeBadge.textContent.includes('升级')) {
+                    type = 'upgrade';
+                }
+                
+                if (typeFilter !== type) {
+                    showRow = false;
+                }
+            }
+            
+            // 日期筛选
+            if (dateFilter && showRow) {
+                const dateCell = row.cells[4];
+                const dateText = dateCell.querySelector('.fw-medium').textContent;
+                
+                if (dateText !== '未设置') {
+                    const taskDate = new Date(dateText);
+                    taskDate.setHours(0, 0, 0, 0);
+                    
+                    if (dateFilter === 'today') {
+                        if (taskDate.getTime() !== today.getTime()) {
+                            showRow = false;
+                        }
+                    } else if (dateFilter === 'week') {
+                        const endOfWeek = new Date(today);
+                        endOfWeek.setDate(today.getDate() + 7);
+                        
+                        if (taskDate < today || taskDate > endOfWeek) {
+                            showRow = false;
+                        }
+                    } else if (dateFilter === 'month') {
+                        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                        
+                        if (taskDate < today || taskDate > endOfMonth) {
+                            showRow = false;
+                        }
+                    } else if (dateFilter === 'overdue') {
+                        if (!row.classList.contains('table-danger')) {
+                            showRow = false;
+                        }
+                    } else if (dateFilter === 'future') {
+                        if (taskDate <= today) {
+                            showRow = false;
+                        }
+                    }
+                } else if (dateFilter !== 'future') {
+                    // 未设置日期的任务，除非筛选未来任务，否则隐藏
+                    showRow = false;
+                }
+            }
+            
+            // 搜索筛选
+            if (searchQuery && showRow) {
+                const taskName = row.cells[1].querySelector('.fw-semibold').textContent.toLowerCase();
+                const taskDesc = row.cells[1].querySelector('.small') ? row.cells[1].querySelector('.small').textContent.toLowerCase() : '';
+                
+                if (!taskName.includes(searchQuery) && !taskDesc.includes(searchQuery)) {
+                    showRow = false;
+                }
+            }
+            
+            // 显示/隐藏行
+            row.style.display = showRow ? '' : 'none';
+            if (showRow) visibleCount++;
+        });
+        
+        // 更新任务计数
+        document.getElementById('taskCount').textContent = visibleCount;
+        
+        // 如果没有显示任何任务，显示空状态
+        const tbody = document.querySelector('tbody');
+        const emptyState = document.querySelector('.empty-state');
+        
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!emptyState) {
+                const newEmptyState = document.createElement('div');
+                newEmptyState.className = 'empty-state';
+                newEmptyState.innerHTML = `
+                    <div class="empty-state-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h4 class="mb-3">未找到匹配的任务</h4>
+                    <p class="text-muted mb-4">请尝试其他筛选条件或搜索关键词</p>
+                    <button type="button" class="btn btn-outline-secondary" id="resetFiltersBtn">
+                        重置筛选条件
+                    </button>
+                `;
+                tbody.parentNode.insertBefore(newEmptyState, tbody);
+                tbody.style.display = 'none';
+                
+                document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+            }
+        } else if (emptyState && emptyState.id !== 'emptyState') {
+            emptyState.remove();
+            tbody.style.display = '';
+        }
+    }
+    
+    // 重置筛选条件
+    function resetFilters() {
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('typeFilter').value = '';
+        document.getElementById('dateFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        filterTasks();
+    }
+    
+    // 统计任务数量
+    function countTasks() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let todayCount = 0;
+        let approvalCount = 0;
+        
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const dateCell = row.cells[4];
+            const dateText = dateCell.querySelector('.fw-medium').textContent;
+            const approvalBadge = row.cells[8].querySelector('.approval-badge');
+            
+            // 统计今日任务
+            if (dateText !== '未设置') {
+                const taskDate = new Date(dateText);
+                taskDate.setHours(0, 0, 0, 0);
+                
+                if (taskDate.getTime() === today.getTime()) {
+                    todayCount++;
+                }
+            }
+            
+            // 统计需要审批的任务
+            if (approvalBadge && approvalBadge.textContent.includes('待批准')) {
+                approvalCount++;
+            }
+        });
+        
+        // 更新统计显示
+        document.getElementById('todayTasksCount').textContent = todayCount;
+        document.getElementById('approvalTasksCount').textContent = approvalCount;
+    }
+    
+    // 查看任务详情
+    function viewTask(taskId) {
+        // 从API获取任务详情
+        fetch(`/api/maintenance/maintenance_tasks/${taskId}`)
+            .then(response => response.json())
+            .then(task => {
+                if (!task) {
+                    alert('任务不存在');
+                    return;
+                }
+                
+                // 构建详情内容
+                let statusBadge = '';
+                if (task.status === 'scheduled') {
+                    statusBadge = '<span class="badge bg-secondary">已计划</span>';
+                } else if (task.status === 'in_progress') {
+                    statusBadge = '<span class="badge bg-info">进行中</span>';
+                } else if (task.status === 'completed') {
+                    statusBadge = '<span class="badge bg-success">已完成</span>';
+                } else if (task.status === 'cancelled') {
+                    statusBadge = '<span class="badge bg-danger">已取消</span>';
+                }
+                
+                let priorityBadge = '';
+                if (task.priority === 'low') {
+                    priorityBadge = '<span class="badge bg-secondary">低</span>';
+                } else if (task.priority === 'medium') {
+                    priorityBadge = '<span class="badge bg-primary">中</span>';
+                } else if (task.priority === 'high') {
+                    priorityBadge = '<span class="badge bg-warning">高</span>';
+                } else if (task.priority === 'critical') {
+                    priorityBadge = '<span class="badge bg-danger">紧急</span>';
+                }
+                
+                let typeBadge = '';
+                if (task.maintenance_type === 'preventive') {
+                    typeBadge = '<span class="badge bg-success">预防性维护</span>';
+                } else if (task.maintenance_type === 'corrective') {
+                    typeBadge = '<span class="badge bg-warning">修复性维护</span>';
+                } else if (task.maintenance_type === 'emergency') {
+                    typeBadge = '<span class="badge bg-danger">紧急维护</span>';
+                } else if (task.maintenance_type === 'upgrade') {
+                    typeBadge = '<span class="badge bg-primary">升级维护</span>';
+                }
+                
+                // 处理设备列表
+                let devicesHtml = '<p class="text-muted">未指定设备</p>';
+                if (task.device_ids && task.device_ids.length > 0) {
+                    devicesHtml = '<ul class="list-unstyled">';
+                    task.device_names.forEach(device => {
+                        devicesHtml += `<li class="mb-1"><i class="fas fa-server me-2"></i>${device.name || device.hostname || device.ip_address}</li>`;
+                    });
+                    devicesHtml += '</ul>';
+                }
+                
+                // 时间线
+                let timelineHtml = `
+                    <div class="timeline-item completed">
+                        <div class="fw-bold">任务创建</div>
+                        <div class="text-muted small">${new Date(task.created_at).toLocaleString()}</div>
+                        <div>由 ${task.created_by_name || '系统'} 创建</div>
+                    </div>
+                `;
+                
+                if (task.approved_at) {
+                    timelineHtml += `
+                        <div class="timeline-item completed">
+                            <div class="fw-bold">任务批准</div>
+                            <div class="text-muted small">${new Date(task.approved_at).toLocaleString()}</div>
+                            <div>由 ${task.approved_by_name || '管理员'} 批准</div>
+                        </div>
+                    `;
+                } else if (task.approval_required) {
+                    timelineHtml += `
+                        <div class="timeline-item">
+                            <div class="fw-bold">等待批准</div>
+                            <div class="text-muted small">需要审批后才能开始</div>
+                        </div>
+                    `;
+                }
+                
+                if (task.status === 'in_progress') {
+                    timelineHtml += `
+                        <div class="timeline-item in-progress">
+                            <div class="fw-bold">任务开始</div>
+                            <div class="text-muted small">进行中</div>
+                            <div>预计持续时间: ${task.estimated_duration || '未指定'} 分钟</div>
+                        </div>
+                    `;
+                }
+                
+                if (task.completed_at) {
+                    timelineHtml += `
+                        <div class="timeline-item completed">
+                            <div class="fw-bold">任务完成</div>
+                            <div class="text-muted small">${new Date(task.completed_at).toLocaleString()}</div>
+                            <div>由 ${task.completed_by_name || '未知'} 完成</div>
+                            ${task.actual_duration ? `<div>实际持续时间: ${task.actual_duration} 分钟</div>` : ''}
+                        </div>
+                    `;
+                }
+                
+                const detailHtml = `
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4>${task.name}</h4>
+                            <p class="text-muted">${task.description || '无描述'}</p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            ${statusBadge} ${priorityBadge} ${typeBadge}
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">任务信息</h6>
+                            <dl class="task-modal-info">
+                                <dt>计划日期:</dt>
+                                <dd>${new Date(task.scheduled_date).toLocaleString()}</dd>
+                                
+                                <dt>预计持续时间:</dt>
+                                <dd>${task.estimated_duration || '未指定'} 分钟</dd>
+                                
+                                ${task.actual_duration ? `
+                                <dt>实际持续时间:</dt>
+                                <dd>${task.actual_duration} 分钟</dd>
+                                ` : ''}
+                                
+                                <dt>负责人:</dt>
+                                <dd>${task.assigned_to_name || '未分配'}</dd>
+                                
+                                <dt>创建人:</dt>
+                                <dd>${task.created_by_name || '未知'}</dd>
+                                
+                                <dt>创建时间:</dt>
+                                <dd>${new Date(task.created_at).toLocaleString()}</dd>
+                                
+                                ${task.approval_required ? `
+                                <dt>审批状态:</dt>
+                                <dd>${task.approved_by ? '已批准' : '待批准'}</dd>
+                                ${task.approved_by ? `<dt>批准人:</dt><dd>${task.approved_by_name}</dd>` : ''}
+                                ${task.approved_at ? `<dt>批准时间:</dt><dd>${new Date(task.approved_at).toLocaleString()}</dd>` : ''}
+                                ` : ''}
+                                
+                                ${task.notes ? `
+                                <dt>备注:</dt>
+                                <dd>${task.notes}</dd>
+                                ` : ''}
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3">关联设备</h6>
+                            ${devicesHtml}
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="mt-3">
+                        <h6>任务时间线</h6>
+                        <div class="mt-3">
+                            ${timelineHtml}
+                        </div>
+                    </div>
+                `;
+                
+                // 显示模态框
+                document.getElementById('taskDetailContent').innerHTML = detailHtml;
+                
+                // 显示/隐藏操作按钮
+                const completeBtn = document.getElementById('markAsCompleteBtn');
+                const startBtn = document.getElementById('startTaskBtn');
+                const approveBtn = document.getElementById('approveTaskBtn');
+                const cancelBtn = document.getElementById('cancelTaskBtn');
+                
+                // 根据任务状态显示不同的操作按钮
+                if (task.status === 'scheduled') {
+                    if (task.approval_required && !task.approved_by) {
+                        approveBtn.style.display = 'inline-block';
+                        approveBtn.onclick = function() {
+                            if (confirm('确定要批准此维护任务吗？')) {
+                                approveTask(task.id);
+                            }
+                        };
+                        startBtn.style.display = 'none';
+                        completeBtn.style.display = 'none';
+                    } else {
+                        startBtn.style.display = 'inline-block';
+                        startBtn.onclick = function() {
+                            if (confirm('确定要开始此维护任务吗？')) {
+                                updateTaskStatus(task.id, 'in_progress');
+                            }
+                        };
+                        completeBtn.style.display = 'none';
+                        approveBtn.style.display = 'none';
+                    }
+                    cancelBtn.style.display = 'inline-block';
+                    cancelBtn.onclick = function() {
+                        if (confirm('确定要取消此维护任务吗？')) {
+                            updateTaskStatus(task.id, 'cancelled');
+                        }
+                    };
+                } else if (task.status === 'in_progress') {
+                    startBtn.style.display = 'none';
+                    completeBtn.style.display = 'inline-block';
+                    completeBtn.onclick = function() {
+                        if (confirm('确定要将此任务标记为完成吗？')) {
+                            updateTaskStatus(task.id, 'completed');
+                        }
+                    };
+                    approveBtn.style.display = 'none';
+                    cancelBtn.style.display = 'inline-block';
+                    cancelBtn.onclick = function() {
+                        if (confirm('确定要取消此维护任务吗？')) {
+                            updateTaskStatus(task.id, 'cancelled');
+                        }
+                    };
+                } else {
+                    startBtn.style.display = 'none';
+                    completeBtn.style.display = 'none';
+                    approveBtn.style.display = 'none';
+                    cancelBtn.style.display = 'none';
+                }
+                
+                const modal = new bootstrap.Modal(document.getElementById('taskDetailModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching task details:', error);
+                alert('获取任务详情失败');
+            });
+    }
+    
+    // 更新任务状态
+    function updateTaskStatus(taskId, status) {
+        fetch(`/api/maintenance/maintenance_tasks/${taskId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: status })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('任务状态已更新');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('taskDetailModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('更新任务状态失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating task status:', error);
+            alert('更新任务状态失败');
+        });
+    }
+    
+    // 批准任务
+    function approveTask(taskId) {
+        fetch(`/api/maintenance/maintenance_tasks/${taskId}/approve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('任务已批准');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('taskDetailModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('批准任务失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error approving task:', error);
+            alert('批准任务失败');
+        });
+    }
+    
+    // 编辑任务
+    function editTask(taskId) {
+        // 从API获取任务数据
+        fetch(`/api/maintenance/maintenance_tasks/${taskId}`)
+            .then(response => response.json())
+            .then(task => {
+                if (!task) {
+                    alert('任务不存在');
+                    return;
+                }
+                
+                // 格式化日期时间
+                const scheduledDate = new Date(task.scheduled_date);
+                const scheduledDateStr = scheduledDate.toISOString().slice(0, 16);
+                
+                // 构建编辑表单
+                const editHtml = `
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="editTaskName" class="form-label">任务名称 *</label>
+                            <input type="text" class="form-control" id="editTaskName" name="name" value="${task.name}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="editTaskType" class="form-label">维护类型 *</label>
+                            <select class="form-select" id="editTaskType" name="maintenance_type" required>
+                                <option value="preventive" ${task.maintenance_type === 'preventive' ? 'selected' : ''}>预防性维护</option>
+                                <option value="corrective" ${task.maintenance_type === 'corrective' ? 'selected' : ''}>修复性维护</option>
+                                <option value="emergency" ${task.maintenance_type === 'emergency' ? 'selected' : ''}>紧急维护</option>
+                                <option value="upgrade" ${task.maintenance_type === 'upgrade' ? 'selected' : ''}>升级维护</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editTaskDescription" class="form-label">任务描述</label>
+                        <textarea class="form-control" id="editTaskDescription" name="description" rows="3">${task.description || ''}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskDevices" class="form-label">关联设备</label>
+                            <select class="form-select" id="editTaskDevices" name="device_ids" multiple>
+                                <!-- 设备选项将通过JavaScript动态加载并选中 -->
+                            </select>
+                            <div class="form-text">按住Ctrl键可多选设备</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskAssignee" class="form-label">负责人</label>
+                            <select class="form-select" id="editTaskAssignee" name="assigned_to">
+                                <option value="">选择负责人...</option>
+                                <!-- 用户选项将通过JavaScript动态加载并选中 -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskScheduledDate" class="form-label">计划日期 *</label>
+                            <input type="datetime-local" class="form-control" id="editTaskScheduledDate" name="scheduled_date" value="${scheduledDateStr}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskEstimatedDuration" class="form-label">预计持续时间 (分钟)</label>
+                            <input type="number" class="form-control" id="editTaskEstimatedDuration" name="estimated_duration" value="${task.estimated_duration || ''}" min="1" max="1440">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskPriority" class="form-label">优先级</label>
+                            <select class="form-select" id="editTaskPriority" name="priority">
+                                <option value="low" ${task.priority === 'low' ? 'selected' : ''}>低</option>
+                                <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>中</option>
+                                <option value="high" ${task.priority === 'high' ? 'selected' : ''}>高</option>
+                                <option value="critical" ${task.priority === 'critical' ? 'selected' : ''}>紧急</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskStatus" class="form-label">状态</label>
+                            <select class="form-select" id="editTaskStatus" name="status">
+                                <option value="scheduled" ${task.status === 'scheduled' ? 'selected' : ''}>已计划</option>
+                                <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>进行中</option>
+                                <option value="completed" ${task.status === 'completed' ? 'selected' : ''}>已完成</option>
+                                <option value="cancelled" ${task.status === 'cancelled' ? 'selected' : ''}>已取消</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editTaskApprovalRequired" name="approval_required" ${task.approval_required ? 'checked' : ''}>
+                                <label class="form-check-label" for="editTaskApprovalRequired">
+                                    需要审批
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editTaskNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="editTaskNotes" name="notes" rows="2">${task.notes || ''}</textarea>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" name="task_id" value="${task.id}">
+                `;
+                
+                // 显示编辑表单
+                document.getElementById('editTaskContent').innerHTML = editHtml;
+                
+                // 设置表单提交URL
+                document.getElementById('editTaskForm').action = `/api/maintenance/maintenance_tasks/${taskId}`;
+                
+                // 加载并选中设备
+                loadDevicesForEdit(task.device_ids);
+                
+                // 加载并选中负责人
+                loadUsersForEdit(task.assigned_to);
+                
+                // 添加表单提交事件
+                document.getElementById('editTaskForm').onsubmit = function(e) {
+                    e.preventDefault();
+                    updateMaintenanceTask(taskId);
+                };
+                
+                const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching task for edit:', error);
+                alert('获取任务信息失败');
+            });
+    }
+    
+    // 删除任务
+    function deleteTask(taskId) {
+        if (confirm('确定要删除这个维护任务吗？此操作不可撤销。')) {
+            fetch(`/api/maintenance/maintenance_tasks/${taskId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert('任务删除成功');
+                    window.location.reload();
+                } else {
+                    alert('删除任务失败: ' + result.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting task:', error);
+                alert('删除任务失败');
+            });
+        }
+    }
+    
+    // 创建维护任务
+    function createMaintenanceTask() {
+        const form = document.getElementById('createTaskForm');
+        const formData = new FormData(form);
+        
+        // 获取选中的设备ID
+        const deviceSelect = document.getElementById('taskDevices');
+        const selectedDevices = Array.from(deviceSelect.selectedOptions).map(option => option.value);
+        
+        // 构建数据对象
+        const data = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            maintenance_type: formData.get('maintenance_type'),
+            device_ids: selectedDevices,
+            scheduled_date: formData.get('scheduled_date'),
+            estimated_duration: formData.get('estimated_duration') ? parseInt(formData.get('estimated_duration')) : null,
+            status: formData.get('status'),
+            priority: formData.get('priority'),
+            assigned_to: formData.get('assigned_to') || null,
+            approval_required: formData.get('approval_required') === 'on',
+            notes: formData.get('notes')
+        };
+        
+        fetch('/api/maintenance/maintenance_tasks', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('维护任务创建成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('创建任务失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error creating task:', error);
+            alert('创建任务失败');
+        });
+    }
+    
+    // 更新维护任务
+    function updateMaintenanceTask(taskId) {
+        const form = document.getElementById('editTaskForm');
+        const formData = new FormData(form);
+        
+        // 获取选中的设备ID
+        const deviceSelect = document.getElementById('editTaskDevices');
+        const selectedDevices = Array.from(deviceSelect.selectedOptions).map(option => option.value);
+        
+        // 构建数据对象
+        const data = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            maintenance_type: formData.get('maintenance_type'),
+            device_ids: selectedDevices,
+            scheduled_date: formData.get('scheduled_date'),
+            estimated_duration: formData.get('estimated_duration') ? parseInt(formData.get('estimated_duration')) : null,
+            status: formData.get('status'),
+            priority: formData.get('priority'),
+            assigned_to: formData.get('assigned_to') || null,
+            approval_required: formData.get('approval_required') === 'on',
+            notes: formData.get('notes')
+        };
+        
+        fetch(`/api/maintenance/maintenance_tasks/${taskId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('维护任务更新成功');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
+                if (modal) modal.hide();
+                window.location.reload();
+            } else {
+                alert('更新任务失败: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating task:', error);
+            alert('更新任务失败');
+        });
+    }
+    
+    // 加载设备列表
+    function loadDevices() {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('taskDevices');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定'})`;
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices:', error);
+            });
+    }
+    
+    // 加载设备列表用于编辑
+    function loadDevicesForEdit(selectedDeviceIds) {
+        // 从API获取设备数据
+        fetch('/api/devices')
+            .then(response => response.json())
+            .then(devices => {
+                const deviceSelect = document.getElementById('editTaskDevices');
+                if (deviceSelect) {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.hostname || device.ip_address} (${device.device_type || '未指定'})`;
+                        
+                        // 如果设备ID在选中的设备列表中，则选中
+                        if (selectedDeviceIds && selectedDeviceIds.includes(device.id)) {
+                            option.selected = true;
+                        }
+                        
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading devices for edit:', error);
+            });
+    }
+    
+    // 加载用户列表
+    function loadUsers() {
+        // 从API获取用户数据
+        fetch('/api/users')
+            .then(response => response.json())
+            .then(users => {
+                const userSelect = document.getElementById('taskAssignee');
+                if (userSelect) {
+                    users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = `${user.name || user.username} (${user.department || '未指定部门'})`;
+                        userSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading users:', error);
+            });
+    }
+    
+    // 加载用户列表用于编辑
+    function loadUsersForEdit(selectedUserId) {
+        // 从API获取用户数据
+        fetch('/api/users')
+            .then(response => response.json())
+            .then(users => {
+                const userSelect = document.getElementById('editTaskAssignee');
+                if (userSelect) {
+                    users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = `${user.name || user.username} (${user.department || '未指定部门'})`;
+                        
+                        // 如果用户ID是选中的负责人，则选中
+                        if (selectedUserId && user.id == selectedUserId) {
+                            option.selected = true;
+                        }
+                        
+                        userSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading users for edit:', error);
+            });
+    }
+</script>
+{% endblock %}

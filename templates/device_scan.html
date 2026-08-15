@@ -1,0 +1,849 @@
+{% extends "base.html" %}
+
+{% block title %}SNMP扫描 - 网络资产管理系统{% endblock %}
+
+{% block head %}
+<style>
+    /* 扫描页面专属样式 */
+    .scan-container {
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+    
+    .scan-form-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .scan-results-card {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .scan-progress {
+        height: 8px;
+        margin: 1rem 0;
+    }
+    
+    .result-item {
+        padding: 1rem;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .result-item:last-child {
+        border-bottom: none;
+    }
+    
+    .result-info {
+        flex: 1;
+    }
+    
+    .result-actions {
+        margin-left: 1rem;
+    }
+    
+    .scan-stats {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .stat-card {
+        flex: 1;
+        min-width: 120px;
+        background-color: #e9ecef;
+        padding: 1rem;
+        border-radius: 0.3rem;
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    /* 加载动画 */
+    .loader {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #007bff;
+        border-bottom-color: transparent;
+        border-radius: 50%;
+        animation: rotation 1s linear infinite;
+        display: inline-block;
+    }
+    
+    @keyframes rotation {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .scan-stats {
+            flex-direction: column;
+        }
+        
+        .result-item {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .result-actions {
+            margin-left: 0;
+            margin-top: 0.5rem;
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+        }
+    }
+    
+    /* 状态标签 */
+    .status-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .status-online {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .status-offline {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .status-snmp {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+SNMP设备扫描
+{% endblock %}
+
+{% block header_actions %}
+<div class="d-flex">
+    <a href="{{ url_for('device.device_list') }}" class="btn btn-secondary btn-sm">
+        <i class="fas fa-arrow-left"></i> 返回设备列表
+    </a>
+    <button type="button" class="btn btn-primary btn-sm ms-2" id="exportScanResults">
+        <i class="fas fa-download"></i> 导出结果
+    </button>
+    <button type="button" class="btn btn-success btn-sm ms-2" id="importAllResults">
+        <i class="fas fa-save"></i> 全部导入
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="scan-container">
+    <!-- 扫描配置表单 -->
+    <div class="scan-form-card">
+        <h5 class="mb-4">
+            <i class="fas fa-network-wired me-2"></i>
+            SNMP扫描配置
+        </h5>
+        
+        <form id="snmpScanForm">
+            <div class="row g-4">
+                <!-- IP地址范围 -->
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">IP地址范围</label>
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <input type="text" class="form-control" id="ip_start" placeholder="起始IP" required value="{{ ip_start or '192.168.1.1' }}">
+                        </div>
+                        <div class="col-2 text-center">
+                            <span class="d-flex align-items-center justify-content-center h-100">至</span>
+                        </div>
+                        <div class="col-5">
+                            <input type="text" class="form-control" id="ip_end" placeholder="结束IP" required value="{{ ip_end or '192.168.1.254' }}">
+                        </div>
+                    </div>
+                    <div class="form-text mt-1">
+                        支持格式: 192.168.1.1-254 或 192.168.1.1/24 或单独IP
+                    </div>
+                </div>
+                
+                <!-- SNMP配置 -->
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">SNMP配置</label>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <input type="text" class="form-control" id="snmp_community" placeholder="SNMP共同体" value="{{ snmp_community or 'public' }}">
+                        </div>
+                        <div class="col-3">
+                            <select class="form-select" id="snmp_version">
+                                <option value="2c" selected>SNMPv2c</option>
+                                <option value="1">SNMPv1</option>
+                                <option value="3">SNMPv3</option>
+                            </select>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" class="form-control" id="snmp_port" value="161" min="1" max="65535">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 扫描选项 -->
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">扫描选项</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="ping_first" checked>
+                        <label class="form-check-label" for="ping_first">
+                            扫描前先Ping检测在线状态
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="resolve_hostname">
+                        <label class="form-check-label" for="resolve_hostname">
+                            解析主机名
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="scan_interfaces">
+                        <label class="form-check-label" for="scan_interfaces">
+                            扫描设备接口信息
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- 高级配置 -->
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">高级配置</label>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <input type="number" class="form-control" id="timeout" value="2" min="1" max="10" placeholder="超时(秒)">
+                            <div class="form-text">超时时间</div>
+                        </div>
+                        <div class="col-4">
+                            <input type="number" class="form-control" id="retries" value="1" min="0" max="5" placeholder="重试次数">
+                            <div class="form-text">重试次数</div>
+                        </div>
+                        <div class="col-4">
+                            <input type="number" class="form-control" id="threads" value="20" min="1" max="100" placeholder="并发数">
+                            <div class="form-text">并发线程</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button type="button" class="btn btn-primary" id="startScanBtn">
+                    <i class="fas fa-play"></i> 开始扫描
+                </button>
+                <button type="button" class="btn btn-outline-secondary ms-2" id="stopScanBtn" disabled>
+                    <i class="fas fa-stop"></i> 停止扫描
+                </button>
+                <button type="button" class="btn btn-outline-secondary ms-2" id="clearResultsBtn">
+                    <i class="fas fa-trash"></i> 清空结果
+                </button>
+                
+                <!-- 扫描进度 -->
+                <div class="mt-3 d-none" id="scanProgressContainer">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span id="scanStatus">准备扫描...</span>
+                        <span id="scanProgressText">0%</span>
+                    </div>
+                    <div class="progress scan-progress">
+                        <div class="progress-bar" id="scanProgressBar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- 扫描统计 -->
+    <div class="scan-stats d-none" id="scanStats">
+        <div class="stat-card">
+            <div class="stat-value" id="totalIps">0</div>
+            <div class="stat-label">总IP数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="onlineIps">0</div>
+            <div class="stat-label">在线IP数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="snmpDevices">0</div>
+            <div class="stat-label">SNMP设备数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="scanSpeed">0</div>
+            <div class="stat-label">扫描速度 (IP/秒)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="elapsedTime">0</div>
+            <div class="stat-label">耗时 (秒)</div>
+        </div>
+    </div>
+    
+    <!-- 扫描结果 -->
+    <div class="scan-results-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>
+                <i class="fas fa-list-alt me-2"></i>
+                扫描结果
+            </h5>
+            <div class="d-flex gap-2">
+                <div class="input-group input-group-sm" style="width: 250px;">
+                    <input type="text" class="form-control" id="resultSearch" placeholder="搜索IP/设备名称...">
+                    <button class="btn btn-outline-secondary" type="button">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <select class="form-select form-select-sm" id="resultFilter" style="width: 150px;">
+                    <option value="all">全部结果</option>
+                    <option value="online">仅在线</option>
+                    <option value="snmp">仅SNMP设备</option>
+                    <option value="offline">仅离线</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 结果列表 -->
+        <div id="scanResultsList">
+            <div class="text-center text-muted py-5" id="emptyResults">
+                <i class="fas fa-search fa-3x mb-3"></i>
+                <p>暂无扫描结果，请开始扫描</p>
+            </div>
+            <div id="resultsContainer"></div>
+        </div>
+        
+        <!-- 分页 -->
+        <div class="mt-4 d-none" id="resultsPagination">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center" id="paginationList">
+                    <!-- 分页内容动态生成 -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- 导入设备确认模态框 -->
+<div class="modal fade" id="importDeviceModal" tabindex="-1" aria-labelledby="importDeviceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importDeviceModalLabel">导入设备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="importDeviceInfo">
+                    <!-- 设备信息动态填充 -->
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">所属机柜</label>
+                    <select class="form-select" id="importCabinetId">
+                        <option value="">未分配机柜</option>
+                        {% for cabinet in all_cabinets %}
+                        <option value="{{ cabinet.id }}">{{ cabinet.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mt-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="importOverride" checked>
+                        <label class="form-check-label" for="importOverride">
+                            覆盖已存在的设备（按IP）
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmImportDevice">确认导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 全局变量
+    let scanResults = [];
+    let currentPage = 1;
+    const resultsPerPage = 20;
+    let scanAbortController = null;
+    let progressPollingInterval = null;
+    let currentTaskId = null;
+    let scanStartTime = 0;
+
+    // ==================== 工具函数 ====================
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>"']/g, function(m) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[m];
+        });
+    }
+
+    const $ = function(id) { return document.getElementById(id); };
+    
+    // 开始扫描
+    document.getElementById('startScanBtn').addEventListener('click', function() {
+        const ipStart = document.getElementById('ip_start').value.trim();
+        const ipEnd = document.getElementById('ip_end').value.trim();
+        const community = document.getElementById('snmp_community').value.trim() || 'public';
+        const version = document.getElementById('snmp_version').value;
+        const port = document.getElementById('snmp_port').value || 161;
+        const pingFirst = document.getElementById('ping_first').checked;
+        const resolveHostname = document.getElementById('resolve_hostname').checked;
+        const scanInterfaces = document.getElementById('scan_interfaces').checked;
+        const timeout = parseInt(document.getElementById('timeout').value) || 2;
+        const retries = parseInt(document.getElementById('retries').value) || 1;
+        const threads = parseInt(document.getElementById('threads').value) || 20;
+        
+        // 验证输入
+        if (!ipStart || !ipEnd) {
+            alert('请输入完整的IP地址范围');
+            return;
+        }
+        
+        // 重置状态
+        scanResults = [];
+        currentPage = 1;
+        scanStartTime = Date.now();
+        $('resultsContainer').innerHTML = '';
+        $('emptyResults').style.display = 'block';
+        $('resultsPagination').classList.add('d-none');
+        $('scanProgressContainer').classList.remove('d-none');
+        $('scanStats').classList.remove('d-none');
+        $('scanStatus').textContent = '准备扫描...';
+        $('scanProgressText').textContent = '0%';
+        $('scanProgressBar').style.width = '0%';
+        $('scanProgressBar').setAttribute('aria-valuenow', '0');
+        $('totalIps').textContent = '0';
+        $('onlineIps').textContent = '0';
+        $('snmpDevices').textContent = '0';
+        $('scanSpeed').textContent = '0';
+        $('elapsedTime').textContent = '0';
+        $('startScanBtn').disabled = true;
+        $('stopScanBtn').disabled = false;
+        $('clearResultsBtn').disabled = true;
+
+        // 提交扫描任务（异步：后端立即返回 task_id）
+        const payload = {
+            ip_range: ipStart + '-' + ipEnd,
+            snmp_community: community,
+            snmp_version: version,
+            snmp_port: port,
+            snmp_timeout: timeout,
+            snmp_retries: retries,
+            max_threads: threads,
+            auto_add: false,
+            skip_existing: true
+        };
+
+        fetch('/devices/ip_scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success && data.task_id) {
+                currentTaskId = data.task_id;
+                $('scanStatus').textContent = '扫描任务已提交，等待开始...';
+                startPolling(data.task_id);
+            } else {
+                throw new Error(data.message || '提交扫描任务失败');
+            }
+        })
+        .catch(function(err) {
+            $('scanStatus').textContent = '扫描提交失败: ' + (err.message || '未知错误');
+            $('startScanBtn').disabled = false;
+            $('stopScanBtn').disabled = true;
+            $('clearResultsBtn').disabled = false;
+            alert('扫描提交失败: ' + (err.message || '请稍后重试'));
+        });
+    });
+
+    // ==================== 进度轮询 ====================
+    function startPolling(taskId) {
+        if (progressPollingInterval) clearInterval(progressPollingInterval);
+        fetchProgress(taskId);
+        progressPollingInterval = setInterval(function() { fetchProgress(taskId); }, 1000);
+    }
+
+    function stopPolling() {
+        if (progressPollingInterval) {
+            clearInterval(progressPollingInterval);
+            progressPollingInterval = null;
+        }
+        if (scanAbortController) {
+            scanAbortController.abort();
+            scanAbortController = null;
+        }
+    }
+
+    function fetchProgress(taskId) {
+        if (scanAbortController) scanAbortController.abort();
+        scanAbortController = new AbortController();
+        fetch('/devices/progress/' + taskId, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: scanAbortController.signal
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(res) {
+            if (res.success && res.progress) {
+                updateProgressUI(res.progress);
+                if (res.progress.status === 'completed' || res.progress.status === 'failed') {
+                    stopPolling();
+                    finishScan(res.progress);
+                }
+            }
+        })
+        .catch(function(err) {
+            if (err.name === 'AbortError') return;
+            // 网络异常时静默，下次轮询重试
+        });
+    }
+
+    // ==================== 进度 UI ====================
+    function updateProgressUI(progress) {
+        const percent = progress.progress || 0;
+        const status = progress.status || 'pending';
+        const statusText = {
+            'pending': '等待开始',
+            'running': '执行中',
+            'completed': '扫描完成',
+            'failed': '扫描失败'
+        };
+        $('scanProgressBar').style.width = percent + '%';
+        $('scanProgressBar').setAttribute('aria-valuenow', percent);
+        $('scanProgressText').textContent = percent + '%';
+        $('scanStatus').textContent = statusText[status] || status;
+        if (progress.current_step) {
+            $('scanStatus').textContent = progress.current_step;
+        }
+
+        $('totalIps').textContent = progress.total || 0;
+        $('onlineIps').textContent = progress.processed || 0;
+        $('elapsedTime').textContent = Math.max(0, Math.round((Date.now() - scanStartTime) / 1000));
+        const elapsed = Math.max(1, (Date.now() - scanStartTime) / 1000);
+        const processed = progress.processed || 0;
+        $('scanSpeed').textContent = (processed / elapsed).toFixed(1);
+    }
+
+    // ==================== 扫描完成 ====================
+    function finishScan(progress) {
+        $('startScanBtn').disabled = false;
+        $('stopScanBtn').disabled = true;
+        $('clearResultsBtn').disabled = false;
+
+        if (progress.status === 'failed') {
+            $('scanStatus').textContent = '扫描失败: ' + (progress.message || '未知错误');
+            return;
+        }
+
+        // 汇总统计
+        const results = progress.results || [];
+        let onlineCount = 0, snmpCount = 0;
+        results.forEach(function(r) {
+            if (r.status === 'online' || r.online) onlineCount++;
+            if (r.snmp_status === '支持' || r.snmp_success) snmpCount++;
+        });
+        $('onlineIps').textContent = onlineCount;
+        $('snmpDevices').textContent = snmpCount;
+
+        scanResults = results;
+        currentPage = 1;
+        $('emptyResults').style.display = results.length > 0 ? 'none' : 'block';
+        $('resultsPagination').classList.toggle('d-none', results.length <= resultsPerPage);
+        renderResults();
+    }
+
+    // ==================== 结果渲染与分页 ====================
+    function getFilteredResults() {
+        const keyword = ($('resultSearch').value || '').trim().toLowerCase();
+        const filter = $('resultFilter').value;
+        return scanResults.filter(function(r) {
+            if (filter === 'online' && r.status !== 'online' && !r.online) return false;
+            if (filter === 'snmp' && r.snmp_status !== '支持' && !r.snmp_success) return false;
+            if (filter === 'offline' && r.status !== 'offline') return false;
+            if (keyword) {
+                const hay = ((r.ip || '') + ' ' + (r.device_name || '')).toLowerCase();
+                if (hay.indexOf(keyword) === -1) return false;
+            }
+            return true;
+        });
+    }
+
+    function renderResults() {
+        const container = $('resultsContainer');
+        if (!container) return;
+        const filtered = getFilteredResults();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / resultsPerPage));
+        if (currentPage > totalPages) currentPage = totalPages;
+        const start = (currentPage - 1) * resultsPerPage;
+        const pageItems = filtered.slice(start, start + resultsPerPage);
+
+        $('emptyResults').style.display = filtered.length > 0 ? 'none' : 'block';
+
+        if (pageItems.length === 0) {
+            container.innerHTML = '';
+            $('resultsPagination').classList.add('d-none');
+            return;
+        }
+
+        let html = '';
+        pageItems.forEach(function(r) {
+            const isOnline = r.status === 'online' || r.online === true;
+            const isSnmp = r.snmp_status === '支持' || r.snmp_success === true;
+            const statusBadge = isOnline
+                ? '<span class="status-badge status-online">在线</span>'
+                : '<span class="status-badge status-offline">离线</span>';
+            const snmpBadge = isSnmp
+                ? '<span class="status-badge status-snmp">SNMP设备</span>'
+                : '<span class="status-badge status-offline">无SNMP</span>';
+            const resultBadge = r.added
+                ? '<span class="status-badge status-online">已添加</span>'
+                : (r.updated ? '<span class="status-badge status-snmp">已更新</span>'
+                   : (r.skipped ? '<span class="status-badge status-offline">已存在</span>' : ''));
+            const importBtn = isSnmp && !r.added
+                ? '<button type="button" class="btn btn-sm btn-primary ms-1" onclick="openImportModal(' +
+                  "'" + escapeHtml(r.ip) + "'," +
+                  "'" + escapeHtml(r.device_name || ('设备_' + r.ip)) + "'," +
+                  "'" + escapeHtml(r.description || '') + "'," +
+                  "'" + escapeHtml(r.device_type || 'unknown') + "'" +
+                  ')">导入</button>'
+                : '';
+            const detailLink = r.device_id
+                ? '<a href="/devices/' + r.device_id + '" class="btn btn-sm btn-outline-secondary ms-1">查看</a>'
+                : '';
+
+            html += '<div class="result-item">' +
+                '<div class="result-info">' +
+                    '<div><strong>' + escapeHtml(r.device_name || ('设备_' + r.ip)) + '</strong> ' +
+                        '<code>' + escapeHtml(r.ip) + '</code></div>' +
+                    '<small class="text-muted">' +
+                        escapeHtml((r.brand || '') + ' ' + (r.model || '')) +
+                        (r.ping_time ? ' · Ping ' + escapeHtml(r.ping_time) + 'ms' : '') +
+                    '</small></div>' +
+                '<div class="result-actions">' +
+                    statusBadge + snmpBadge + resultBadge + importBtn + detailLink +
+                '</div></div>';
+        });
+        container.innerHTML = html;
+
+        // 分页
+        $('resultsPagination').classList.toggle('d-none', totalPages <= 1);
+        renderPagination(totalPages, filtered.length);
+    }
+
+    function renderPagination(totalPages, totalCount) {
+        const list = $('paginationList');
+        if (!list) return;
+        let html = '';
+        for (let i = 1; i <= totalPages; i++) {
+            html += '<li class="page-item' + (i === currentPage ? ' active' : '') + '">' +
+                '<a class="page-link" href="#" data-page="' + i + '" onclick="return goToPage(' + i + ')">' + i + '</a></li>';
+        }
+        list.innerHTML = html;
+    }
+
+    window.goToPage = function(page) {
+        currentPage = page;
+        renderResults();
+        return false;
+    };
+
+    $('resultSearch').addEventListener('input', function() {
+        currentPage = 1;
+        renderResults();
+    });
+    $('resultFilter').addEventListener('change', function() {
+        currentPage = 1;
+        renderResults();
+    });
+
+    // ==================== 停止 / 清空 ====================
+    $('stopScanBtn').addEventListener('click', function() {
+        stopPolling();
+        $('scanStatus').textContent = '已停止扫描';
+        $('startScanBtn').disabled = false;
+        $('stopScanBtn').disabled = true;
+        $('clearResultsBtn').disabled = false;
+    });
+
+    $('clearResultsBtn').addEventListener('click', function() {
+        scanResults = [];
+        currentPage = 1;
+        $('resultsContainer').innerHTML = '';
+        $('emptyResults').style.display = 'block';
+        $('resultsPagination').classList.add('d-none');
+        $('scanStats').classList.add('d-none');
+        $('scanProgressContainer').classList.add('d-none');
+        $('clearResultsBtn').disabled = true;
+    });
+
+    // ==================== 单个导入 ====================
+    let currentImportDevice = null;
+
+    window.openImportModal = function(ip, name, description, deviceType) {
+        currentImportDevice = { ip: ip, name: name, description: description, device_type: deviceType || 'unknown' };
+        $('importDeviceInfo').innerHTML =
+            '<div class="mb-2"><label class="form-label fw-semibold">IP地址</label>' +
+            '<input type="text" class="form-control" id="importIp" value="' + escapeHtml(ip) + '" readonly></div>' +
+            '<div class="mb-2"><label class="form-label fw-semibold">设备名称</label>' +
+            '<input type="text" class="form-control" id="importName" value="' + escapeHtml(name) + '"></div>' +
+            '<div class="mb-2"><label class="form-label fw-semibold">设备类型</label>' +
+            '<input type="text" class="form-control" id="importDeviceType" value="' + escapeHtml(deviceType || 'unknown') + '"></div>' +
+            '<div class="mb-2"><label class="form-label fw-semibold">描述</label>' +
+            '<textarea class="form-control" id="importDescription" rows="2">' + escapeHtml(description || '') + '</textarea></div>';
+        new bootstrap.Modal(document.getElementById('importDeviceModal')).show();
+    };
+
+    $('confirmImportDevice').addEventListener('click', function() {
+        if (!currentImportDevice) return;
+        const payload = {
+            ip: currentImportDevice.ip,
+            name: $('importName').value.trim() || currentImportDevice.name,
+            device_type: $('importDeviceType').value.trim() || 'unknown',
+            description: $('importDescription').value.trim() || ''
+        };
+        const btn = this;
+        btn.disabled = true;
+        fetch('/devices/add_from_scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                alert('设备 ' + payload.name + ' 添加成功');
+                bootstrap.Modal.getInstance(document.getElementById('importDeviceModal')).hide();
+                scanResults.forEach(function(r) {
+                    if (r.ip === payload.ip) {
+                        r.added = true;
+                        r.device_id = data.device_id;
+                    }
+                });
+                renderResults();
+            } else {
+                alert('导入失败: ' + (data.message || '未知错误'));
+            }
+        })
+        .catch(function(err) {
+            alert('导入失败: ' + (err.message || '请求失败'));
+        })
+        .finally(function() { btn.disabled = false; });
+    });
+
+    // ==================== 全部导入 ====================
+    $('importAllResults').addEventListener('click', function() {
+        const devices = scanResults.filter(function(r) {
+            return (r.snmp_status === '支持' || r.snmp_success === true) && !r.added;
+        }).map(function(r) {
+            return {
+                ip: r.ip,
+                name: r.device_name || ('设备_' + r.ip),
+                device_type: r.device_type || 'unknown',
+                description: r.description || ''
+            };
+        });
+        if (devices.length === 0) {
+            alert('没有可导入的SNMP设备');
+            return;
+        }
+        if (!confirm('确定要批量导入 ' + devices.length + ' 台SNMP设备吗？')) return;
+
+        const btn = this;
+        btn.disabled = true;
+        fetch('/devices/batch_add_from_scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ devices: devices })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                alert(data.message || '批量导入完成');
+                scanResults.forEach(function(r) {
+                    if ((r.snmp_status === '支持' || r.snmp_success === true) && !r.added) r.added = true;
+                });
+                renderResults();
+            } else {
+                alert('批量导入失败: ' + (data.message || '未知错误'));
+            }
+        })
+        .catch(function(err) {
+            alert('批量导入失败: ' + (err.message || '请求失败'));
+        })
+        .finally(function() { btn.disabled = false; });
+    });
+
+    // ==================== 导出结果 (CSV) ====================
+    $('exportScanResults').addEventListener('click', function() {
+        const rows = getFilteredResults();
+        if (rows.length === 0) {
+            alert('没有可导出的结果');
+            return;
+        }
+        const header = ['IP', '设备名称', '状态', 'SNMP', '类型', '品牌', '型号', '描述'];
+        const lines = [header.join(',')];
+        rows.forEach(function(r) {
+            const status = (r.status === 'online' || r.online) ? '在线' : '离线';
+            const snmp = (r.snmp_status === '支持' || r.snmp_success) ? '支持' : '不支持';
+            const csvCell = function(v) {
+                const s = String(v === null || v === undefined ? '' : v);
+                return '"' + s.replace(/"/g, '""') + '"';
+            };
+            lines.push([r.ip, r.device_name || '', status, snmp, r.device_type || '', r.brand || '', r.model || '', r.description || ''].map(csvCell).join(','));
+        });
+        const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'scan_results_' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    });
+});
+</script>
+{% endblock %}

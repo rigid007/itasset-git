@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}实时监控 - 数据中心{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card { border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); transition: transform 0.2s; height: 100%; }
+    .metric-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+    .metric-value { font-size: 2rem; font-weight: bold; }
+    .metric-unit { font-size: 0.9rem; color: #6c757d; }
+    .metric-label { font-size: 1rem; color: #495057; margin-bottom: 0.5rem; }
+    .device-info { background-color: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+    .control-panel { background-color: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .snmp-hint { background-color: #e7f3ff; border-left: 4px solid #0d6efd; padding: 10px 15px; border-radius: 4px; margin-bottom: 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-chart-line me-2"></i>实时监控</h2>
+        <span class="badge bg-secondary" id="clock"></span>
+    </div>
+
+    <!-- SNMP 提示信息 -->
+    <div class="snmp-hint">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>提示：</strong> 实时监控功能仅支持通过 <strong>SNMP 协议</strong> 采集数据，请确保所选设备已正确配置管理 IP 和 SNMP 团体字。
+    </div>
+
+    <!-- 控制面板 -->
+    <div class="control-panel">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="deviceSelect" class="form-label fw-bold"><i class="fas fa-server me-1"></i>选择设备</label>
+                <select class="form-select" id="deviceSelect">
+                    <option value="" disabled>-- 请选择设备 --</option>  <!-- 移除了 selected -->
+                    {% for device in devices %}
+                    <option value="{{ device.id }}" 
+                            data-management-ip="{{ device.management_ip or '' }}" 
+                            data-ip-address="{{ device.ip_address or '' }}"
+                            data-name="{{ device.name }}"
+                            data-snmp-enabled="{{ 'true' if device.snmp_community else 'false' }}">
+                        {{ device.name }} (管理IP: {{ device.management_ip or '无' }} / 业务IP: {{ device.ip_address or '无' }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="refreshInterval" class="form-label fw-bold"><i class="fas fa-clock me-1"></i>刷新间隔(秒)</label>
+                <input type="number" class="form-control" id="refreshInterval" 
+                       value="{{ monitoring_settings.get('snmp_polling_interval', 5) }}" min="1" max="60" step="1">
+            </div>
+            <div class="col-md-5 d-flex gap-2">
+                <button class="btn btn-primary flex-fill" id="startMonitorBtn" disabled>
+                    <i class="fas fa-play me-1"></i>开始监控
+                </button>
+                <button class="btn btn-secondary flex-fill" id="stopMonitorBtn" disabled>
+                    <i class="fas fa-stop me-1"></i>停止监控
+                </button>
+                <button class="btn btn-success flex-fill" id="saveDataBtn" disabled>
+                    <i class="fas fa-database me-1"></i>入库保存
+                </button>
+            </div>
+        </div>
+        <!-- 当前设备信息摘要 -->
+        <div class="device-info mt-3" id="deviceInfo" style="display: none;">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong><i class="fas fa-tag me-1"></i>设备名称：</strong> <span id="deviceName"></span>
+                </div>
+                <div class="col-md-6">
+                    <strong><i class="fas fa-network-wired me-1"></i>监控IP：</strong> <span id="deviceIp"></span>
+                </div>
+            </div>
+        </div>
+        <!-- 监控状态 -->
+        <div id="monitorStatus" class="mt-3"></div>
+    </div>
+
+    <!-- 监控数据展示区域 -->
+    <div class="row g-4" id="metricsPanel" style="display: none;">
+        <!-- CPU 使用率 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-microchip me-1"></i>CPU 使用率</div>
+                    <div class="metric-value" id="cpuValue">--</div>
+                    <div class="metric-unit">%</div>
+                </div>
+            </div>
+        </div>
+        <!-- 内存使用率 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-memory me-1"></i>内存使用率</div>
+                    <div class="metric-value" id="memoryValue">--</div>
+                    <div class="metric-unit">%</div>
+                </div>
+            </div>
+        </div>
+        <!-- 磁盘使用率 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-hdd me-1"></i>磁盘使用率</div>
+                    <div class="metric-value" id="diskValue">--</div>
+                    <div class="metric-unit">%</div>
+                </div>
+            </div>
+        </div>
+        <!-- 温度 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-thermometer-half me-1"></i>温度</div>
+                    <div class="metric-value" id="tempValue">--</div>
+                    <div class="metric-unit">°C</div>
+                </div>
+            </div>
+        </div>
+        <!-- 功耗 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-bolt me-1"></i>功耗</div>
+                    <div class="metric-value" id="powerValue">--</div>
+                    <div class="metric-unit">W</div>
+                </div>
+            </div>
+        </div>
+        <!-- 电源状态 -->
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="metric-card card">
+                <div class="card-body text-center">
+                    <div class="metric-label"><i class="fas fa-plug me-1"></i>电源状态</div>
+                    <div class="metric-value" id="powerSupplyValue">--</div>
+                    <div class="metric-unit">&nbsp;</div>
+                </div>
+            </div>
+        </div>
+        <!-- 最后更新时间 -->
+        <div class="col-12">
+            <div class="text-muted text-end" id="lastUpdate">最后更新：--</div>
+        </div>
+    </div>
+
+    <!-- 无数据提示 -->
+    <div class="alert alert-info text-center" id="noDeviceAlert" style="display: none;">
+        <i class="fas fa-info-circle me-2"></i>请选择设备并点击“开始监控”获取实时数据。
+    </div>
+
+    <!-- 错误提示区域 -->
+    <div id="errorAlert" class="alert alert-danger mt-3" style="display: none;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        console.log('real_time.js 已加载'); // 测试用
+
+        // ---------- 全局变量 ----------
+        let monitorTimer = null;
+        let currentDeviceId = null;
+        let isMonitoring = false;
+
+        // CSRF 令牌配置
+        const csrfToken = $('meta[name="csrf-token"]').attr('content');
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    xhr.setRequestHeader('X-CSRFToken', csrfToken);
+                }
+            }
+        });
+
+        // ---------- 辅助函数 ----------
+        function showStatus(message, type = 'info') {
+            const statusDiv = $('#monitorStatus');
+            statusDiv.html(`<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>`);
+            setTimeout(() => {
+                statusDiv.fadeOut(500, function() { $(this).empty().show(); });
+            }, 5000);
+        }
+
+        function showError(message) {
+            const errorDiv = $('#errorAlert');
+            errorDiv.html(message).fadeIn();
+            setTimeout(() => { errorDiv.fadeOut(); }, 8000);
+        }
+
+        function updateClock() {
+            const now = new Date();
+            $('#clock').text(now.toLocaleString('zh-CN', { hour12: false }));
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ---------- 设备选择变化 ----------
+        $('#deviceSelect').on('change', function() {
+            console.log('change 事件触发'); // 确认事件触发
+            const selected = $(this).find(':selected');
+            const deviceId = $(this).val();
+
+            console.log('========== 设备选择 ==========');
+            console.log('设备ID:', deviceId);
+            console.log('设备名称:', selected.data('name'));
+            console.log('管理IP (management_ip):', selected.data('management-ip'));
+            console.log('业务IP (ip_address):', selected.data('ip-address'));
+            console.log('SNMP已配置:', selected.data('snmp-enabled'));
+
+            if (deviceId) {
+                currentDeviceId = deviceId;
+                //const hasSnmp = selected.data('snmp-enabled') === 'true';
+                const hasSnmp = String(selected.data('snmp-enabled')) === 'true';
+                const managementIp = selected.data('management-ip');
+                const ipAddress = selected.data('ip-address');
+                const validIp = managementIp && managementIp.trim() !== '' ? managementIp : (ipAddress && ipAddress.trim() !== '' ? ipAddress : null);
+                const hasValidIp = validIp !== null;
+
+                console.log('有效监控IP:', validIp);
+                console.log('hasSnmp:', hasSnmp, 'hasValidIp:', hasValidIp);
+
+
+
+                $('#deviceName').text(selected.data('name'));
+                $('#deviceIp').text(validIp || '无可用IP');
+                $('#deviceInfo').fadeIn();
+
+                if (hasSnmp && hasValidIp) {
+                    $('#startMonitorBtn').prop('disabled', false);
+                    $('#saveDataBtn').prop('disabled', false);
+                    $('#monitorStatus').html('');
+                    console.log('✅ 按钮已启用');
+                } else {
+                    $('#startMonitorBtn').prop('disabled', true);
+                    $('#saveDataBtn').prop('disabled', true);
+                    let reason = '';
+                    if (!hasValidIp) reason = '无可用IP (management_ip和ip_address均为空)';
+                    else if (!hasSnmp) reason = '未配置SNMP团体字';
+                    showStatus(`该设备${reason}，无法进行实时监控`, 'warning');
+                    console.log('❌ 按钮禁用，原因:', reason);
+                }
+                $('#stopMonitorBtn').prop('disabled', true);
+                if (isMonitoring) stopMonitoring();
+                $('#metricsPanel').hide();
+                $('#noDeviceAlert').show();
+            } else {
+                currentDeviceId = null;
+                $('#deviceInfo').fadeOut();
+                $('#startMonitorBtn, #stopMonitorBtn, #saveDataBtn').prop('disabled', true);
+                if (isMonitoring) stopMonitoring();
+                $('#metricsPanel').hide();
+                $('#noDeviceAlert').show();
+            }
+        });
+
+        // ---------- 强制选择默认设备（ID=3）----------
+        const defaultDeviceId = 3; // 您可以根据需要修改
+        const selectElement = $('#deviceSelect');
+        if (selectElement.find(`option[value="${defaultDeviceId}"]`).length > 0) {
+            selectElement.val(defaultDeviceId).trigger('change');
+            console.log('已强制选择设备ID:', defaultDeviceId);
+        } else {
+            console.warn('默认设备ID', defaultDeviceId, '不存在于下拉列表中');
+        }
+
+        // ---------- 开始监控 ----------
+        $('#startMonitorBtn').click(function() {
+            if (!currentDeviceId) return showError('请先选择设备');
+            if (isMonitoring) return showStatus('监控已在运行中', 'warning');
+
+            const interval = parseInt($('#refreshInterval').val());
+            if (isNaN(interval) || interval < 1) return showError('刷新间隔必须为正整数');
+
+            $('#stopMonitorBtn').prop('disabled', false);
+            $('#startMonitorBtn').prop('disabled', true);
+            $('#refreshInterval').prop('readonly', true);
+            $('#saveDataBtn').prop('disabled', false);
+            $('#metricsPanel').show();
+            $('#noDeviceAlert').hide();
+
+            fetchSnmpData(currentDeviceId);
+            monitorTimer = setInterval(() => fetchSnmpData(currentDeviceId), interval * 1000);
+            isMonitoring = true;
+            showStatus(`开始监控设备 #${currentDeviceId}，刷新间隔 ${interval} 秒`, 'success');
+        });
+
+        // ---------- 停止监控 ----------
+        $('#stopMonitorBtn').click(stopMonitoring);
+        function stopMonitoring() {
+            if (monitorTimer) clearInterval(monitorTimer);
+            monitorTimer = null;
+            isMonitoring = false;
+            $('#stopMonitorBtn').prop('disabled', true);
+            $('#startMonitorBtn').prop('disabled', false);
+            $('#refreshInterval').prop('readonly', false);
+            showStatus('监控已停止', 'info');
+        }
+
+        // ---------- 获取 SNMP 数据 ----------
+        function fetchSnmpData(deviceId) {
+            if (!deviceId) return;
+            const url = "{{ url_for('monitoring.get_snmp_data') }}?device_id=" + deviceId;
+            $.ajax({
+                url: url,
+                type: 'GET',
+                dataType: 'json',
+                success: function(res) {
+                    if (res.success) updateMetrics(res.data);
+                    else showError('获取数据失败：' + (res.message || '未知错误'));
+                },
+                error: function(xhr) {
+                    let msg = '请求失败';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    showError(msg);
+                }
+            });
+        }
+
+        // ---------- 更新指标 ----------
+        function updateMetrics(data) {
+            const map = {
+                cpu_usage: '#cpuValue',
+                memory_usage: '#memoryValue',
+                disk_usage: '#diskValue',
+                temperature: '#tempValue',
+                power_consumption: '#powerValue',
+                power_supply: '#powerSupplyValue'
+            };
+            for (let [key, sel] of Object.entries(map)) {
+                let val = data[key];
+                $(sel).text(val !== null && val !== undefined ? (typeof val === 'number' ? val.toFixed(1) : val) : '--');
+            }
+            $('#lastUpdate').text('最后更新：' + (data.last_checked || new Date().toLocaleString('zh-CN')));
+        }
+
+        // ---------- 保存数据到数据库 ----------
+        $('#saveDataBtn').click(function() {
+            if (!currentDeviceId) return showError('请先选择设备');
+            const btn = $(this);
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>保存中...');
+
+            $.ajax({
+                url: "{{ url_for('monitoring.save_snmp_data') }}",
+                type: 'POST',
+                data: JSON.stringify({ device_id: currentDeviceId }),
+                contentType: 'application/json',
+                dataType: 'json',
+                success: function(res) {
+                    if (res.success) showStatus('数据已成功保存到数据库', 'success');
+                    else showError('保存失败：' + (res.message || '未知错误'));
+                },
+                error: function(xhr) {
+                    let msg = '保存请求失败';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    showError(msg);
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('<i class="fas fa-database me-1"></i>入库保存');
+                }
+            });
+        });
+
+        // 页面卸载前清理定时器
+        $(window).on('beforeunload', function() { if (monitorTimer) clearInterval(monitorTimer); });
+    });
+</script>
+{% endblock %}
