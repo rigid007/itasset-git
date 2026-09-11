@@ -33,6 +33,17 @@ COLUMN_PATCHES = [
     # ---- 无线控制器字段（迁移 j6f7g8h9a0b1）----
     ('devices', 'is_wireless_controller', 'BOOLEAN'),
     ('devices', 'controller_vendor', 'VARCHAR(20)'),
+    # ---- 服务器/宿主机连接核对字段（迁移 l3m4n5o6p7q8）----
+    ('devices', 'bmc_ip', 'VARCHAR(45)'),
+    ('devices', 'bmc_mac', 'VARCHAR(17)'),
+    ('devices', 'virtualization_type', 'VARCHAR(32)'),
+    ('devices', 'is_virtual_host', 'BOOLEAN DEFAULT 0'),
+    # ---- 告警升级联动（SEL/iDRAC 带外）：alert_escalations 补充列，alert_escalation_logs 由 create_all 建表 ----
+    ('alert_escalations', 'metric_type', 'VARCHAR(50)'),
+    ('alert_escalations', 'max_escalations', 'INTEGER'),
+    ('alert_escalations', 'repeat_interval', 'INTEGER'),
+    ('alert_escalations', 'auto_create_work_order', 'BOOLEAN DEFAULT 0'),
+    ('alert_escalation_logs', 'work_order_id', 'INTEGER'),
 ]
 
 
@@ -58,6 +69,11 @@ INDEX_PATCHES = [
     ('device_monitor_logs', 'idx_dml_device_type', 'device_id, monitor_type'),
     # 设备是否下线高频过滤（列表页、报表）
     ('devices', 'idx_devices_is_decommissioned', 'is_decommissioned'),
+    # 虚拟化宿主机过滤（服务器连接核对报表）
+    ('devices', 'idx_devices_is_virtual_host', 'is_virtual_host'),
+    ('alert_escalation_logs', 'idx_aell_work_order_id', 'work_order_id'),
+    # NetFlow 窗口统计高频过滤（stats/sessions/report/records/清理均按 received_at）
+    ('netflow_records', 'idx_netflow_record_recv', 'received_at'),
 ]
 
 

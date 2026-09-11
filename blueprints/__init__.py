@@ -27,6 +27,7 @@ def register_blueprints(app):
     from blueprints.config_compliance import config_compliance_bp
     from blueprints.monitoring_extra import monitoring_extra_bp
     from blueprints.maintenance_extra import maintenance_extra_bp
+    from blueprints.maintenance_api import maintenance_api_bp
     from blueprints.report_extra import report_extra_bp
     from blueprints.device_group import device_group_bp
     from blueprints.cmdb import cmdb_bp
@@ -34,6 +35,10 @@ def register_blueprints(app):
     from blueprints.dc_view import dc_view_bp
     from blueprints.event_monitor import event_monitor_bp
     from blueprints.sysjobs import sysjobs_bp
+    from blueprints.network import network_bp
+    from blueprints.automation import automation_bp
+    from blueprints.oob import oob_bp
+    from blueprints.netflow import netflow_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(asset_bp)
@@ -57,6 +62,7 @@ def register_blueprints(app):
     app.register_blueprint(config_compliance_bp)
     app.register_blueprint(monitoring_extra_bp)
     app.register_blueprint(maintenance_extra_bp)
+    app.register_blueprint(maintenance_api_bp)
     app.register_blueprint(report_extra_bp)
     app.register_blueprint(device_group_bp)
     app.register_blueprint(cmdb_bp)
@@ -64,5 +70,9 @@ def register_blueprints(app):
     app.register_blueprint(dc_view_bp)
     app.register_blueprint(event_monitor_bp)
     app.register_blueprint(sysjobs_bp)
+    app.register_blueprint(network_bp)
+    app.register_blueprint(automation_bp)
+    app.register_blueprint(oob_bp)
+    app.register_blueprint(netflow_bp)
 
     print("所有蓝图注册成功")

@@ -419,12 +419,10 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                {% if url_for('cabinet.view') %}
-                                                <a href="{{ url_for('cabinet.view', id=stat.cabinet.id) }}" 
+                                                <a href="{{ url_for('cabinet.cabinet_detail', id=stat.cabinet.id) }}" 
                                                    class="btn btn-sm btn-outline-primary" title="查看机柜详情">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
-                                                {% endif %}
                                                 <button onclick="showCabinetDetails({{ stat.cabinet.id }})" 
                                                         class="btn btn-sm btn-outline-info" title="查看U位详情">
                                                     <i class="fas fa-cube"></i>
@@ -520,12 +518,10 @@
                                         </div>
                                         
                                         <div class="mt-3">
-                                            {% if url_for('cabinet.view') %}
-                                            <a href="{{ url_for('cabinet.view', id=stat.cabinet.id) }}" 
+                                            <a href="{{ url_for('cabinet.cabinet_detail', id=stat.cabinet.id) }}" 
                                                class="btn btn-sm btn-outline-primary btn-block">
                                                 <i class="fas fa-eye mr-1"></i> 查看详情
                                             </a>
-                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}在线率报表 - 数据中心管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">在线率（可用性）报表</h1>
+            <p class="text-muted">统计各设备的可用性与停机时长</p>
+        </div>
+        <div>
+            <a href="{{ url_for('report.report_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> 返回报表中心
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">设备可用性列表</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>设备</th>
+                            <th>可用率</th>
+                            <th>停机时长(分钟)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in uptime_stats %}
+                        <tr>
+                            <td>{{ s.device.name if s.device else 'Unknown' }}</td>
+                            <td>
+                                <span class="badge {% if s.uptime_percent >= 99 %}bg-success{% elif s.uptime_percent >= 95 %}bg-warning{% else %}bg-danger{% endif %}">
+                                    {{ "%.2f"|format(s.uptime_percent) }}%
+                                </span>
+                            </td>
+                            <td>{{ "%.1f"|format(s.downtime_minutes) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center text-muted">暂无设备数据</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -27,3 +27,6 @@ archive/trash/
 
 # 冒烟测试临时产物
 .smoke/
+
+# 环境变量 / 密钥（含 -gam 后缀变体）
+.env-gam

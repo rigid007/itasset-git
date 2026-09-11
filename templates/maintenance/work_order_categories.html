@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}工单分类统计{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-tags"></i> 工单分类统计</h2>
+    <a href="{{ url_for('maintenance.work_order_list') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> 返回工单列表</a>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><i class="fas fa-table"></i> 分类汇总</div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr><th>分类</th><th>工单数</th><th>平均解决时长（小时）</th></tr>
+          </thead>
+          <tbody>
+            {% for category, count, avg_resolution_time in categories %}
+            <tr>
+              <td>
+                {% if category == 'incident' %}事件
+                {% elif category == 'request' %}服务请求
+                {% elif category == 'problem' %}问题
+                {% elif category == 'change' %}变更
+                {% elif category == 'other' %}其他
+                {% else %}{{ category or '未分类' }}{% endif %}
+              </td>
+              <td>{{ count }}</td>
+              <td>{{ avg_resolution_time|round(2) if avg_resolution_time is not none else '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-center">暂无工单分类数据</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

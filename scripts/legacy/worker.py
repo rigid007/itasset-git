@@ -48,6 +48,16 @@ engine = create_engine(
     **Config.SQLALCHEMY_ENGINE_OPTIONS
 )
 
+def _counter_bits(last_value, current_value):
+    """Guess counter width for delta wrap-around.
+
+    With 64-bit HC counters normal values quickly exceed 2^32-1; legacy 32-bit
+    counters stay below it until wrap. Using the larger of the two samples gives
+    a cheap and reliable width for rate calculation.
+    """
+    return 64 if max(int(last_value or 0), int(current_value or 0)) >= (1 << 32) else 32
+
+
 class MonitorDataWorker:
     def __init__(self):
         self.config = Config()
@@ -171,12 +181,18 @@ class MonitorDataWorker:
                 if last_record:
                     delta_t = (collected_at - last_record.collected_at).total_seconds()
                     if delta_t > 0:
-                        delta_in = rec['bytes_in'] - last_record.bytes_in
-                        delta_out = rec['bytes_out'] - last_record.bytes_out
-                        if delta_in < 0:
+                        if last_record.bytes_in in (0, None):
                             delta_in = 0
-                        if delta_out < 0:
+                        else:
+                            delta_in = rec['bytes_in'] - last_record.bytes_in
+                            if delta_in < 0:
+                                delta_in += 2 ** _counter_bits(last_record.bytes_in, rec['bytes_in'])
+                        if last_record.bytes_out in (0, None):
                             delta_out = 0
+                        else:
+                            delta_out = rec['bytes_out'] - last_record.bytes_out
+                            if delta_out < 0:
+                                delta_out += 2 ** _counter_bits(last_record.bytes_out, rec['bytes_out'])
 
                         rec['speed_in'] = delta_in * 8 / delta_t
                         rec['speed_out'] = delta_out * 8 / delta_t

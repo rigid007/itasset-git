@@ -1,99 +1,134 @@
 {% extends "base.html" %}
-
 {% block title %}工单模板 - 运维管理系统{% endblock %}
-
 {% block content %}
 <div class="container-fluid">
-    <!-- 页面标题与操作按钮 -->
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-gray-800">工单模板</h1>
-        <a href="{{ url_for('maintenance.create_work_order_template') }}" class="btn btn-primary btn-sm">
-            <i class="fas fa-plus"></i> 新建模板
-        </a>
-    </div>
+  <div class="d-sm-flex align-items-center justify-content-between mb-4">
+    <h1 class="h3 mb-0"><i class="fas fa-file-alt"></i> 工单模板</h1>
+    <a href="{{ url_for('maintenance.work_order_list') }}" class="btn btn-outline-secondary btn-sm">返回工单列表</a>
+  </div>
 
-    <!-- 模板列表卡片 -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary">模板列表</h6>
+  <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">新建模板</h6>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('maintenance.create_work_order_template') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div class="col-md-3 mb-2"><input class="form-control" name="name" placeholder="模板名称" required></div>
+          <div class="col-md-3 mb-2">
+            <select class="form-select" name="category">
+              <option value="incident">事件</option><option value="request">服务请求</option>
+              <option value="problem">问题</option><option value="change">变更</option><option value="other">其他</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-2">
+            <select class="form-select" name="default_priority">
+              <option value="low">低</option><option value="medium" selected>中</option>
+              <option value="high">高</option><option value="critical">紧急</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-2">
+            <select class="form-select" name="default_assignee">
+              <option value="">未指定默认工程师</option>
+              {% for user in users %}<option value="{{ user.id }}">{{ user.username }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-12 mb-2"><textarea class="form-control" name="description" rows="2" placeholder="模板说明"></textarea></div>
+          <div class="col-md-12 mb-2"><textarea class="form-control" name="content" rows="3" placeholder="模板内容/工单描述"></textarea></div>
+          <div class="col-md-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" id="newActive" checked><label class="form-check-label" for="newActive">启用</label></div></div>
         </div>
-        <div class="card-body">
-            {% if templates %}
-            <div class="table-responsive">
-                <table class="table table-bordered table-striped" id="dataTable" width="100%" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>模板名称</th>
-                            <th>工单类型</th>
-                            <th>类别</th>
-                            <th>优先级</th>
-                            <th>描述</th>
-                            <th>创建时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for template in templates %}
-                        <tr>
-                            <td>{{ template.id }}</td>
-                            <td>{{ template.name }}</td>
-                            <td>
-                                {% if template.work_order_type == 'incident' %}事件
-                                {% elif template.work_order_type == 'request' %}服务请求
-                                {% elif template.work_order_type == 'problem' %}问题
-                                {% elif template.work_order_type == 'change' %}变更
-                                {% elif template.work_order_type == 'task' %}任务
-                                {% else %}{{ template.work_order_type }}
-                                {% endif %}
-                            </td>
-                            <td>{{ template.category or '-' }}</td>
-                            <td>
-                                {% if template.priority == 'critical' %}<span class="badge badge-danger">严重</span>
-                                {% elif template.priority == 'high' %}<span class="badge badge-warning">高</span>
-                                {% elif template.priority == 'medium' %}<span class="badge badge-info">中</span>
-                                {% elif template.priority == 'low' %}<span class="badge badge-secondary">低</span>
-                                {% else %}{{ template.priority }}
-                                {% endif %}
-                            </td>
-                            <td>{{ template.description|truncate(50) }}</td>
-                            <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') if template.created_at else '' }}</td>
-                            <td>
-                                <!-- 使用模板创建工单（需后端实现） -->
-                                <a href="{{ url_for('maintenance.use_template', template_id=template.id) }}" class="btn btn-sm btn-success" title="使用模板创建工单">
-                                    <i class="fas fa-file"></i>
-                                </a>
-                                <!-- 编辑模板（需后端实现） -->
-                                <a href="{{ url_for('maintenance.edit_work_order_template', template_id=template.id) }}" class="btn btn-sm btn-primary" title="编辑">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <!-- 删除模板（需后端实现，附带确认弹窗） -->
-                                <a href="#" class="btn btn-sm btn-danger" onclick="deleteTemplate({{ template.id }})" title="删除">
-                                    <i class="fas fa-trash"></i>
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="text-end mt-2"><button class="btn btn-primary btn-sm">创建模板</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">模板列表</h6></div>
+    <div class="card-body">
+      {% if templates %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+          <thead><tr><th>ID</th><th>模板名称</th><th>分类</th><th>优先级</th><th>默认工程师</th><th>说明</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for template in templates %}
+            <tr>
+              <td>{{ template.id }}</td>
+              <td>{{ template.name }}</td>
+              <td>
+                {% if template.category == 'incident' %}事件
+                {% elif template.category == 'request' %}服务请求
+                {% elif template.category == 'problem' %}问题
+                {% elif template.category == 'change' %}变更
+                {% elif template.category == 'other' %}其他
+                {% else %}{{ template.category or '-' }}{% endif %}
+              </td>
+              <td>
+                {% if template.default_priority == 'critical' %}<span class="badge bg-danger">紧急</span>
+                {% elif template.default_priority == 'high' %}<span class="badge bg-warning">高</span>
+                {% elif template.default_priority == 'medium' %}<span class="badge bg-info">中</span>
+                {% else %}<span class="badge bg-secondary">低</span>{% endif %}
+              </td>
+              <td>{{ users_by_id.get(template.default_assignee) or '-' }}</td>
+              <td>{{ template.description|truncate(40) }}</td>
+              <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') if template.created_at else '' }}</td>
+              <td>
+                <a href="{{ url_for('maintenance.use_template', template_id=template.id) }}" class="btn btn-sm btn-success" title="使用模板创建工单"><i class="fas fa-file"></i></a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editTemplate{{ template.id }}" title="编辑"><i class="fas fa-edit"></i></button>
+                <form action="{{ url_for('maintenance.delete_work_order_template', template_id=template.id) }}" method="post" class="d-inline" onsubmit="return confirm('确定停用该模板吗？');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-sm btn-danger" title="停用"><i class="fas fa-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+
+            <div class="modal fade" id="editTemplate{{ template.id }}" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                  <form method="post" action="{{ url_for('maintenance.edit_work_order_template', template_id=template.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-header"><h5 class="modal-title">编辑模板 #{{ template.id }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                      <div class="row">
+                        <div class="col-md-6 mb-2"><label class="form-label">名称</label><input class="form-control" name="name" value="{{ template.name }}" required></div>
+                        <div class="col-md-6 mb-2"><label class="form-label">分类</label>
+                          <select class="form-select" name="category">
+                            {% for key,label in [('incident','事件'),('request','服务请求'),('problem','问题'),('change','变更'),('other','其他')] %}
+                            <option value="{{ key }}" {% if template.category == key %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-md-6 mb-2"><label class="form-label">优先级</label>
+                          <select class="form-select" name="default_priority">
+                            {% for key,label in [('low','低'),('medium','中'),('high','高'),('critical','紧急')] %}
+                            <option value="{{ key }}" {% if template.default_priority == key %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-md-6 mb-2"><label class="form-label">默认工程师</label>
+                          <select class="form-select" name="default_assignee">
+                            <option value="">未指定</option>
+                            {% for user in users %}<option value="{{ user.id }}" {% if template.default_assignee == user.id %}selected{% endif %}>{{ user.username }}</option>{% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-12 mb-2"><label class="form-label">说明</label><textarea class="form-control" name="description" rows="2">{{ template.description or '' }}</textarea></div>
+                        <div class="col-12 mb-2"><label class="form-label">内容</label><textarea class="form-control" name="content" rows="4">{{ template.content or '' }}</textarea></div>
+                        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" id="active{{ template.id }}" {% if template.is_active %}checked{% endif %}><label class="form-check-label" for="active{{ template.id }}">启用</label></div></div>
+                      </div>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary">保存</button></div>
+                  </form>
+                </div>
+              </div>
             </div>
-            {% else %}
-            <p class="text-center text-muted my-4">暂无工单模板，点击右上角“新建模板”创建。</p>
-            {% endif %}
-        </div>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-center text-muted my-4">暂无工单模板，请使用上方表单创建。</p>
+      {% endif %}
     </div>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
-<script>
-// 删除模板确认函数（需后端配合实现删除逻辑）
-function deleteTemplate(templateId) {
-    if (confirm('确定要删除此模板吗？')) {
-        // 实际使用时请替换为真实的删除路由
-        window.location.href = "{{ url_for('maintenance.delete_work_order_template', template_id=0) }}".replace('0', templateId);
-    }
-}
-</script>
 {% endblock %}

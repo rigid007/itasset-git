@@ -14,7 +14,8 @@ from utils.permission import permission_required
 # 导入模型
 from models.models import (
     Device, User, AlertRule, AlertEvent, AlertTemplate, AlertAction, 
-    AlertEscalation, AlertSuppression, AlertStatistic, NotificationConfig,
+    AlertEscalation, AlertEscalationLog, AlertSuppression, AlertStatistic,
+    NotificationConfig,
     db
 )
 from models.maintenance_models import WorkOrder
@@ -35,6 +36,7 @@ def alert_list():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     search = request.args.get('search', '')
+    metric_type = request.args.get('metric_type', '')
     
     # 构建查询
     query = AlertEvent.query
@@ -76,6 +78,10 @@ def alert_list():
         query = query.join(Device).filter(search_filter)
     else:
         query = query.join(Device)
+    
+    # 来源(metric_type)筛选，例如 bmc_sel（iDRAC 带外 SEL）
+    if metric_type:
+        query = query.filter(AlertEvent.metric_type == metric_type)
     
     # 排序
     sort_by = request.args.get('sort_by', 'first_occurred')
@@ -125,6 +131,8 @@ def alert_list():
         'error': AlertEvent.query.filter_by(severity='error').count(),
         'warning': AlertEvent.query.filter_by(severity='warning').count(),
         'info': AlertEvent.query.filter_by(severity='info').count(),
+        'bmc_sel': AlertEvent.query.filter_by(metric_type='bmc_sel').count(),
+        'bmc_sel_active': AlertEvent.query.filter_by(metric_type='bmc_sel', status='active').count(),
     }
     
     return render_template('alert/list.html',
@@ -138,6 +146,7 @@ def alert_list():
                          start_date=start_date,
                          end_date=end_date,
                          search=search,
+                         metric_type=metric_type,
                          sort_by=sort_by,
                          order=order,
                          per_page=per_page)
@@ -441,9 +450,13 @@ def api_alerts():
     severity = request.args.get('severity')
     status = request.args.get('status')
     device_id = request.args.get('device_id', type=int)
+    metric_type = request.args.get('metric_type')
     
     # 构建查询
     query = AlertEvent.query
+    
+    if metric_type:
+        query = query.filter(AlertEvent.metric_type == metric_type)
     
     if severity:
         query = query.filter(AlertEvent.severity == severity)
@@ -2242,3 +2255,108 @@ def create_notification():
 # 类似的路由函数也需要为 AlertAction, AlertEscalation, AlertSuppression 实现
 # 包括 create-form, test, copy, delete, create 等路由
 # 由于篇幅限制，这里不一一列出，但结构与上述类似
+
+
+# ========== 升级日志（告警页新标签页） ==========
+@alert_bp.route('/escalations')
+@login_required
+@permission_required('alert:view')
+def escalations():
+    """告警升级日志页：展示每次升级的告警、策略、级别、渠道与自动工单。"""
+    from sqlalchemy import func as _func
+    from models.maintenance_models import WorkOrder
+
+    search = (request.args.get('search') or '').strip()
+    limit = min(request.args.get('limit', 200, type=int), 500)
+
+    q = AlertEscalationLog.query
+    if search:
+        q = q.join(AlertEvent, AlertEscalationLog.alert_id == AlertEvent.id)
+        q = q.filter(or_(AlertEvent.title.ilike('%' + search + '%'),
+                         AlertEscalationLog.channel.ilike('%' + search + '%')))
+    logs = q.order_by(AlertEscalationLog.escalated_at.desc()).limit(limit).all()
+
+    policies = {p.id: p for p in AlertEscalation.query.all()}
+    wo_ids = {lg.work_order_id for lg in logs}
+    wos = {}
+    if wo_ids:
+        for w in WorkOrder.query.filter(WorkOrder.id.in_(wo_ids)).all():
+            wos[w.id] = w
+
+    # 汇总统计
+    total_escalations = AlertEscalationLog.query.count()
+    distinct_alerts = (AlertEscalationLog.query
+                       .with_entities(AlertEscalationLog.alert_id).distinct().count())
+    auto_wos = (AlertEscalationLog.query
+                .filter(AlertEscalationLog.work_order_id.isnot(None)).count())
+
+    rows = []
+    for lg in logs:
+        alert = None
+        try:
+            alert = AlertEvent.query.get(lg.alert_id)
+        except Exception:
+            alert = None
+        wo = wos.get(lg.work_order_id)
+        policy = policies.get(lg.policy_id)
+        rows.append({
+            'id': lg.id,
+            'alert_id': lg.alert_id,
+            'alert_title': alert.title if alert else None,
+            'alert_status': alert.status if alert else None,
+            'device_name': (lambda a: (lambda d: d.name if d else None)(
+                getattr(a, 'device', None)))(alert) if alert else None,
+            'policy_id': lg.policy_id,
+            'policy_name': policy.name if policy else lg.policy_id,
+            'level': lg.level,
+            'from_severity': lg.from_severity,
+            'to_severity': lg.to_severity,
+            'channel': lg.channel,
+            'target': lg.target,
+            'message': (lg.message or '')[:300],
+            'escalated_at': lg.escalated_at,
+            'work_order_id': wo.id if wo else None,
+            'work_order_number': wo.work_order_number if wo else None,
+            'work_order_status': wo.status if wo else None,
+        })
+
+    return render_template('alert/escalations.html',
+                           logs=rows, policies=policies.values(),
+                           total_escalations=total_escalations,
+                           distinct_alerts=distinct_alerts,
+                           auto_work_orders=auto_wos,
+                           search=search, limit=limit)
+
+
+@alert_bp.route('/api/escalations')
+@login_required
+@permission_required('alert:view')
+def api_escalations():
+    """升级日志 JSON 接口（供告警页新标签页 AJAX 刷新）。"""
+    from models.maintenance_models import WorkOrder
+    limit = min(request.args.get('limit', 100, type=int), 500)
+    logs = (AlertEscalationLog.query
+            .order_by(AlertEscalationLog.escalated_at.desc()).limit(limit).all())
+    policies = {p.id: p.name for p in AlertEscalation.query.all()}
+    out = []
+    for lg in logs:
+        alert = AlertEvent.query.get(lg.alert_id) if lg.alert_id else None
+        wo = WorkOrder.query.get(lg.work_order_id) if lg.work_order_id else None
+        out.append({
+            'id': lg.id,
+            'alert_id': lg.alert_id,
+            'alert_title': alert.title if alert else None,
+            'device_name': getattr(alert.device, 'name', None) if alert else None,
+            'policy_id': lg.policy_id,
+            'policy': policies.get(lg.policy_id, lg.policy_id),
+            'level': lg.level,
+            'from_severity': lg.from_severity,
+            'to_severity': lg.to_severity,
+            'channel': lg.channel,
+            'target': lg.target,
+            'message': (lg.message or '')[:300],
+            'escalated_at': lg.escalated_at.isoformat() if lg.escalated_at else None,
+            'work_order_id': wo.id if wo else None,
+            'work_order_number': wo.work_order_number if wo else None,
+        })
+    return jsonify(out)

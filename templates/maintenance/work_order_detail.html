@@ -275,7 +275,7 @@
                 <div class="card-body">
                     {% if work_order.device %}
                         <p><strong>设备：</strong> 
-                            <a href="{{ url_for('inventory.device_detail', id=work_order.device.id) }}">
+                            <a href="{{ url_for('device.device_detail', id=work_order.device.id) }}">
                                 {{ work_order.device.name }} ({{ work_order.device.serial_number }})
                             </a>
                         </p>
@@ -285,7 +285,7 @@
                     
                     {% if work_order.asset %}
                         <p><strong>资产：</strong> 
-                            <a href="{{ url_for('inventory.asset_detail', id=work_order.asset.id) }}">
+                            <a href="{{ url_for('asset.asset_detail', id=work_order.asset.id) }}">
                                 {{ work_order.asset.name }} ({{ work_order.asset.asset_number }})
                             </a>
                         </p>

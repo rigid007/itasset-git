@@ -107,7 +107,77 @@
         </div>
     </div>
 
-    <!-- 最近发现结果 -->
+    <!-- 待审批候选设备 -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">待审批候选设备 <span class="badge bg-warning" id="candidateCountBadge">0</span></h5>
+            <button class="btn btn-sm btn-outline-secondary" id="refreshCandidatesBtn">
+                <i class="bi bi-arrow-repeat"></i> 刷新
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>设备名称</th>
+                            <th>管理IP</th>
+                            <th>设备类型</th>
+                            <th>发现来源</th>
+                            <th>置信度</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="candidateDevicesBody">
+                        <tr id="noCandidatesRow">
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                                暂无待审批候选设备
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+        <!-- 最近拓扑发现摘要 -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">最近拓扑发现摘要 <small class="text-muted" id="topologySummaryTime"></small></h5>
+            <button class="btn btn-sm btn-outline-secondary" id="refreshTopologySummaryBtn">
+                <i class="bi bi-arrow-repeat"></i> 刷新
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="topologySummaryEmpty" class="text-center text-muted py-4 d-none">
+                <i class="bi bi-inbox fs-3 d-block mb-2"></i>暂无拓扑发现摘要
+            </div>
+            <div id="topologySummaryContent" class="d-none">
+                <div class="row g-2 mb-3" id="topologySummaryStats"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>设备</th>
+                                <th>IP</th>
+                                <th>状态</th>
+                                <th>LLDP</th>
+                                <th>CDP</th>
+                                <th>ARP</th>
+                                <th>FDB</th>
+                                <th>错误</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topologySummaryDevices"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- 最近发现结果 -->
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">最近发现的设备</h5>
@@ -290,6 +360,43 @@
     </div>
 </div>
 
+<!-- ==================== 发现结果 Modal ==================== -->
+<div class="modal fade" id="resultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-hdd-stack me-2"></i>发现结果 - <span id="resultsTaskName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resultSummary" class="mb-3"></div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SNMP状态</th>
+                                <th>IP地址</th>
+                                <th>设备名称</th>
+                                <th>类型</th>
+                                <th>品牌 / 型号</th>
+                                <th>MAC地址</th>
+                                <th>入库</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr><td colspan="8" class="text-center text-muted py-4">正在加载...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -329,7 +436,26 @@ $(function() {
         pollTimer = setInterval(function() {
             loadTasks();
             loadRecentDevices();
+            loadCandidateDevices();
         }, interval);
+    }
+
+    // 轮询遇到鉴权失败：停止轮询，避免会话过期后无限刷 401
+    function handlePollError(xhr) {
+        if (xhr.status === 401 || xhr.status === 403) {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+            if (xhr.status === 401) {
+                showToast('warning', '会话已过期，请重新登录');
+                setTimeout(function() { window.location.href = '/login'; }, 1200);
+            } else {
+                showToast('warning', '当前账号权限不足，已停止自动刷新');
+            }
+        } else {
+            console.error('加载失败: HTTP ' + (xhr.status || '未知'));
+        }
     }
 
     function loadTasks() {
@@ -347,6 +473,8 @@ $(function() {
                     console.log('[设备发现] 所有任务执行完毕，刷新已发现设备列表');
                     loadRecentDevices();
                     setTimeout(loadRecentDevices, 2000);
+                    loadCandidateDevices();
+                    setTimeout(loadCandidateDevices, 2000);
                 }
 
                 if (newRunningCount !== runningTaskCount) {
@@ -357,7 +485,7 @@ $(function() {
                 updateStats(tasks);
                 renderTaskTable(tasks);
             },
-            error: function() { console.error('加载任务列表失败'); }
+            error: function(xhr) { handlePollError(xhr); }
         });
     }
 
@@ -372,6 +500,143 @@ $(function() {
         $('#statRunning').text(running);
         $('#statCompleted').text(completed);
         $('#statDiscovered').text(discovered);
+    }
+
+    function loadCandidateDevices() {
+        $.ajax({
+            url: '/api/discovery/candidates',
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                renderCandidateDevices(res.candidates || []);
+            },
+            error: function(xhr) { handlePollError(xhr); }
+        });
+    function renderCandidateDevices(candidates) {
+        const $tbody = $('#candidateDevicesBody');
+        $('#candidateCountBadge').text((candidates || []).length).toggleClass('bg-success', (candidates || []).length === 0);
+        if (!candidates || candidates.length === 0) {
+            $tbody.html(`<tr id="noCandidatesRow"><td colspan="7" class="text-center text-muted py-4">
+                <i class="bi bi-check-circle fs-3 d-block mb-2"></i>暂无待审批候选设备</td></tr>`);
+            return;
+        }
+        const typeLabels = {
+            router: '路由器', switch: '交换机', firewall: '防火墙', server: '服务器',
+            pc: '计算机', ap: '无线AP', other: '其他', unknown: '未知'
+        };
+        let html = '';
+        candidates.forEach(function(device) {
+            const type = typeLabels[device.device_type] || device.device_type || '未知';
+            const confidence = Number(device.discovery_confidence || 0);
+            const confidenceClass = confidence >= 90 ? 'success' : (confidence >= 60 ? 'warning text-dark' : 'danger');
+            const statusBadge = device.approval_status === 'review'
+                ? '<span class="badge bg-warning text-dark">待确认</span>'
+                : '<span class="badge bg-secondary">待审批</span>';
+            html += `<tr>
+                <td><strong>${escapeHtml(device.name)}</strong></td>
+                <td><code>${escapeHtml(device.management_ip || '-')}</code></td>
+                <td>${escapeHtml(type)}</td>
+                <td>${escapeHtml(device.discovery_source || '-')}</td>
+                <td><span class="badge bg-${confidenceClass}">${confidence}%</span></td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-success approve-candidate-btn" data-device-id="${device.id}" title="批准"><i class="bi bi-check-lg"></i></button>
+                        <button class="btn btn-outline-danger reject-candidate-btn" data-device-id="${device.id}" title="拒绝"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        $tbody.html(html);
+    }
+
+function setCandidateApproval(deviceId, status) {
+        $.ajax({
+            url: `/api/discovery/candidates/${deviceId}/${status}`,
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                if (!res.success) {
+                    showToast('warning', res.message || '操作失败');
+                    return;
+                }
+                showToast('success', res.message || '操作成功');
+                loadCandidateDevices();
+                loadRecentDevices();
+            },
+            error: function(xhr) { handlePollError(xhr); }
+        });
+    }
+
+    $(document).on('click', '.approve-candidate-btn', function() {
+        setCandidateApproval($(this).data('device-id'), 'approve');
+    });
+    $(document).on('click', '.reject-candidate-btn', function() {
+        setCandidateApproval($(this).data('device-id'), 'reject');
+    });
+
+    function loadTopologySummary() {
+        $.ajax({
+            url: '/api/discovery/topology-summary/latest',
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) { renderTopologySummary(res.latest); },
+            error: function(xhr) { handlePollError(xhr); }
+        });
+    }
+
+    function renderTopologySummary(latest) {
+        const summary = latest && latest.summary ? latest.summary : null;
+        $('#topologySummaryEmpty').toggleClass('d-none', !!summary);
+        $('#topologySummaryContent').toggleClass('d-none', !summary);
+        $('#topologySummaryTime').text(latest && latest.check_time ? ('上次运行: ' + latest.check_time) : '');
+        if (!summary) {
+            $('#topologySummaryStats').empty();
+            $('#topologySummaryDevices').empty();
+            return;
+        }
+
+        const protocols = summary.protocols || {};
+        const statItems = [
+            { label: '设备总数', value: summary.devices_total || 0, cls: 'bg-primary' },
+            { label: '成功', value: summary.devices_success || 0, cls: 'bg-success' },
+            { label: '失败', value: summary.devices_failed || 0, cls: 'bg-danger' },
+            { label: 'LLDP', value: protocols.lldp || 0, cls: 'bg-info text-dark' },
+            { label: 'CDP', value: protocols.cdp || 0, cls: 'bg-info text-dark' },
+            { label: 'ARP', value: protocols.arp || 0, cls: 'bg-info text-dark' },
+            { label: 'FDB', value: protocols.fdb || 0, cls: 'bg-info text-dark' }
+        ];
+        $('#topologySummaryStats').html(statItems.map(function(item) {
+            return `<div class="col-6 col-md-3 col-xl">
+                <div class="card text-white ${item.cls} mb-0">
+                    <div class="card-body py-2 px-3">
+                        <div class="small">${item.label}</div>
+                        <h5 class="mb-0">${item.value}</h5>
+                    </div>
+                </div>
+            </div>`;
+        }).join(''));
+
+        const devices = summary.per_device || [];
+        const tbody = $('#topologySummaryDevices');
+        if (!devices.length) {
+            tbody.html('<tr><td colspan="8" class="text-center text-muted py-3">本次无设备明细</td></tr>');
+            return;
+        }
+        tbody.html(devices.map(function(item) {
+            const counts = item.counts || {};
+            const ok = item.status === 'success';
+            return `<tr>
+                <td>${escapeHtml(item.name || ('#' + item.device_id))}</td>
+                <td><code>${escapeHtml(item.ip || '-')}</code></td>
+                <td>${ok ? '<span class="badge bg-success">成功</span>' : '<span class="badge bg-danger">失败</span>'}</td>
+                <td>${counts.lldp || 0}</td>
+                <td>${counts.cdp || 0}</td>
+                <td>${counts.arp || 0}</td>
+                <td>${counts.fdb || 0}</td>
+                <td><small class="text-danger">${escapeHtml(item.error || '')}</small></td>
+            </tr>`;
+        }).join(''));
     }
 
     function renderTaskTable(tasks) {
@@ -419,7 +684,10 @@ $(function() {
                     </div>
                     <small>${task.progress || 0}%</small>
                 </td>
-                <td>${task.discovered_count || 0}</td>
+                <td>
+                    ${task.discovered_count || 0}
+                    ${task.has_result ? renderTaskSummary(task.result_summary) : ''}
+                </td>
                 <td><small>${task.last_run ? new Date(task.last_run).toLocaleString() : '-'}</small></td>
                 <td><small class="text-muted">${task.next_run_time || '-'}</small></td>
                 <td>
@@ -429,6 +697,7 @@ $(function() {
                             `<button class="btn btn-outline-success run-task-btn" data-task-id="${task.id}"><i class="bi bi-play-fill"></i></button>`
                         }
                         <button class="btn btn-outline-primary edit-task-btn" data-task-id="${task.id}"><i class="bi bi-pencil"></i></button>
+                        ${task.has_result ? `<button class="btn btn-outline-info view-result-btn" data-task-id="${task.id}" title="查看发现结果"><i class="bi bi-eye"></i></button>` : ''}
                         <button class="btn btn-outline-danger delete-task-btn" data-task-id="${task.id}"><i class="bi bi-trash"></i></button>
                     </div>
                 </td>
@@ -466,7 +735,8 @@ $(function() {
                     </tr>`;
                 });
                 $tbody.html(html);
-            }
+            },
+            error: function(xhr) { handlePollError(xhr); }
         });
     }
 
@@ -644,6 +914,99 @@ $(function() {
         });
     });
 
+    // ========== 查看发现结果 ==========
+    function renderTaskSummary(s) {
+        s = s || {};
+        return `<div class="mt-1">
+            <span class="badge bg-success" title="团体号正确">${s.ok || 0}</span>
+            <span class="badge bg-warning text-dark" title="团体号错误">${s.wrong_community || 0}</span>
+            <span class="badge bg-danger" title="不支持SNMP">${s.unsupported || 0}</span>
+        </div>`;
+    }
+
+    function snmpStatusBadge(r) {
+        const st = r.snmp_status || '';
+        if (st === 'ok') return '<span class="badge bg-success">团体号正确</span>';
+        if (st === 'wrong_community') return '<span class="badge bg-warning text-dark">团体号错误</span>';
+        if (st === 'unsupported') {
+            if (r.online === false || r.status === 'offline') return '<span class="badge bg-danger">离线/不可达</span>';
+            return '<span class="badge bg-danger">不支持SNMP</span>';
+        }
+        // 兼容 IP 段批量导入模式的结果
+        if (r.status === 'added') return '<span class="badge bg-success">已添加</span>';
+        if (r.status === 'skipped') return '<span class="badge bg-warning text-dark">已存在</span>';
+        if (r.status === 'failed') return '<span class="badge bg-danger">失败</span>';
+        return '<span class="badge bg-secondary">-</span>';
+    }
+
+    function importStatusBadge(r) {
+        if (r.added) return '<span class="badge bg-success">已添加</span>';
+        if (r.updated) return '<span class="badge bg-info">已更新</span>';
+        if (r.skipped) return '<span class="badge bg-warning text-dark">已存在</span>';
+        if (r.type === 'wrong_community') return '<span class="badge bg-warning text-dark">团体号错误</span>';
+        return '<span class="text-muted">未入库</span>';
+    }
+
+    function renderResultSummary(summary) {
+        const s = summary || {};
+        return `<div class="d-flex flex-wrap gap-2">
+            <span class="badge bg-success fs-6">团体号正确 ${s.ok || 0}</span>
+            <span class="badge bg-warning text-dark fs-6">团体号错误 ${s.wrong_community || 0}</span>
+            <span class="badge bg-danger fs-6">不支持SNMP ${s.unsupported || 0}</span>
+            <span class="badge bg-secondary fs-6">总计 ${s.total || 0}</span>
+        </div>`;
+    }
+
+    function renderResultRows(results) {
+        if (!results || results.length === 0) {
+            return '<tr><td colspan="8" class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>暂无发现结果</td></tr>';
+        }
+        const typeMap = {router:'路由器', switch:'交换机', firewall:'防火墙', server:'服务器', pc:'计算机', ap:'无线AP'};
+        let html = '';
+        results.forEach(function(r) {
+            const type = typeMap[r.device_type] || r.device_type || '未知';
+            const modelText = [r.brand || '', r.model || ''].filter(Boolean).join(' ') || '-';
+            const desc = r.snmp_detail || r.description || '';
+            html += `<tr>
+                <td>${snmpStatusBadge(r)}</td>
+                <td><code>${escapeHtml(r.ip)}</code></td>
+                <td>${escapeHtml(r.device_name || ('设备_' + r.ip))}</td>
+                <td>${escapeHtml(type)}</td>
+                <td>${escapeHtml(modelText)}</td>
+                <td><small>${escapeHtml(r.mac_address || '-')}</small></td>
+                <td>${importStatusBadge(r)}</td>
+                <td><small class="text-muted">${escapeHtml(desc || '-')}</small></td>
+            </tr>`;
+        });
+        return html;
+    }
+
+    $(document).on('click', '.view-result-btn', function() {
+        const taskId = $(this).data('task-id');
+        const $modal = $('#resultsModal');
+        $('#resultsTaskName').text('#' + taskId);
+        $('#resultsBody').html('<tr><td colspan="8" class="text-center text-muted py-4">正在加载...</td></tr>');
+        $('#resultSummary').html('');
+        $modal.modal('show');
+        $.ajax({
+            url: `/devices/discovery/tasks/${taskId}/results`,
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            success: function(res) {
+                if (!res.success) {
+                    $('#resultsBody').html('<tr><td colspan="8" class="text-center text-muted py-4">加载失败</td></tr>');
+                    return;
+                }
+                $('#resultsTaskName').text((res.task && res.task.name) || ('#' + taskId));
+                $('#resultSummary').html(renderResultSummary(res.summary));
+                $('#resultsBody').html(renderResultRows(res.results));
+            },
+            error: function() {
+                $('#resultsBody').html('<tr><td colspan="8" class="text-center text-muted py-4">加载失败</td></tr>');
+            }
+        });
+    });
+
     // ========== 切换显示已完成 ==========
     $('#toggleCompletedBtn').click(function() {
         showCompleted = !showCompleted;
@@ -655,11 +1018,22 @@ $(function() {
     $('#refreshTasksBtn').click(function() {
         loadTasks();
         loadRecentDevices();
+        loadCandidateDevices();
+    });
+
+    $('#refreshCandidatesBtn').click(function() {
+        loadCandidateDevices();
+    });
+
+    $('#refreshTopologySummaryBtn').click(function() {
+        loadTopologySummary();
     });
 
     // ========== 初始加载 ==========
     loadTasks();
     loadRecentDevices();
+    loadCandidateDevices();
+    loadTopologySummary();
 
     startAdaptivePoll();
 });

@@ -16,10 +16,11 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from extensions import db
 from models.models import (
     Device, Interface, ConnectionPath, 
-    DeviceMonitorLog, AlertEvent, DiscoveryResult
+    DeviceMonitorLog, AlertEvent, DiscoveryResult, TopologyLog
 )
 from models.config_models import SystemLog
 from utils.utils import ping_device, snmp_get, snmp_walk
+from utils.snmp_utils import discover_lldp_neighbors, discover_cdp_neighbors, discover_topology_summary, normalize_mac
 
 # 用于从 LLDP 邻居信息中识别 AP / 无线边缘设备的特征关键词
 AP_KEYWORDS = ('ap', 'access point', 'air', 'aruba', 'fitap', 'huawei ap',
@@ -357,70 +358,20 @@ class LinkMonitor:
     
     def get_lldp_neighbors(self, device_ip: str, port_name: Optional[str] = None,
                           community: str = 'public') -> List[Dict]:
-        """获取LLDP邻居信息"""
-        neighbors = []
-        
-        chassis_results = self.snmp_walk_values(device_ip, self.LLDP_CHASSIS_OID, community)
-        
-        if not isinstance(chassis_results, dict):
-            return neighbors
-        
-        # 辅助函数：清理值
-        def clean_value(val):
-            if not val:
-                return ''
-            val = val.strip()
-            if val.startswith('"') and val.endswith('"'):
-                val = val[1:-1]
-            if val.startswith("'") and val.endswith("'"):
-                val = val[1:-1]
-            return val.strip()
-        
-        for oid, chassis_id in chassis_results.items():
-            parts = oid.split('.')
-            if len(parts) < 3:
-                continue
-            
-            try:
-                ifindex = int(parts[-2])
-                remote_index = int(parts[-1])
-            except (ValueError, IndexError):
-                continue
-            
-            local_port = self.get_port_name(device_ip, ifindex, community)
-            if not local_port:
-                continue
-            
-            if port_name and local_port != port_name:
-                continue
-            
-            neighbor = {
-                'local_port': local_port,
-                'ifindex': ifindex,
-                'remote_index': remote_index,
-                'chassis_id': clean_value(chassis_id),
-            }
-            
-            port_oid = f'{self.LLDP_PORT_OID}.0.{ifindex}.{remote_index}'
-            port_id = self.snmp_get_value(device_ip, port_oid, community)
-            if port_id:
-                neighbor['remote_port_id'] = clean_value(port_id)
-            
-            sysname_oid = f'{self.LLDP_SYSNAME_OID}.0.{ifindex}.{remote_index}'
-            sysname = self.snmp_get_value(device_ip, sysname_oid, community)
-            if sysname:
-                neighbor['remote_system_name'] = clean_value(sysname)
-
-            # 补充采集 LLDP 系统描述，用于识别 AP 等边缘设备（SYSDESC_OID 已在类内定义）
-            desc_oid = f'{self.LLDP_SYSDESC_OID}.0.{ifindex}.{remote_index}'
-            sysdesc = self.snmp_get_value(device_ip, desc_oid, community)
-            if sysdesc:
-                neighbor['remote_sys_desc'] = clean_value(sysdesc)
-
-            neighbors.append(neighbor)
-        
+        """Get LLDP neighbors through the pure Python SnmpClient helper."""
+        neighbors = discover_lldp_neighbors(device_ip, community=community, version='2c')
+        if port_name:
+            neighbors = [n for n in neighbors if n.get('local_port') == port_name]
         return neighbors
-    
+
+    def get_cdp_neighbors(self, device_ip: str, port_name: Optional[str] = None,
+                          community: str = 'public') -> List[Dict]:
+        """Get CDP neighbors through the pure Python SnmpClient helper."""
+        neighbors = discover_cdp_neighbors(device_ip, community=community, version='2c')
+        if port_name:
+            neighbors = [n for n in neighbors if n.get('local_port') == port_name]
+        return neighbors
+
     # ==================== 设备查找 ====================
     
     def find_device_by_mac(self, mac: str, session=None) -> Optional[Device]:
@@ -628,7 +579,7 @@ class LinkMonitor:
 
             # ===== 快照后立即释放数据库连接：Ping/SNMP 网络 I/O 阶段零连接占用 =====
             # 对象已 detach，但已加载的列属性仍可读取；ifindex 缓存与状态回写
-            # 由外层 _check_link_in_thread 在检测完成后用新事务落库，
+            # 由 check_all_links 汇总检测结果后批量落库，
             # 避免 20 个并发线程在慢速网络期间把 QueuePool 占满导致其它任务超时。
             try:
                 session.close()
@@ -806,109 +757,99 @@ class LinkMonitor:
     # ==================== 数据库更新 ====================
     
     def update_connection_status(self, connection_id: int, result: Dict, session):
-        """更新连接状态到数据库"""
-        try:
-            connection = session.get(ConnectionPath, connection_id)
-            if not connection:
-                print(f"链路 {connection_id} 未找到")
-                return
-            
-            old_status = connection.link_status or 'unknown'
-            new_status = result['status']
-            
-            if old_status != new_status:
-                connection.link_status = new_status
-                connection.updated_at = datetime.now()
-                
-                source_device = session.get(Device, connection.source_device_id)
-                target_device = session.get(Device, connection.target_device_id)
-                device_ip = source_device.management_ip if source_device else ''
-                
-                log = DeviceMonitorLog(
-                    device_id=connection.source_device_id,
-                    device_ip=device_ip,
-                    old_status=old_status,
-                    new_status=new_status,
-                    error_message=result.get('reason', ''),
-                    monitor_type='link_monitor',
-                    is_online=(new_status == 'active')
-                )
-                session.add(log)
-                
-                # 告警处理：链路断开创建/更新告警，链路恢复关闭告警
-                alert_status = None
-                if new_status == 'down':
-                    self._create_alert_in_session(session, connection, result)
-                    alert_status = 'active'
-                elif new_status == 'active' and old_status == 'down':
-                    self._clear_alert_in_session(session, connection)
-                    alert_status = 'resolved'
-                
-                # 链路状态改变：告警信息写入系统日志
-                src_name = source_device.name if source_device else str(connection.source_device_id)
-                dst_name = target_device.name if target_device else str(connection.target_device_id)
-                reason = result.get('reason', '')
-                alert_title = (
-                    f'链路断开: {connection.source_port} -> {connection.target_port}'
-                    if new_status == 'down'
-                    else f'链路恢复: {connection.source_port} -> {connection.target_port}'
-                )
-                session.add(SystemLog(
-                    timestamp=datetime.utcnow(),
-                    level='warning' if new_status == 'down' else 'info',
-                    module='link_monitor',
-                    source=f'link:{connection.id}',
-                    message=(
-                        f'链路 {src_name}:{connection.source_port} -> '
-                        f'{dst_name}:{connection.target_port} '
-                        f'状态变化: {old_status} -> {new_status}'
-                        + (f'，原因: {reason}' if reason else '')
-                    ),
-                    details=json.dumps({
-                        'alert_title': alert_title,
-                        'severity': 'critical' if new_status == 'down' else 'info',
-                        'alert_status': alert_status,
-                        'reason': reason,
-                        'source_port': connection.source_port,
-                        'target_port': connection.target_port,
-                    }, ensure_ascii=False),
-                ))
-                
-                session.commit()
-                print(f"链路 {connection_id} 状态已更新: {old_status} -> {new_status}")
-            else:
-                connection.updated_at = datetime.now()
-                session.commit()
-                
-        except Exception as e:
-            session.rollback()
-            print(f"update_connection_status 异常: {e}")
-            raise
+        """Update connection status in the supplied session.
 
+        This method no longer commits. The caller is responsible for batching
+        commits, which keeps link checks from hammering the database with one
+        transaction per link.
+        """
+        connection = session.get(ConnectionPath, connection_id)
+        if not connection:
+            print(f"链路 {connection_id} 未找到")
+            return
+
+        old_status = connection.link_status or 'unknown'
+        new_status = result['status']
+
+        if old_status != new_status:
+            connection.link_status = new_status
+            connection.updated_at = datetime.now()
+
+            source_device = session.get(Device, connection.source_device_id)
+            target_device = session.get(Device, connection.target_device_id)
+            device_ip = source_device.management_ip if source_device else ''
+
+            log = DeviceMonitorLog(
+                device_id=connection.source_device_id,
+                device_ip=device_ip,
+                old_status=old_status,
+                new_status=new_status,
+                error_message=result.get('reason', ''),
+                monitor_type='link_monitor',
+                is_online=(new_status == 'active')
+            )
+            session.add(log)
+
+            # 告警处理：链路断开创建/更新告警，链路恢复关闭告警
+            alert_status = None
+            if new_status == 'down':
+                self._create_alert_in_session(session, connection, result)
+                alert_status = 'active'
+            elif new_status == 'active' and old_status == 'down':
+                self._clear_alert_in_session(session, connection)
+                alert_status = 'resolved'
+
+            # 链路状态改变：告警信息写入系统日志
+            src_name = source_device.name if source_device else str(connection.source_device_id)
+            dst_name = target_device.name if target_device else str(connection.target_device_id)
+            reason = result.get('reason', '')
+            alert_title = (
+                f'链路断开: {connection.source_port} -> {connection.target_port}'
+                if new_status == 'down'
+                else f'链路恢复: {connection.source_port} -> {connection.target_port}'
+            )
+            session.add(SystemLog(
+                timestamp=datetime.utcnow(),
+                level='warning' if new_status == 'down' else 'info',
+                module='link_monitor',
+                source=f'link:{connection.id}',
+                message=(
+                    f'链路 {src_name}:{connection.source_port} -> '
+                    f'{dst_name}:{connection.target_port} '
+                    f'状态变化: {old_status} -> {new_status}'
+                    + (f'，原因: {reason}' if reason else '')
+                ),
+                details=json.dumps({
+                    'alert_title': alert_title,
+                    'severity': 'critical' if new_status == 'down' else 'info',
+                    'alert_status': alert_status,
+                    'reason': reason,
+                    'source_port': connection.source_port,
+                    'target_port': connection.target_port,
+                }, ensure_ascii=False),
+            ))
+
+            print(f"链路 {connection_id} 状态已更新: {old_status} -> {new_status}")
+        else:
+            connection.updated_at = datetime.now()
     def _update_ifindex_cache(self, connection_id: int, result: Dict, session):
-        """把检测阶段 SNMP walk 得到的 ifindex 写回接口缓存（短事务，不占连接池）。"""
-        try:
-            connection = session.get(ConnectionPath, connection_id)
-            if not connection:
-                return
-            changed = False
-            if result.get('source_ifindex_found'):
-                port = connection.source_interface
-                if port and port.ifindex != result['source_ifindex_found']:
-                    port.ifindex = result['source_ifindex_found']
-                    changed = True
-            if result.get('target_ifindex_found'):
-                port = connection.target_interface
-                if port and port.ifindex != result['target_ifindex_found']:
-                    port.ifindex = result['target_ifindex_found']
-                    changed = True
-            if changed:
-                session.commit()
-                print(f"链路 {connection_id} ifindex 缓存已更新")
-        except Exception as e:
-            session.rollback()
-            print(f"_update_ifindex_cache 异常: {e}")
-    
+        """Write discovered ifindex values back to the session for batch commit."""
+        connection = session.get(ConnectionPath, connection_id)
+        if not connection:
+            return
+        changed = False
+        if result.get('source_ifindex_found'):
+            port = connection.source_interface
+            if port and port.ifindex != result['source_ifindex_found']:
+                port.ifindex = result['source_ifindex_found']
+                changed = True
+        if result.get('target_ifindex_found'):
+            port = connection.target_interface
+            if port and port.ifindex != result['target_ifindex_found']:
+                port.ifindex = result['target_ifindex_found']
+                changed = True
+        if changed:
+            print(f"链路 {connection_id} ifindex 缓存已更新")
     def _create_alert_in_session(self, session, connection: ConnectionPath, result: Dict):
         """在会话中创建告警"""
         try:
@@ -988,30 +929,30 @@ class LinkMonitor:
     # ==================== 批量链路检测 ====================
     
     def check_all_links(self, connection_ids: Optional[List[int]] = None) -> List[Dict]:
-        """批量检测所有链路"""
+        """Batch-detect links, then persist status changes in batched commits."""
         results = []
-        
+
         try:
             query = ConnectionPath.query
             if connection_ids:
                 query = query.filter(ConnectionPath.id.in_(connection_ids))
-            
+
             connections = query.filter(
                 ConnectionPath.source_interface_id.isnot(None),
                 ConnectionPath.target_interface_id.isnot(None)
             ).all()
-            
+
             print(f"查询到 {len(connections)} 条有效链路需要检测")
             if not connections:
                 return results
-            
+
             conn_ids = [c.id for c in connections]
-            
+
             futures = {}
             for conn_id in conn_ids:
                 future = self.pool.submit(self._check_link_in_thread, conn_id)
                 futures[future] = conn_id
-            
+
             for future in as_completed(futures, timeout=120):
                 conn_id = futures[future]
                 try:
@@ -1029,35 +970,57 @@ class LinkMonitor:
                         'target_status': 'unknown',
                         'elapsed': 0
                     })
-            
+
+            self._persist_link_results(results)
+
         except Exception as e:
             print(f"check_all_links 整体异常: {e}")
             import traceback
             traceback.print_exc()
             raise
-        
+
         return results
-    
+
+    def _persist_link_results(self, results: List[Dict]):
+        """Persist all link-check results in one session with periodic commits."""
+        if not results:
+            return
+
+        session = self._get_session()
+        persisted = 0
+        commit_every = 50
+        try:
+            for result in results:
+                conn_id = result.get('connection_id')
+                if conn_id is None:
+                    continue
+                try:
+                    if result.get('source_ifindex_found') or result.get('target_ifindex_found'):
+                        self._update_ifindex_cache(conn_id, result, session)
+                    self.update_connection_status(conn_id, result, session)
+                    persisted += 1
+                    if persisted % commit_every == 0:
+                        session.commit()
+                except Exception as e:
+                    session.rollback()
+                    persisted = 0
+                    print(f"链路 {conn_id} 状态回写异常，跳过当前批次: {e}")
+
+            if persisted % commit_every != 0:
+                session.commit()
+        finally:
+            if self.Session:
+                session.close()
+            else:
+                db.session.remove()
+
     def _check_link_in_thread(self, conn_id: int) -> Dict:
-        """在线程中检测单条链路（使用独立会话）"""
+        """Detect one link in a worker thread without database writes."""
         session = None
         try:
-            if self.Session:
-                session = self.Session()
-            else:
-                session = db.session
-            
-            result = self.check_single_link(conn_id, session)
-
-            if result.get('source_ifindex_found') or result.get('target_ifindex_found'):
-                self._update_ifindex_cache(conn_id, result, session)
-
-            self.update_connection_status(conn_id, result, session)
-
-            return result
+            session = self._get_session()
+            return self.check_single_link(conn_id, session)
         except Exception as e:
-            if session:
-                session.rollback()
             print(f"_check_link_in_thread 异常: {e}")
             import traceback
             traceback.print_exc()
@@ -1075,7 +1038,7 @@ class LinkMonitor:
                     session.close()
                 else:
                     db.session.remove()
-    
+
     # ==================== LLDP自动发现 ====================
 
     @staticmethod
@@ -1120,10 +1083,15 @@ class LinkMonitor:
                     continue
                 
                 try:
-                    neighbors = self.get_lldp_neighbors(
+                    neighbors = []
+                    neighbors.extend(self.get_lldp_neighbors(
                         device.management_ip,
                         community=device.snmp_community or 'public'
-                    )
+                    ))
+                    neighbors.extend(self.get_cdp_neighbors(
+                        device.management_ip,
+                        community=device.snmp_community or 'public'
+                    ))
                     
                     for neighbor in neighbors:
                         target_device = self.find_device_by_mac(neighbor.get('chassis_id', ''), session)
@@ -1200,7 +1168,7 @@ class LinkMonitor:
                         if existing:
                             existing.discovery_time = datetime.now()
                             existing.last_seen = datetime.now()  # 刷新"最近确认在线"时间，供老化判断
-                            existing.discovery_protocol = 'LLDP'
+                            existing.discovery_protocol = neighbor.get('protocol') or 'LLDP'
                             existing.link_status = 'active'
                             existing.confidence = 100
                             existing.auto_discovered = True
@@ -1358,11 +1326,70 @@ def run_link_monitor(app: Flask):
 
 
 def discover_topology(app: Flask):
-    """运行拓扑发现任务"""
+    """Run topology discovery task"""
     with app.app_context():
         monitor = LinkMonitor(app)
         result = monitor.discover_links_via_lldp()
         return result
+
+
+def run_topology_summary_job(app: Flask):
+    """Run SNMP topology summary collection and persist a TopologyLog record."""
+    with app.app_context():
+        now = datetime.utcnow()
+        devices = Device.query.filter(
+            Device.management_ip.isnot(None),
+            Device.status == 'online'
+        ).all()
+
+        summary = {
+            'started_at': now.isoformat(),
+            'devices_total': len(devices),
+            'devices_success': 0,
+            'devices_failed': 0,
+            'protocols': {'lldp': 0, 'cdp': 0, 'arp': 0, 'fdb': 0},
+            'per_device': []
+        }
+
+        for device in devices:
+            try:
+                device_summary = discover_topology_summary(
+                    device.management_ip,
+                    community=device.snmp_community or 'public',
+                    version=device.snmp_version or 2
+                )
+                counts = {
+                    protocol: len(device_summary.get(protocol) or [])
+                    for protocol in ('lldp', 'cdp', 'arp', 'fdb')
+                }
+                for protocol, count in counts.items():
+                    summary['protocols'][protocol] += count
+                summary['devices_success'] += 1
+                summary['per_device'].append({
+                    'device_id': device.id,
+                    'name': device.name,
+                    'ip': device.management_ip,
+                    'status': 'success',
+                    'counts': counts,
+                })
+            except Exception as exc:  # noqa: BLE001 - per-device SNMP failures must not break the job
+                summary['devices_failed'] += 1
+                summary['per_device'].append({
+                    'device_id': device.id,
+                    'name': device.name,
+                    'ip': device.management_ip,
+                    'status': 'failed',
+                    'error': str(exc)[:160],
+                })
+
+        log = TopologyLog(
+            check_time=now,
+            log_type='topology_summary',
+            message=json.dumps(summary, ensure_ascii=False, default=str),
+        )
+        db.session.add(log)
+        db.session.commit()
+        return summary
 
 
 def prune_stale_links_task(app: Flask):

@@ -47,6 +47,8 @@ def init_extensions(app):
         from models import maintenance_models,config_models,device_performance_models,monitoring
         from models import config_models,report_models,settings_models
         from models import device_group_models
+        from models import oob_models
+        from models import netflow_models
 
         #from models.models import User, Location, Cabinet, Device, Interface, SystemConfig, OperationLog, InterfaceRelationship, TopologyLog,InterfaceMonitorData
         #from models.maintenance_models import SparePart, SparePartUsage, WorkOrder, MaintenanceRecord

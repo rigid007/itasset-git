@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}采集健康度{% endblock %}
+{% block page_title %}采集健康度{% endblock %}
+{% block page_subtitle %}检查统一设备轮询的最近采集状态、失败连续次数与数据新鲜度{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-3">
+    <div class="col-md-2">
+      <div class="card text-white bg-primary">
+        <div class="card-body py-2"><small>总设备</small><h3 class="mb-0">{{ stats.total }}</h3></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-white bg-success">
+        <div class="card-body py-2"><small>正常</small><h3 class="mb-0">{{ stats.ok }}</h3></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-white bg-danger">
+        <div class="card-body py-2"><small>采集失败</small><h3 class="mb-0">{{ stats.failing }}</h3></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-white bg-warning">
+        <div class="card-body py-2"><small>数据过期</small><h3 class="mb-0">{{ stats.stale }}</h3></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-white bg-secondary">
+        <div class="card-body py-2"><small>无数据</small><h3 class="mb-0">{{ stats.no_data }}</h3></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-white bg-dark">
+        <div class="card-body py-2"><small>已禁用</small><h3 class="mb-0">{{ stats.disabled }}</h3></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>设备</th>
+              <th>IP</th>
+              <th>采集状态</th>
+              <th>最近采集</th>
+              <th>Ping</th>
+              <th>SNMP</th>
+              <th>CPU / 内存 / 磁盘</th>
+              <th>失败连续</th>
+              <th>最后成功</th>
+              <th>最后失败</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in items %}
+            {% set d = it.device %}
+            {% set latest = it.latest %}
+            <tr>
+              <td>
+                <a href="{{ url_for('device.device_detail', id=d.id) }}">{{ d.name }}</a>
+                {% if not it.enabled %}<span class="badge bg-secondary ms-1">禁用</span>{% endif %}
+              </td>
+              <td>{{ d.management_ip or d.ip_address or '-' }}</td>
+              <td>
+                {% if it.health == 'ok' %}<span class="badge bg-success">正常</span>
+                {% elif it.health == 'failing' %}<span class="badge bg-danger">采集失败</span>
+                {% elif it.health == 'stale' %}<span class="badge bg-warning text-dark">过期</span>
+                {% elif it.health == 'no_data' %}<span class="badge bg-secondary">无数据</span>
+                {% else %}<span class="badge bg-dark">禁用</span>{% endif %}
+              </td>
+              <td>
+                {% if latest %}{{ latest.collected_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                {% else %}-{% endif %}
+              </td>
+              <td>{% if latest and latest.ping_time is not none %}{{ '%.1f'|format(latest.ping_time) }} ms{% else %}-{% endif %}</td>
+              <td>{% if latest %}{{ '可达' if latest.is_reachable else '不可达' }}{% else %}-{% endif %}</td>
+              <td>
+                {% if latest %}
+                  {{ latest.cpu_usage|round(1) if latest.cpu_usage is not none else '-' }} /
+                  {{ latest.memory_usage|round(1) if latest.memory_usage is not none else '-' }} /
+                  {{ latest.disk_usage|round(1) if latest.disk_usage is not none else '-' }}
+                {% else %}-{% endif %}
+              </td>
+              <td>
+                {% if it.consecutive_failures > 0 %}<span class="text-danger">{{ it.consecutive_failures }}</span>
+                {% else %}0{% endif %}
+              </td>
+              <td>{% if it.last_success %}{{ it.last_success.collected_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}-{% endif %}</td>
+              <td>{% if it.last_fail %}{{ it.last_fail.collected_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}-{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" class="text-center">暂无可监控设备</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if pagination.pages > 1 %}
+      <nav>
+        <ul class="pagination">
+          <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('monitoring.collection_health', page=pagination.prev_num) }}">上一页</a>
+          </li>
+          {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <li class="page-item {% if p == pagination.page %}active{% endif %}"><a class="page-link" href="{{ url_for('monitoring.collection_health', page=p) }}">{{ p }}</a></li>
+            {% else %}<li class="page-item disabled"><span class="page-link">...</span></li>{% endif %}
+          {% endfor %}
+          <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('monitoring.collection_health', page=pagination.next_num) }}">下一页</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

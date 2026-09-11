@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block title %}NetFlow 报表 - AS / 区域 / DSCP{% endblock %}
+{% block page_title %}NetFlow 流量报表{% endblock %}
+{% block page_subtitle %}按自治域(AS)、区域(网段)与 QoS(DSCP) 聚合分析{% endblock %}
+{% block header_actions %}
+<select id="rep-minutes" class="form-select form-select-sm" style="width:auto;display:inline-block">
+  <option value="15">最近 15 分钟</option>
+  <option value="60" selected>最近 60 分钟</option>
+  <option value="1440">最近 24 小时</option>
+</select>
+<div class="btn-group" role="group">
+  <button class="btn btn-outline-primary active" data-group="as">AS 自治域</button>
+  <button class="btn btn-outline-primary" data-group="region">区域(网段)</button>
+  <button class="btn btn-outline-primary" data-group="dscp">DSCP 服务等级</button>
+  <button class="btn btn-outline-primary" data-group="asregion">区域(国家/运营商)</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header"><span id="rep-title">Top AS 流量</span></div>
+      <div class="card-body"><canvas id="rep-chart" height="200"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header">统计摘要</div>
+      <div class="card-body">
+        <div class="mb-2"><span class="text-muted">窗口记录数</span><br><b id="rep-total">-</b></div>
+        <div class="mb-2"><span class="text-muted">Top 条目</span><br><b id="rep-items">-</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">对外网段 Top 会话 <span class="text-muted small">（跨网段，目的网段不在内网列表即标记“对外”）</span></div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead><tr>
+            <th>#</th><th>源网段</th><th>源设备</th><th>源区域</th><th>→</th><th>目的网段</th><th>目的设备</th><th>目的区域</th>
+            <th>对外</th><th class="text-end">字节</th><th class="text-end">包数</th><th class="text-end">流数</th>
+          </tr></thead>
+          <tbody id="sess-body"><tr><td colspan="12" class="text-center text-muted">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">明细</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead><tr>
+            <th>#</th><th>键</th><th>名称</th><th>区域</th>
+            <th class="text-end">字节</th><th class="text-end">包数</th><th class="text-end">流数</th><th class="text-end">占比</th>
+          </tr></thead>
+          <tbody id="rep-body"><tr><td colspan="8" class="text-center text-muted">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  let chart = null;
+  const labels = { as: 'Top AS 流量', region: 'Top 区域(网段) 流量', dscp: 'DSCP 服务等级分布', asregion: '区域(国家/运营商) 分布' };
+  const names = { as: '自治域', region: '网段', dscp: 'DSCP' };
+
+  function fmtBytes(n) {
+    if (n == null) return '-';
+    const u = ['B','KB','MB','GB','TB']; let i=0;
+    while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+    return n.toFixed(1)+' '+u[i];
+  }
+
+  function load(group) {
+    const minutes = document.getElementById('rep-minutes').value;
+    fetch('/netflow/api/report?group=' + group + '&minutes=' + minutes, {
+      headers: { 'X-CSRFToken': csrf }
+    }).then(r => r.json()).then(d => {
+      document.getElementById('rep-title').textContent = labels[group] || '';
+      document.getElementById('rep-total').textContent = d.total || 0;
+      document.getElementById('rep-items').textContent = (d.items || []).length;
+      const items = (d.items || []).slice(0, 10);
+      const maxOct = items.length ? items[0].octets : 1;
+      const body = document.getElementById('rep-body');
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center text-muted">无数据</td></tr>';
+      } else {
+        body.innerHTML = items.map((x, i) => '<tr>' +
+          '<td>' + (i+1) + '</td>' +
+          '<td>' + (x.key ?? '-') + '</td>' +
+          '<td>' + (x.label ?? '-') + '</td>' +
+          '<td>' + (x.region || '-') + '</td>' +
+          '<td class="text-end">' + fmtBytes(x.octets) + '</td>' +
+          '<td class="text-end">' + (x.packets ?? 0) + '</td>' +
+          '<td class="text-end">' + (x.flows ?? 0) + '</td>' +
+          '<td class="text-end">' + (maxOct ? (x.octets/maxOct*100).toFixed(1) : 0) + '%</td></tr>').join('');
+      }
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById('rep-chart'), {
+        type: 'bar',
+        data: {
+          labels: items.map(x => (x.label || x.key || '').toString().slice(0, 18)),
+          datasets: [{ label: '字节', data: items.map(x => x.octets), backgroundColor: '#0d6efd' }]
+        },
+        options: {
+          indexAxis: 'y',
+          scales: { x: { ticks: { callback: v => fmtBytes(v) } } }
+        }
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-group]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-group]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      load(btn.dataset.group);
+    });
+  });
+  document.getElementById('rep-minutes').addEventListener('change', () => {
+    const active = document.querySelector('[data-group].active');
+    load(active ? active.dataset.group : 'as');
+    loadSessions();
+  });
+
+  function loadSessions() {
+    const minutes = document.getElementById('rep-minutes').value;
+    fetch('/netflow/api/sessions?minutes=' + minutes + '&top=10', {
+      headers: { 'X-CSRFToken': csrf }
+    }).then(r => r.json()).then(d => {
+      const body = document.getElementById('sess-body');
+      const items = d.items || [];
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="12" class="text-center text-muted">无跨网段会话</td></tr>';
+        return;
+      }
+      body.innerHTML = items.map((x, i) => '<tr>' +
+        '<td>' + (i+1) + '</td>' +
+        '<td>' + (x.src_subnet || '-') + '</td>' +
+        '<td>' + (x.src_device || '-') + '</td>' +
+        '<td>' + (x.src_region || '-') + '</td>' +
+        '<td class="text-center">→</td>' +
+        '<td>' + (x.dst_subnet || '-') + '</td>' +
+        '<td>' + (x.dst_device || '-') + '</td>' +
+        '<td>' + (x.dst_region || '-') + '</td>' +
+        '<td>' + (x.external ? '<span class="badge bg-danger">对外</span>' : '<span class="badge bg-secondary">内网</span>') + '</td>' +
+        '<td class="text-end">' + fmtBytes(x.octets) + '</td>' +
+        '<td class="text-end">' + (x.packets ?? 0) + '</td>' +
+        '<td class="text-end">' + (x.flows ?? 0) + '</td></tr>').join('');
+    });
+  }
+  load('as');
+  loadSessions();
+})();
+</script>
+{% endblock %}

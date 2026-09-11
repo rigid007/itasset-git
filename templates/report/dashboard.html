@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}报表中心 - 数据中心管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">报表中心</h1>
+            <p class="text-muted">集中查看资产、监控、告警、运维等各类统计报表</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.device_status_report') }}" class="text-decoration-none">
+                <div class="card border-left-primary shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-server fa-2x text-primary mr-3"></i>
+                            <div><div class="font-weight-bold">设备状态报表</div><div class="small text-muted">设备在线/离线/维护分布</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.device_type_distribution') }}" class="text-decoration-none">
+                <div class="card border-left-info shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-chart-pie fa-2x text-info mr-3"></i>
+                            <div><div class="font-weight-bold">设备类型分布</div><div class="small text-muted">按类型/品牌统计</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.monitoring_coverage_report') }}" class="text-decoration-none">
+                <div class="card border-left-success shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-broadcast-tower fa-2x text-success mr-3"></i>
+                            <div><div class="font-weight-bold">监控覆盖率报表</div><div class="small text-muted">纳管设备比例</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.alert_statistics_report') }}" class="text-decoration-none">
+                <div class="card border-left-danger shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-bell fa-2x text-danger mr-3"></i>
+                            <div><div class="font-weight-bold">告警统计报表</div><div class="small text-muted">按严重级别/设备</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.alert_trend_report') }}" class="text-decoration-none">
+                <div class="card border-left-warning shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-chart-area fa-2x text-warning mr-3"></i>
+                            <div><div class="font-weight-bold">告警趋势报表</div><div class="small text-muted">告警时间趋势</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.performance_trend_report') }}" class="text-decoration-none">
+                <div class="card border-left-secondary shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-chart-line fa-2x text-secondary mr-3"></i>
+                            <div><div class="font-weight-bold">性能趋势报表</div><div class="small text-muted">CPU/内存趋势</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.uptime_report') }}" class="text-decoration-none">
+                <div class="card border-left-primary shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-power-off fa-2x text-primary mr-3"></i>
+                            <div><div class="font-weight-bold">在线率报表</div><div class="small text-muted">设备可用性</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.response_time_report') }}" class="text-decoration-none">
+                <div class="card border-left-info shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-stopwatch fa-2x text-info mr-3"></i>
+                            <div><div class="font-weight-bold">响应时间报表</div><div class="small text-muted">告警响应时长</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.change_report') }}" class="text-decoration-none">
+                <div class="card border-left-dark shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-exchange-alt fa-2x text-dark mr-3"></i>
+                            <div><div class="font-weight-bold">变更报表</div><div class="small text-muted">变更请求统计</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.maintenance_report') }}" class="text-decoration-none">
+                <div class="card border-left-success shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-tools fa-2x text-success mr-3"></i>
+                            <div><div class="font-weight-bold">运维报表</div><div class="small text-muted">维护任务统计</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.compliance_report') }}" class="text-decoration-none">
+                <div class="card border-left-warning shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-shield-alt fa-2x text-warning mr-3"></i>
+                            <div><div class="font-weight-bold">合规报表</div><div class="small text-muted">设备合规检查</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.scheduled_reports') }}" class="text-decoration-none">
+                <div class="card border-left-secondary shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-clock fa-2x text-secondary mr-3"></i>
+                            <div><div class="font-weight-bold">定时报表</div><div class="small text-muted">计划任务管理</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.custom_reports') }}" class="text-decoration-none">
+                <div class="card border-left-primary shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-pencil-alt fa-2x text-primary mr-3"></i>
+                            <div><div class="font-weight-bold">自定义报表</div><div class="small text-muted">报表模板</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <a href="{{ url_for('report.export_reports') }}" class="text-decoration-none">
+                <div class="card border-left-info shadow h-100 py-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-download fa-2x text-info mr-3"></i>
+                            <div><div class="font-weight-bold">导出报表</div><div class="small text-muted">导出历史</div></div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

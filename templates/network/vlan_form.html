@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 网络管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('network.vlan_list') }}">VLAN管理</a></li>
+                    <li class="breadcrumb-item active">{{ title }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2">{{ title }}</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {{ form.hidden_tag() }}
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.vlan_id.label(class='form-label') }}
+                                {{ form.vlan_id(class='form-control' + (' is-invalid' if form.vlan_id.errors else ''), type='number', min=1, max=4094) }}
+                                {% for e in form.vlan_id.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.name.label(class='form-label') }}
+                                {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else '')) }}
+                                {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.vlan_type.label(class='form-label') }}
+                                {{ form.vlan_type(class='form-select' + (' is-invalid' if form.vlan_type.errors else '')) }}
+                                {% for e in form.vlan_type.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.gateway.label(class='form-label') }}
+                                {{ form.gateway(class='form-control' + (' is-invalid' if form.gateway.errors else ''), placeholder='如 192.168.1.1') }}
+                                {% for e in form.gateway.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.status.label(class='form-label') }}
+                                {{ form.status(class='form-select' + (' is-invalid' if form.status.errors else '')) }}
+                                {% for e in form.status.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.description.label(class='form-label') }}
+                            {{ form.description(class='form-control', rows=3) }}
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                            <a href="{{ url_for('network.vlan_list') }}" class="btn btn-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -172,7 +172,9 @@ class DeviceHealthScore(db.Model):
     ping_score = db.Column(db.Integer, default=100)
     components = db.Column(db.Text, comment='各组件详情JSON')
     calculated_at = db.Column(db.DateTime, default=datetime.utcnow, comment='计算时间')
-    device = db.relationship('Device', backref='health_scores')
+    # device_id NOT NULL：需 delete-orphan，否则删设备时 ORM 先置 NULL → 1048
+    device = db.relationship(
+        'Device', backref=db.backref('health_scores', cascade='all, delete-orphan'))
 
     def to_dict(self):
         return {
@@ -233,7 +235,9 @@ class SlaUptime(db.Model):
     period_start = db.Column(db.DateTime, comment='周期开始')
     period_end = db.Column(db.DateTime, comment='周期结束')
     calculated_at = db.Column(db.DateTime, default=datetime.utcnow)
-    device = db.relationship('Device', backref='sla_records')
+    # device_id NOT NULL：需 delete-orphan（原 1048 报错源头，批量删除设备时暴露）
+    device = db.relationship(
+        'Device', backref=db.backref('sla_records', cascade='all, delete-orphan'))
 
     __table_args__ = (
         db.UniqueConstraint('device_id', 'period_start', 'period', name='uq_sla_period'),

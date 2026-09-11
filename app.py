@@ -43,6 +43,15 @@ app.jinja_env.globals['has_permission'] = has_permission
 from utils.html_sanitize import sanitize_html
 app.jinja_env.filters['sanitize_html'] = sanitize_html
 
+# 字典合并过滤器（供部分报表模板聚合使用）
+def _jinja_merge(dict_a, dict_b):
+    if not isinstance(dict_a, dict):
+        dict_a = dict(dict_a) if dict_a is not None else {}
+    result = dict(dict_a)
+    result.update(dict_b)
+    return result
+app.jinja_env.filters['merge'] = _jinja_merge
+
 # 5. 初始化扩展
 try:
     init_extensions(app)
@@ -74,6 +83,10 @@ register_context_processors(app)
 # 9. 注册蓝图
 from blueprints import register_blueprints
 register_blueprints(app)
+
+# 9.6 WebSSH / 实时终端（SocketIO）
+from realtime import socketio
+socketio.init_app(app, async_mode='threading')
 
 # 9.5 全局登录守卫：除白名单外的所有路由都必须先登录，统一防止越权访问
 # （原有逐路由 @login_required / @permission_required 继续生效，此处作为兜底防线）
@@ -178,4 +191,4 @@ if __name__ == '__main__':
     configure_scheduler(app)
 
     app.logger.info("应用启动完成，开始监听请求")
-    app.run(debug=debug_mode, host=host, port=port)
+    socketio.run(app, debug=debug_mode, host=host, port=port, allow_unsafe_werkzeug=True)

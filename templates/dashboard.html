@@ -799,9 +799,95 @@
                 <i class="fas fa-chart-pie" style="font-size:0.65rem;"></i> 平均使用率 {{ (stats.get('cabinet_avg_usage', 0))|round(1) }}%
             </div>
         </div>
+
+        <!-- 自动工单（升级引擎生成，支持时间窗切换） -->
+        <div class="kpi-card accent-violet" id="autoWoCard" style="cursor:pointer;">
+            <a href="/maintenance/work_order/list" style="text-decoration:none;color:inherit;">
+            <div class="kpi-card-header">
+                <div class="kpi-icon-circle violet"><i class="fas fa-ticket-alt"></i></div>
+                {% if stats.get('auto_wo_open', 0) > 0 %}
+                <span class="kpi-trend-badge down">{{ stats.get('auto_wo_open', 0) }} 待处理</span>
+                {% else %}
+                <span class="kpi-trend-badge neutral">无待办</span>
+                {% endif %}
+            </div>
+            <div class="kpi-body">
+                <div class="kpi-value" data-count="{{ stats.get('auto_wo_total', 0) }}">0</div>
+                <div class="kpi-label">自动工单</div>
+            </div>
+            <div class="kpi-footer">
+                <span class="btn-group btn-group-sm" role="group" style="display:inline-flex;">
+                    <button type="button" class="btn btn-outline-primary auto-wo-window active" data-w="today">今日</button>
+                    <button type="button" class="btn btn-outline-primary auto-wo-window" data-w="week">本周</button>
+                    <button type="button" class="btn btn-outline-primary auto-wo-window" data-w="month">本月</button>
+                    <button type="button" class="btn btn-outline-primary auto-wo-window" data-w="total">累计</button>
+                </span>
+                <i class="far fa-calendar-alt" style="font-size:0.65rem;"></i>
+                <span class="auto-wo-window-label" data-today="{{ stats.get('auto_wo_today', 0) }}" data-week="{{ stats.get('auto_wo_week', 0) }}" data-month="{{ stats.get('auto_wo_month', 0) }}" data-total="{{ stats.get('auto_wo_total', 0) }}">今日新增 {{ stats.get('auto_wo_today', 0) }} 张</span>
+            </div>
+            </a>
+        </div>
     </div>
 
-    <!-- ====== CHARTS ROW ====== -->
+    <!-- ====== NETFLOW SUMMARY CARD ====== -->
+    {% set nf = netflow_summary if netflow_summary is defined else {} %}
+    {% set w = nf.get('windows', {}) %}
+    <div class="kpi-card accent-aqua" style="width:100%; margin-bottom:28px;">
+        <div class="kpi-card-header">
+            <div class="kpi-icon-circle aqua"><i class="fas fa-chart-area"></i></div>
+            <span style="font-weight:600;">NetFlow 流量统计</span>
+            <span class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-primary nf-window active" data-w="today">今日</button>
+                <button class="btn btn-outline-primary nf-window" data-w="h24">近24h</button>
+                <button class="btn btn-outline-primary nf-window" data-w="week">本周</button>
+                <button class="btn btn-outline-primary nf-window" data-w="d7">近7天</button>
+                <button class="btn btn-outline-primary nf-window" data-w="month">本月</button>
+            </span>
+            {% if nf.get('probes_running', 0) > 0 %}
+            <span class="kpi-trend-badge up"><i class="fas fa-circle" style="font-size:0.5rem;"></i> {{ nf.get('probes_running', 0) }} 采集器运行中</span>
+            {% else %}
+            <span class="kpi-trend-badge neutral">未启动</span>
+            {% endif %}
+        </div>
+        <div class="kpi-body">
+            <div class="row text-center w-100 g-2">
+                <div class="col-3">
+                    <div class="kpi-value" id="nf-octets" data-today="{{ w.get('today', {}).get('octets', 0) }}" data-h24="{{ w.get('h24', {}).get('octets', 0) }}" data-week="{{ w.get('week', {}).get('octets', 0) }}" data-d7="{{ w.get('d7', {}).get('octets', 0) }}" data-month="{{ w.get('month', {}).get('octets', 0) }}">0</div>
+                    <div class="kpi-label">总流量</div>
+                </div>
+                <div class="col-3">
+                    <div class="kpi-value" id="nf-packets" data-today="{{ w.get('today', {}).get('packets', 0) }}" data-h24="{{ w.get('h24', {}).get('packets', 0) }}" data-week="{{ w.get('week', {}).get('packets', 0) }}" data-d7="{{ w.get('d7', {}).get('packets', 0) }}" data-month="{{ w.get('month', {}).get('packets', 0) }}">0</div>
+                    <div class="kpi-label">总包数</div>
+                </div>
+                <div class="col-3">
+                    <div class="kpi-value" id="nf-flows" data-today="{{ w.get('today', {}).get('flows', 0) }}" data-h24="{{ w.get('h24', {}).get('flows', 0) }}" data-week="{{ w.get('week', {}).get('flows', 0) }}" data-d7="{{ w.get('d7', {}).get('flows', 0) }}" data-month="{{ w.get('month', {}).get('flows', 0) }}">0</div>
+                    <div class="kpi-label">流记录</div>
+                </div>
+                <div class="col-3">
+                    <div class="kpi-value" id="nf-top" data-today="{{ w.get('today', {}).get('top_source_octets', 0) }}" data-h24="{{ w.get('h24', {}).get('top_source_octets', 0) }}" data-week="{{ w.get('week', {}).get('top_source_octets', 0) }}" data-d7="{{ w.get('d7', {}).get('top_source_octets', 0) }}" data-month="{{ w.get('month', {}).get('top_source_octets', 0) }}">0</div>
+                    <div class="kpi-label" id="nf-top-label">Top 源地址（今日）</div>
+                </div>
+            </div>
+            <div id="nf-top-probes-store" class="d-none"
+                 data-today="{{ w.get('today', {}).get('top_probes', [])|tojson|forceescape }}"
+                 data-h24="{{ w.get('h24', {}).get('top_probes', [])|tojson|forceescape }}"
+                 data-week="{{ w.get('week', {}).get('top_probes', [])|tojson|forceescape }}"
+                 data-d7="{{ w.get('d7', {}).get('top_probes', [])|tojson|forceescape }}"
+                 data-month="{{ w.get('month', {}).get('top_probes', [])|tojson|forceescape }}"></div>
+            <div class="row w-100 mt-2 px-1">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap gap-1 align-items-center small" id="nf-probe-chips">
+                        <span class="text-muted">Top 采集器：-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="kpi-footer">
+            <a href="/netflow/" class="text-decoration-none"><i class="fas fa-external-link-alt" style="font-size:0.65rem;"></i> 进入 NetFlow 流量分析 / 报表 →</a>
+        </div>
+    </div>
+
+<!-- ====== CHARTS ROW ====== -->
     <div class="charts-row">
         <!-- 设备类型分布 -->
         <div class="panel">
@@ -1989,3 +2075,47 @@
 })();
 </script>
 {% endblock %}
+<script>
+(function () {
+  function fmt(n) {
+    if (n == null) return '-';
+    const u = ['B','KB','MB','GB','TB']; let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return n.toFixed(1) + ' ' + u[i];
+  }
+  const ids = ['nf-octets', 'nf-packets', 'nf-flows', 'nf-top'];
+  const winLabels = { today: '今日', h24: '近24h', week: '本周', d7: '近7天', month: '本月' };
+  function render(w) {
+    const key = (w || 'today');
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const n = parseInt(el.getAttribute('data-' + key) || '0', 10);
+      el.textContent = fmt(n);
+    });
+    const label = document.getElementById('nf-top-label');
+    if (label) label.textContent = 'Top 源地址（' + (winLabels[key] || key) + '）';
+    const store = document.getElementById('nf-top-probes-store');
+    const chips = document.getElementById('nf-probe-chips');
+    if (store && chips) {
+      let list = [];
+      try { list = JSON.parse(store.getAttribute('data-' + key) || '[]') || []; } catch (e) { list = []; }
+      if (!list.length) {
+        chips.innerHTML = '<span class="text-muted">Top 采集器：-</span>';
+      } else {
+        chips.innerHTML = '<span class="text-muted">Top 采集器：</span> ' + list.map(p =>
+          '<a class="badge text-bg-light border text-decoration-none me-1" href="/netflow/?probe=' + (p.id ?? '') + '&window=' + key + '" title="查看该采集器（设备）流量">' +
+          (p.name || '?') + ' · ' + fmt(p.octets) + '</a>').join('');
+      }
+    }
+  }
+  document.querySelectorAll('.nf-window').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nf-window').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render(btn.getAttribute('data-w'));
+    });
+  });
+  render('today');
+})();
+</script>

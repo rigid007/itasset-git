@@ -1166,9 +1166,9 @@ async function fetchRealTimeStats() {
             return;
         }
 
-        // 并发请求每个设备的接口最新统计
+        // 并发请求每个设备的接口最新统计（POST 触发真实 SNMP 重新检测）
         const promises = deviceIds.map(deviceId =>
-            fetch(`/monitoring/api/devices/${deviceId}/interfaces/latest`)
+            fetch(`/monitoring/api/devices/${deviceId}/interfaces/refresh`, { method: 'POST' })
                 .then(res => res.ok ? res.json() : Promise.reject(`设备 ${deviceId} 请求失败`))
         );
         const results = await Promise.allSettled(promises);

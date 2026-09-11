@@ -1,0 +1,189 @@
+{% extends 'base.html' %}
+{% block title %}告警升级联动 - 带外管理{% endblock %}
+{% block page_title %}告警升级联动（SEL / 带外）{% endblock %}
+{% block page_subtitle %}iDRAC 带外 SEL 等告警持续未确认时自动升级严重级别并按频率加推通知{% endblock %}
+{% block header_actions %}
+<button class="btn btn-outline-danger" id="btn-run-now"><i class="bi bi-lightning"></i> 立即扫描</button>
+<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#escModal"><i class="bi bi-plus"></i> 新增策略</button>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">升级策略</div>
+      <div class="fs-4 fw-bold">{{ policies|length }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">启用策略</div>
+      <div class="fs-4 fw-bold">{{ policies|selectattr('enabled')|list|length }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">待升级活跃 SEL 告警（未确认）</div>
+      <div class="fs-4 fw-bold"><a href="/alert/list?metric_type=bmc_sel&status=active">{{ pending_sel }}</a></div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header">升级策略</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>名称</th><th>适用范围</th><th>升级方向</th><th>超时(s)</th>
+          <th>仅未确认</th><th>重复间隔(s)</th><th>最大次数</th><th>自动工单</th><th>已升级</th><th>状态</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in policies %}
+        <tr id="esc-row-{{ p.id }}">
+          <td>{{ p.name }}{% if p.description %}<div class="small text-muted">{{ p.description }}</div>{% endif %}</td>
+          <td>{% if p.metric_type in (None, '', 'all') %}全部告警{% else %}<span class="badge bg-info">{{ p.metric_type }}</span>{% endif %}</td>
+          <td><span class="badge bg-warning">{{ p.original_severity or 'all' }}</span> → <span class="badge bg-danger">{{ p.target_severity }}</span></td>
+          <td>{{ p.escalate_after }}</td>
+          <td>{{ '是' if p.escalate_if_unacknowledged else '否' }}</td>
+          <td>{{ p.repeat_interval or '—' }}</td>
+          <td>{{ p.max_escalations }}</td>
+          <td>{{ '是' if p.auto_create_work_order else '否' }}</td>
+          <td>{{ p.escalation_count or 0 }}</td>
+          <td>{% if p.enabled %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">停用</span>{% endif %}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleEsc({{ p.id }})">{{ '停用' if p.enabled else '启用' }}</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="delEsc({{ p.id }})">删除</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="text-center text-muted">暂未配置升级策略。新增策略后，SEL 告警持续未确认将自动升级并加推通知。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">最近升级日志</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>时间</th><th>告警ID</th><th>策略</th><th>级别</th><th>升级</th><th>渠道</th><th>消息摘要</th></tr></thead>
+      <tbody id="log-body">
+        {% for lg in logs %}
+        <tr>
+          <td>{{ lg.escalated_at.strftime('%Y-%m-%d %H:%M') if lg.escalated_at else '-' }}</td>
+          <td>#{{ lg.alert_id }}</td>
+          <td>{{ policy_names.get(lg.policy_id, lg.policy_id) }}</td>
+          <td>L{{ lg.level }}</td>
+          <td><span class="badge bg-warning">{{ lg.from_severity or '?' }}</span> → <span class="badge bg-danger">{{ lg.to_severity or '?' }}</span></td>
+          <td>{{ lg.channel or '-' }}</td>
+          <td class="text-muted small">{{ (lg.message or '')[:80] }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted">暂无升级记录</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- create modal -->
+<div class="modal fade" id="escModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">新增升级策略</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-2">
+        <div class="col-6"><label class="form-label">名称 *</label><input id="e-name" class="form-control" value="SEL 严重未确认升级"></div>
+        <div class="col-6"><label class="form-label">适用范围</label>
+          <select id="e-metric" class="form-select">
+            <option value="bmc_sel">仅 iDRAC 带外 SEL (bmc_sel)</option>
+            <option value="">全部告警</option>
+          </select></div>
+        <div class="col-4"><label class="form-label">原级别 *</label>
+          <select id="e-orig" class="form-select">
+            <option value="critical">critical</option><option value="warning">warning</option>
+            <option value="error">error</option><option value="info">info</option>
+          </select></div>
+        <div class="col-4"><label class="form-label">升级到</label>
+          <select id="e-target" class="form-select">
+            <option value="critical">critical</option><option value="error">error</option>
+            <option value="warning">warning</option><option value="info">info</option>
+          </select></div>
+        <div class="col-4"><label class="form-label">超时升级(秒)</label><input id="e-after" type="number" class="form-control" value="300"></div>
+        <div class="col-4"><label class="form-label">重复间隔(秒, 0=一次)</label><input id="e-repeat" type="number" class="form-control" value="0"></div>
+        <div class="col-4"><label class="form-label">最大升级次数</label><input id="e-max" type="number" class="form-control" value="3"></div>
+        <div class="col-4"><label class="form-label">仅未确认时升级</label>
+          <select id="e-unack" class="form-select"><option value="1">是</option><option value="0">否</option></select></div>
+        <div class="col-4"><label class="form-label">升级后自动建工单</label>
+          <select id="e-wo" class="form-select"><option value="1">是</option><option value="0" selected>否</option></select></div>
+        <div class="col-12"><label class="form-label">通知渠道（逗号分隔: email/webhook/wechat/dingtalk/feishu/slack）</label>
+          <input id="e-actions" class="form-control" value="email,webhook"></div>
+        <div class="col-12"><label class="form-label">收件人邮箱（逗号分隔）</label><input id="e-users" class="form-control" value=""></div>
+        <div class="col-12"><label class="form-label">升级消息模板（{title} {device} {severity} {to_severity} {level} {message} ...）</label>
+          <textarea id="e-msg" class="form-control" rows="3">【告警升级】{title}
+设备：{device}
+级别：{severity} -&gt; {to_severity}（升级 {level} 级）
+详情：{message}</textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button type="button" class="btn btn-primary" id="btn-save-esc">保存</button>
+    </div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+      'X-CSRFToken': csrf, 'Content-Type': 'application/json'
+    });
+    return fetch(path, opts).then(r => r.json());
+  }
+  document.getElementById('btn-save-esc').addEventListener('click', () => {
+    const actions = (document.getElementById('e-actions').value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const users = (document.getElementById('e-users').value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const body = {
+      name: document.getElementById('e-name').value,
+      metric_type: document.getElementById('e-metric').value,
+      original_severity: document.getElementById('e-orig').value,
+      target_severity: document.getElementById('e-target').value,
+      escalate_after: parseInt(document.getElementById('e-after').value, 10) || 300,
+      repeat_interval: parseInt(document.getElementById('e-repeat').value, 10) || 0,
+      max_escalations: parseInt(document.getElementById('e-max').value, 10) || 3,
+      escalate_if_unacknowledged: document.getElementById('e-unack').value === '1',
+      auto_create_work_order: document.getElementById('e-wo').value === '1',
+      target_actions: actions,
+      target_users: users,
+      escalation_message: document.getElementById('e-msg').value
+    };
+    api('/oob/api/escalations', { method: 'POST', body: JSON.stringify(body) }).then(r => {
+      if (r.error) { alert(r.error); return; }
+      bootstrap.Modal.getInstance(document.getElementById('escModal')).hide();
+      location.reload();
+    });
+  });
+  window.toggleEsc = function (id) {
+    api('/oob/api/escalations/' + id + '/toggle', { method: 'POST' }).then(() => location.reload());
+  };
+  window.delEsc = function (id) {
+    if (!confirm('确认删除该升级策略？')) return;
+    api('/oob/api/escalations/' + id, { method: 'DELETE' }).then(() => location.reload());
+  };
+  document.getElementById('btn-run-now').addEventListener('click', () => {
+    api('/oob/api/escalations/run', { method: 'POST' }).then(r => {
+      alert('扫描完成，升级 ' + (r.performed ? r.performed.length : 0) + ' 条');
+      location.reload();
+    });
+  });
+})();
+</script>
+{% endblock %}

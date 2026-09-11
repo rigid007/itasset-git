@@ -233,7 +233,7 @@
             <h1 class="h3 mb-0">逻辑拓扑管理</h1>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
-                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">仪表板</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">仪表板</a></li>
                     <li class="breadcrumb-item"><a href="{{ url_for('topology.physical_topology') }}">拓扑管理</a></li>
                     <li class="breadcrumb-item active" aria-current="page">逻辑拓扑</li>
                 </ol>
@@ -729,6 +729,8 @@
         var connectionList = [];
         var rawNodesData = [];
         var rawEdgesData = [];
+        // 逻辑拓扑 API 基址（/topology/api/topologies），设备/连接/创建在其下
+        var API_TOPO_BASE = "{{ url_for('topology.api_topologies') }}";
 
         // 状态颜色
         var STATUS_COLORS = {
@@ -756,7 +758,7 @@
 
         function loadTopologyList() {
             $.ajax({
-                url: "{{ url_for('topology.logical_topology') }}",
+                url: API_TOPO_BASE,
                 method: "GET",
                 dataType: "json",
                 success: function(response) {
@@ -811,6 +813,12 @@
             loadConnectionList(topologyId);
             loadTopologyProperties(topology);
             if (topology.layout_type) $("#layoutType").val(topology.layout_type);
+            // 将拓扑自身的分组方式映射到页面分组下拉框（创建时可选 vlan_id/custom 等）
+            if (topology.group_by) {
+                var gbMap = { vlan_id: 'vlan', subnet: 'subnet', location: 'location', device_type: 'device_type' };
+                var mapped = gbMap[topology.group_by];
+                if (mapped) $("#groupBySelect").val(mapped);
+            }
         }
 
         function loadTopologyData(topologyId) {
@@ -853,16 +861,119 @@
             });
 
             chart.on('dblclick', function(params) {
-                if (params.dataType === 'node' && params.data && params.data.id) {
-                    showDeviceDetail(params.data.id);
+                if (params.dataType === 'node' && params.data && params.data._raw) {
+                    var raw = params.data._raw;
+                    if (raw.data && raw.data.type === 'device') {
+                        showDeviceDetail({
+                            id: raw.id,
+                            name: raw.label || '',
+                            ip: (raw.data && raw.data.ip) || '',
+                            device_type: raw.group || raw.data.type,
+                            status: (raw.data && raw.data.status) || 'unknown',
+                            location: (raw.data && raw.data.location) || ''
+                        });
+                    }
                 }
             });
+        }
+
+        // ===== 分组聚类布局 =====
+        // 组节点（location/device_type/vlan/subnet）排成网格，成员设备环绕组中心，
+        // 未归组设备铺在底部；最后归一化到画布可视范围。
+        function isGroupNode(n){ return n._raw && n._raw.data && n._raw.data.type !== 'device'; }
+
+        function applyClusteredLayout(echartsNodes){
+            var groupNodes = echartsNodes.filter(isGroupNode);
+            var deviceNodes = echartsNodes.filter(function(n){ return n._raw && n._raw.data && n._raw.data.type === 'device'; });
+            var groupedDevs = deviceNodes.filter(function(n){ return n._raw.parent != null; });
+            var ungroupedDevs = deviceNodes.filter(function(n){ return n._raw.parent == null; });
+
+            // 1) 组节点网格
+            var cols = Math.max(Math.ceil(Math.sqrt(Math.max(groupNodes.length, 1))), 1);
+            var gw = 280, gh = 240, startX = 140, startY = 90;
+            groupNodes.forEach(function(g, i){
+                g.x = startX + (i % cols) * gw;
+                g.y = startY + Math.floor(i / cols) * gh;
+                g.fixed = true;
+                var cnt = (g._raw.data && g._raw.data.device_count) || 0;
+                g.symbolSize = Math.min(110, 50 + cnt * 2);
+                g.symbol = 'roundRect';
+                g.itemStyle = g.itemStyle || {};
+                g.itemStyle.borderWidth = 2;
+            });
+
+            // 2) 组内设备环绕组中心
+            var byParent = {};
+            groupedDevs.forEach(function(n){
+                var pid = String(n._raw.parent);
+                (byParent[pid] = byParent[pid] || []).push(n);
+            });
+            Object.keys(byParent).forEach(function(pid){
+                var arr = byParent[pid];
+                var g = groupNodes.find(function(gn){ return String(gn.id) === pid; });
+                if (!g) return;
+                var radius = 55 + arr.length * 16;
+                arr.forEach(function(n, i){
+                    var ang = (2 * Math.PI * i) / arr.length;
+                    n.x = g.x + radius * Math.cos(ang);
+                    n.y = g.y + radius * Math.sin(ang);
+                    n.fixed = false;
+                });
+            });
+
+            // 3) 未归组设备铺在组网格下方
+            var gRows = Math.ceil(groupNodes.length / cols) || 0;
+            var ucols = Math.max(Math.ceil(Math.sqrt(Math.max(ungroupedDevs.length, 1))), 1);
+            ungroupedDevs.forEach(function(n, i){
+                n.x = startX + (i % ucols) * 60 + 200;
+                n.y = (gRows * gh + 150) + Math.floor(i / ucols) * 60;
+                n.fixed = false;
+            });
+
+            // 4) 归一化到画布可视范围（约 800x560，中心 400,300）
+            var xs = [], ys = [];
+            echartsNodes.forEach(function(n){ if (n.x != null && n.y != null){ xs.push(n.x); ys.push(n.y); } });
+            if (xs.length){
+                var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+                var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+                var w = (maxX - minX) || 1, h = (maxY - minY) || 1;
+                var s = Math.min(800 / w, 560 / h);
+                var cx = (maxX + minX) / 2, cy = (maxY + minY) / 2;
+                echartsNodes.forEach(function(n){
+                    if (n.x != null && n.y != null){
+                        n.x = (n.x - cx) * s + 400;
+                        n.y = (n.y - cy) * s + 300;
+                    }
+                });
+            }
         }
 
         // ===== ECharts 渲染 =====
         function renderTopologyNetwork(nodesData, edgesData) {
             $("#loadingSpinner").hide();
             if (!chart) return;
+
+            // 按「在线/离线/警告」勾选框过滤（纯客户端，无需重新请求）
+            var filterMap = {
+                online: !!$("#filterOnline").is(":checked"),
+                offline: !!$("#filterOffline").is(":checked"),
+                warning: !!$("#filterWarning").is(":checked")
+            };
+            var filtering = !(filterMap.online && filterMap.offline && filterMap.warning);
+            var nodesData2 = nodesData.filter(function(node) {
+                if (!filtering) return true;
+                if (node.data && node.data.type !== 'device') return true;  // 组节点始终保留
+                var st = (node.data && node.data.status) || 'unknown';
+                var bucket = st === 'online' ? 'online' : (st === 'warning' ? 'warning' : 'offline');
+                return !!filterMap[bucket];
+            });
+            var visibleIds = {};
+            nodesData2.forEach(function(node) { visibleIds[String(node.id)] = true; });
+            var edgesData2 = edgesData.filter(function(edge) {
+                return visibleIds[String(edge.from)] && visibleIds[String(edge.to)];
+            });
+            nodesData = nodesData2;
+            edgesData = edgesData2;
 
             var categories = [];
             var catSet = {};
@@ -930,8 +1041,13 @@
 
             var layoutType = $("#layoutType").val() || 'force';
             var layoutCfg = {};
+            var hasGroups = echartsNodes.some(isGroupNode);
             if (layoutType === 'circular') {
                 layoutCfg = { layout: 'circular' };
+            } else if (hasGroups) {
+                // 分组视图（device_type/location/vlan/subnet）：组节点网格 + 成员环绕
+                applyClusteredLayout(echartsNodes);
+                layoutCfg = { layout: 'none' };
             } else if (layoutType === 'hierarchical') {
                 layoutCfg = { layout: 'none' };
                 var layers = {}; var li = 0; var layerOrder = ['router','firewall','switch','server','storage','vm','printer','unknown'];
@@ -1016,33 +1132,43 @@
             $("#infoPanel").show();
         }
 
-        function showDeviceDetail(deviceId) {
+        function showDeviceDetail(device) {
+            if (!device) return;
+            var st = device.status || 'unknown';
+            var badgeCls = (st==='online') ? 'success' : (st==='warning' ? 'warning' : 'secondary');
             $("#deviceDetailContent").html(
                 '<div class="row"><div class="col-md-4 text-center">' +
                 '<i class="bi bi-server" style="font-size: 4rem; color: #007bff;"></i>' +
-                '<h5 class="mt-2">设备 ' + deviceId + '</h5><span class="badge bg-success">在线</span></div>' +
+                '<h5 class="mt-2">' + (device.name || '') + '</h5>' +
+                '<span class="badge bg-' + badgeCls + '">' + getStatusText(st) + '</span></div>' +
                 '<div class="col-md-8"><table class="table table-sm">' +
-                '<tr><th>设备名称:</th><td>设备 ' + deviceId + '</td></tr>' +
-                '<tr><th>IP地址:</th><td>192.168.1.' + deviceId + '</td></tr>' +
-                '<tr><th>设备类型:</th><td>服务器</td></tr>' +
-                '<tr><th>位置:</th><td>机房A</td></tr>' +
-                '<tr><th>状态:</th><td><span class="status-badge status-online"></span> 在线</td></tr>' +
+                '<tr><th>设备名称:</th><td>' + (device.name || 'N/A') + '</td></tr>' +
+                '<tr><th>IP地址:</th><td>' + (device.ip || 'N/A') + '</td></tr>' +
+                '<tr><th>设备类型:</th><td>' + getDeviceTypeText(device.device_type) + '</td></tr>' +
+                '<tr><th>位置:</th><td>' + (device.location || '未知') + '</td></tr>' +
+                '<tr><th>状态:</th><td><span class="status-badge ' + getStatusClass(st) + '"></span> ' + getStatusText(st) + '</td></tr>' +
                 '</table></div></div>'
             );
-            $("#deviceManageBtn").attr("href", "/devices/" + deviceId);
+            $("#deviceManageBtn").attr("href", "/devices/" + device.id);
             new bootstrap.Modal(document.getElementById('deviceDetailModal')).show();
         }
 
         function loadDeviceList(topologyId) {
-            var mockDevices = [
-                { id: 1, name: "核心交换机01", ip: "10.0.1.1", type: "switch", status: "online", location: "机房A" },
-                { id: 2, name: "核心交换机02", ip: "10.0.1.2", type: "switch", status: "online", location: "机房A" },
-                { id: 3, name: "路由器01", ip: "10.0.0.1", type: "router", status: "online", location: "机房A" },
-                { id: 4, name: "防火墙01", ip: "10.0.2.1", type: "firewall", status: "warning", location: "机房A" },
-                { id: 5, name: "Web服务器01", ip: "192.168.1.10", type: "server", status: "online", location: "机房B" }
-            ];
-            deviceList = mockDevices;
-            updateDeviceTable();
+            var gb = $("#groupBySelect").val() || 'device_type';
+            $.ajax({
+                url: API_TOPO_BASE + '/' + topologyId + '/devices?group_by=' + encodeURIComponent(gb),
+                method: "GET",
+                dataType: "json",
+                success: function(response) {
+                    deviceList = response.devices || [];
+                    updateDeviceTable();
+                },
+                error: function() {
+                    deviceList = [];
+                    updateDeviceTable();
+                    showToast('加载设备列表失败', 'danger');
+                }
+            });
         }
 
         function updateDeviceTable() {
@@ -1058,14 +1184,20 @@
         }
 
         function loadConnectionList(topologyId) {
-            var mockConnections = [
-                { id: 1, source_device: "核心交换机01", source_interface: "Gig0/1", target_device: "核心交换机02", target_interface: "Gig0/1", type: "physical", status: "active" },
-                { id: 2, source_device: "核心交换机01", source_interface: "Gig0/2", target_device: "路由器01", target_interface: "Gig0/0", type: "physical", status: "active" },
-                { id: 3, source_device: "核心交换机01", source_interface: "Gig0/3", target_device: "防火墙01", target_interface: "eth0", type: "physical", status: "degraded" },
-                { id: 4, source_device: "Web服务器01", source_interface: "eth0", target_device: "数据库服务器01", target_interface: "eth0", type: "virtual", status: "active" }
-            ];
-            connectionList = mockConnections;
-            updateConnectionTable();
+            $.ajax({
+                url: API_TOPO_BASE + '/' + topologyId + '/connections',
+                method: "GET",
+                dataType: "json",
+                success: function(response) {
+                    connectionList = response.connections || [];
+                    updateConnectionTable();
+                },
+                error: function() {
+                    connectionList = [];
+                    updateConnectionTable();
+                    showToast('加载连接关系失败', 'danger');
+                }
+            });
         }
 
         function updateConnectionTable() {
@@ -1102,8 +1234,8 @@
             nodesData.forEach(function(node) {
                 if (node.data && node.data.type === 'device') {
                     if (node.data.status === 'online') onlineCount++;
-                    else if (node.data.status === 'offline') offlineCount++;
                     else if (node.data.status === 'warning') warningCount++;
+                    else offlineCount++;  // offline/unknown/下架 计入离线
                 }
             });
             var totalDevices = onlineCount + offlineCount + warningCount;
@@ -1135,7 +1267,11 @@
             $("#zoomResetBtn").click(function() { if (rawNodesData) renderTopologyNetwork(rawNodesData, rawEdgesData); });
             $("#exportBtn").click(function() { exportTopology(); });
             $("#closeInfoPanel").click(function() { $("#infoPanel").hide(); });
-            $("#deviceTableBody").on("click", ".view-device-btn", function() { showDeviceDetail($(this).data("id")); });
+            $("#deviceTableBody").on("click", ".view-device-btn", function() {
+                var id = $(this).data("id");
+                var dev = deviceList.find(function(d) { return d.id === id; });
+                showDeviceDetail(dev || { id: id });
+            });
             $("#connectionTableBody").on("click", ".view-connection-btn", function() { showConnectionDetail($(this).data("id")); });
             $("#createTopologyForm").submit(function(e) { e.preventDefault(); createTopology(); });
             $("#topologySettingsForm").submit(function(e) { e.preventDefault(); saveTopologySettings(); });
@@ -1151,7 +1287,8 @@
                 else data[item.name] = item.value;
             });
             $.ajax({
-                url: "/api/topologies/create", method: "POST", contentType: "application/json",
+                url: API_TOPO_BASE + '/create', method: "POST", contentType: "application/json",
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
                 data: JSON.stringify(data),
                 success: function(response) {
                     if (response.success) {
@@ -1162,7 +1299,11 @@
                         if (response.topology_id) selectTopology(response.topology_id);
                     } else { showToast(response.message || '创建拓扑失败', 'danger'); }
                 },
-                error: function() { showToast('创建拓扑失败，请检查网络连接', 'danger'); }
+                error: function(xhr) {
+                    var msg = '创建拓扑失败，请检查网络连接';
+                    try { msg = (xhr.responseJSON && xhr.responseJSON.message) || msg; } catch(e) {}
+                    showToast(msg, 'danger');
+                }
             });
         }
 
@@ -1183,7 +1324,10 @@
         }
 
         function applyDeviceFilters() {
-            if (currentTopologyId) { loadTopologyData(currentTopologyId); showToast("筛选条件已应用", "info"); }
+            if (rawNodesData && rawNodesData.length) {
+                renderTopologyNetwork(rawNodesData, rawEdgesData);
+            }
+            showToast("筛选条件已应用", "info");
         }
 
         function showConnectionDetail(connectionId) {

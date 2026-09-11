@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}导出报表 - 数据中心管理系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">报表导出历史</h1>
+            <p class="text-muted">查看由当前用户触发的报表导出记录</p>
+        </div>
+        <div>
+            <a href="{{ url_for('report.report_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> 返回报表中心
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">最近导出</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>报表名称</th>
+                            <th>类型</th>
+                            <th>格式</th>
+                            <th>状态</th>
+                            <th>生成时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ex in recent_exports %}
+                        <tr>
+                            <td>{{ ex.report_name }}</td>
+                            <td>{{ ex.report_type }}</td>
+                            <td>{{ ex.format }}</td>
+                            <td>
+                                <span class="badge {% if ex.status == 'completed' %}bg-success{% elif ex.status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ ex.status }}
+                                </span>
+                            </td>
+                            <td>{{ ex.generated_at.strftime('%Y-%m-%d %H:%M') if ex.generated_at else '' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted">暂无导出记录</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -2878,16 +2878,16 @@
 
 ● Bash(cd "D:/asset" && python -c "
       from utils.utils import (…)
-  ⎿  models/models.py �е� db ʵ�� ID: 1942528280976
-     models/models.py �е� db.Model ����: <class 'sqlalchemy.orm.decl_api.Model'>
-     models/models.py �е� registry ID: 1942528204624
+  ⎿  models/models.py 中的 db 实例 ID: 1942528280976
+     models/models.py 中的 db.Model 类: <class 'sqlalchemy.orm.decl_api.Model'>
+     models/models.py 中的 registry ID: 1942528204624
      … +4 lines (ctrl+o to expand)
 
 ● Bash(cd "D:/asset" && python -c "
       import os…)
-  ⎿  models/models.py �е� db ʵ�� ID: 2641738072144
-     models/models.py �е� db.Model ����: <class 'sqlalchemy.orm.decl_api.Model'>
-     models/models.py �е� registry ID: 2641738043472
+  ⎿  models/models.py 中的 db 实例 ID: 2641738072144
+     models/models.py 中的 db.Model 类: <class 'sqlalchemy.orm.decl_api.Model'>
+     models/models.py 中的 registry ID: 2641738043472
      … +6 lines (ctrl+o to expand)
 
 ● All done with this batch. Here's what was accomplished:

@@ -2,9 +2,9 @@
 
 from flask import Blueprint, jsonify, request, Response
 from flask_login import login_required, current_user
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from extensions import db
-from models.models import OperationLog, ActivityLog
+from models.models import ConnectionPath, Device, OperationLog, ActivityLog, User
 import json
 from utils.audit import log_audit
 from utils.permission import permission_required
@@ -73,3 +73,118 @@ def export_user_data():
     response.headers['Content-Disposition'] = f'attachment; filename=user_data_{current_user.username}.json'
     
     return response
+
+@api_bp.route('/devices')
+@login_required
+@permission_required('device:view')
+def api_devices():
+    """供运维页面下拉框使用的设备简要列表。"""
+    devices = Device.query.order_by(Device.name.asc()).all()
+    return jsonify({'success': True, 'devices': [{
+        'id': d.id,
+        'name': d.name,
+        'hostname': d.name,
+        'ip_address': d.ip_address or d.management_ip or '',
+        'model': d.model or '',
+        'status': d.status or '',
+    } for d in devices]})
+
+
+@api_bp.route('/users')
+@login_required
+@permission_required('user:view')
+def api_users():
+    """供运维页面下拉框使用的用户简要列表。"""
+    users = User.query.order_by(User.username.asc()).all()
+    return jsonify({'success': True, 'users': [{
+        'id': u.id,
+        'username': u.username,
+        'name': getattr(u, 'name', None) or u.username,
+        'department': getattr(u, 'department', None),
+    } for u in users]})
+
+
+def _as_naive_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _link_aging(link, now):
+    last_seen = _as_naive_utc(link.last_seen)
+    if not last_seen:
+        if link.link_status == 'stale':
+            return {'state': 'stale', 'label': '已老化', 'hours': None}
+        return {'state': 'unknown', 'label': '未记录', 'hours': None}
+    hours = max(0.0, (now - last_seen).total_seconds() / 3600.0)
+    if link.link_status == 'stale' or hours > 72:
+        return {'state': 'stale', 'label': '已老化', 'hours': round(hours, 1)}
+    if hours > 24:
+        return {'state': 'aging', 'label': '老化中', 'hours': round(hours, 1)}
+    return {'state': 'fresh', 'label': '正常', 'hours': round(hours, 1)}
+
+
+@api_bp.route('/topology-data')
+@login_required
+@permission_required('topology:view')
+def topology_data():
+    """ECharts topology data endpoint.
+
+    Matches templates/topology_view.html expectations: nodes and links arrays.
+    Each link carries ConnectionPath discovery_protocol/discovered_by, confidence,
+    last_seen and computed aging state for display in the topology page.
+    """
+    devices = Device.query.all()
+    connections = ConnectionPath.query.all()
+
+    device_map = {}
+    nodes = []
+    for d in devices:
+        node = {
+            'id': str(d.id),
+            'name': d.name,
+            'type': d.device_type or 'unknown',
+            'status': d.status or 'unknown',
+            'ip': d.management_ip or d.ip_address or '',
+            'vendor': d.brand or d.manufacturer or '',
+            'model': d.model or '',
+            'mac': d.mac_address or '',
+            'last_seen': d.last_seen.isoformat() if d.last_seen else None,
+        }
+        nodes.append(node)
+        device_map[d.id] = node
+
+    now = datetime.utcnow()
+    links = []
+    for c in connections:
+        source_node = device_map.get(c.source_device_id)
+        target_node = device_map.get(c.target_device_id)
+        aging = _link_aging(c, now)
+        links.append({
+            'id': c.id,
+            'source': str(c.source_device_id),
+            'target': str(c.target_device_id),
+            'source_name': source_node['name'] if source_node else f"ID:{c.source_device_id}",
+            'target_name': target_node['name'] if target_node else f"ID:{c.target_device_id}",
+            'source_if': c.source_port or '',
+            'target_if': c.target_port or '',
+            'protocol': c.discovery_protocol or c.discovered_by or 'unknown',
+            'confidence': c.confidence if c.confidence is not None else 0,
+            'bandwidth': c.bandwidth or 0,
+            'media': c.media_type or '',
+            'vlan': c.vlan_id or '',
+            'status': c.link_status or 'unknown',
+            'type': c.connection_type or 'physical',
+            'aging_state': aging['state'],
+            'aging_label': aging['label'],
+            'aging_hours': aging['hours'],
+            'last_seen': c.last_seen.isoformat() if c.last_seen else None,
+        })
+
+    return jsonify({
+        'nodes': nodes,
+        'links': links,
+        'timestamp': now.isoformat(),
+    })

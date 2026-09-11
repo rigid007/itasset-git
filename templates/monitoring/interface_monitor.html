@@ -687,9 +687,24 @@
 
     // ========== 页面操作函数 ==========
     function refreshInterfaceData() {
-        if (currentDeviceId) {
-            loadInterfaceStats();
-        }
+        if (!currentDeviceId) return;
+        const btn = document.querySelector('button[onclick="refreshInterfaceData()"]');
+        const orig = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>刷新中...'; }
+        // 手动刷新：重新通过 SNMP 检测设备，更新实时状态后再回填表格
+        fetch(`/monitoring/api/devices/${currentDeviceId}/interfaces/refresh`, { method: 'POST' })
+            .then(response => {
+                if (!response.ok) throw new Error('刷新失败');
+                return response.json();
+            })
+            .then(data => {
+                updateInterfaceTable(data);
+                updateSummaryCards(data);
+            })
+            .catch(error => console.error('刷新设备接口失败:', error))
+            .finally(() => {
+                if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+            });
     }
 
     function toggleInterfaceFilter() {

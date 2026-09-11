@@ -1,190 +1,190 @@
-{% extends "base.html" %}
-{% block title %}{{ '知识库管理' if manage else '知识库' }}{% endblock %}
-{% block page_title %}{{ '知识库管理' if manage else '知识库' }}{% endblock %}
-{% block page_subtitle %}{{ '管理所有知识文章' if manage else '运维知识管理与经验沉淀' }}{% endblock %}
-{% block header_actions %}
-{% if has_permission(current_user, 'maintenance:edit') %}
-<a href="{{ url_for('maintenance_extra.kb_create') }}" class="btn btn-primary">
-    <i class="fas fa-plus"></i> 新增文章
-</a>
-{% if not manage %}
-<a href="{{ url_for('maintenance_extra.kb_manage') }}" class="btn btn-outline-secondary">
-    <i class="fas fa-cog"></i> 管理
-</a>
-{% endif %}
-{% endif %}
-{% endblock %}
-
-{% block content %}
-<!-- 搜索 -->
-<div class="card mb-4">
-    <div class="card-body">
-        <form class="row g-2">
-            <div class="col-md-10">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" name="search" class="form-control" placeholder="搜索文章标题或内容..." value="{{ search }}">
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> 搜索</button>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('maintenance_extra.kb_manage' if manage else 'maintenance_extra.knowledge_base') }}" class="btn btn-secondary w-100"><i class="fas fa-undo"></i> 重置</a>
-            </div>
-        </form>
-    </div>
-</div>
-
-{% if manage %}
-<!-- 管理视图：状态导航 -->
-<div class="card mb-4">
-    <div class="card-body py-2">
-        <div class="d-flex align-items-center gap-3">
-            <span class="fw-medium me-2">筛选状态:</span>
-            <a href="{{ url_for('maintenance_extra.kb_manage', search=search) }}" class="btn btn-sm {{ 'btn-primary' if not current_status else 'btn-outline-secondary' }}">全部 ({{ counts.get('draft', 0) + counts.get('published', 0) + counts.get('archived', 0) }})</a>
-            <a href="{{ url_for('maintenance_extra.kb_manage', status='draft', search=search) }}" class="btn btn-sm {{ 'btn-warning' if current_status == 'draft' else 'btn-outline-warning' }}">草稿 ({{ counts.get('draft', 0) }})</a>
-            <a href="{{ url_for('maintenance_extra.kb_manage', status='published', search=search) }}" class="btn btn-sm {{ 'btn-success' if current_status == 'published' else 'btn-outline-success' }}">已发布 ({{ counts.get('published', 0) }})</a>
-            <a href="{{ url_for('maintenance_extra.kb_manage', status='archived', search=search) }}" class="btn btn-sm {{ 'btn-secondary' if current_status == 'archived' else 'btn-outline-secondary' }}">归档 ({{ counts.get('archived', 0) }})</a>
-        </div>
-    </div>
-</div>
-
-<!-- 管理视图：表格 -->
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>标题</th>
-                    <th>分类</th>
-                    <th>状态</th>
-                    <th>阅读</th>
-                    <th>作者</th>
-                    <th>更新时间</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for article in articles.items %}
-                <tr>
-                    <td>
-                        <a href="{{ url_for('maintenance_extra.kb_article', id=article.id) }}">{{ article.title }}</a>
-                        {% if article.is_featured %}<span class="badge bg-warning ms-1">推荐</span>{% endif %}
-                    </td>
-                    <td>{% if article.category %}<span class="badge bg-info">{{ article.category }}</span>{% endif %}</td>
-                    <td>
-                        {% if article.status == 'published' %}<span class="badge bg-success">已发布</span>
-                        {% elif article.status == 'draft' %}<span class="badge bg-warning text-dark">草稿</span>
-                        {% else %}<span class="badge bg-secondary">归档</span>{% endif %}
-                    </td>
-                    <td>{{ article.view_count or 0 }}</td>
-                    <td><small>{{ article.author_id }}</small></td>
-                    <td><small>{{ article.updated_at.strftime('%Y-%m-%d') if article.updated_at else '-' }}</small></td>
-                    <td>
-                        <div class="d-flex gap-1">
-                            <a href="{{ url_for('maintenance_extra.kb_edit', id=article.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
-                            <form method="POST" action="{{ url_for('maintenance_extra.kb_delete', id=article.id) }}" style="display:inline"
-                                  onsubmit="return confirm('确定要删除文章「{{ article.title }}」吗？')">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="text-center text-muted py-4">暂无文章</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-{% else %}
-<!-- 公开视图：统计 -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card border-primary text-center">
-            <div class="card-body"><h3 class="text-primary">{{ articles.total }}</h3><small>文章总数</small></div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        {% set featured = articles.items|selectattr('is_featured', 'equalto', true)|list %}
-        <div class="card border-warning text-center">
-            <div class="card-body"><h3 class="text-warning">{{ featured|length }}</h3><small>精选推荐</small></div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        {% set total_views = articles.items|sum(attribute='view_count') %}
-        <div class="card border-info text-center">
-            <div class="card-body"><h3 class="text-info">{{ total_views }}</h3><small>总阅读</small></div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-success text-center">
-            <div class="card-body"><h3 class="text-success">{{ articles.items|selectattr('helpful_count', 'gt', 0)|list|length }}</h3><small>有帮助</small></div>
-        </div>
-    </div>
-</div>
-
-<!-- 公开视图：卡片列表 -->
-<div class="row">
-    {% for article in articles.items %}
-    <div class="col-md-6 mb-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <h5 class="card-title mb-1">
-                        <a href="{{ url_for('maintenance_extra.kb_article', id=article.id) }}" class="text-decoration-none">
-                            {{ article.title }}
-                        </a>
-                    </h5>
-                    {% if article.is_featured %}<span class="badge bg-warning ms-2">推荐</span>{% endif %}
-                </div>
-                <p class="card-text text-muted small mb-2">
-                    {{ (article.content|striptags)[:150] if article.content else '暂无内容' }}...
-                </p>
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        {% if article.category %}<span class="badge bg-info me-1">{{ article.category }}</span>{% endif %}
-                        {% if article.tags %}
-                            {% for tag in article.tags.split(',')[:3] %}
-                            <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-                    <small class="text-muted">
-                        <i class="fas fa-eye me-1"></i>{{ article.view_count or 0 }}
-                        <i class="fas fa-thumbs-up ms-2 me-1"></i>{{ article.helpful_count or 0 }}
-                    </small>
-                </div>
-            </div>
-            <div class="card-footer bg-transparent">
-                <small class="text-muted">
-                    <i class="fas fa-user me-1"></i>{{ article.author_id }}
-                    <i class="fas fa-calendar ms-2 me-1"></i>{{ article.created_at.strftime('%Y-%m-%d') if article.created_at else '-' }}
-                </small>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="col-12">
-        <div class="card"><div class="card-body text-center text-muted py-5">
-            <i class="fas fa-book-open fa-3x mb-3"></i>
-            <p>{{ '没有找到匹配的文章' if search else '知识库暂无文章' }}</p>
-            {% if search %}<a href="{{ url_for('maintenance_extra.knowledge_base') }}" class="btn btn-outline-primary">浏览全部</a>{% endif %}
-        </div></div>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
-
-<!-- 分页 -->
-{% if articles.pages > 1 %}
-<nav class="mt-3"><ul class="pagination justify-content-center">
-    {% for p in range(1, articles.pages + 1) %}
-    <li class="page-item {% if p == articles.page %}active{% endif %}">
-        <a class="page-link" href="{{ url_for('maintenance_extra.kb_manage' if manage else 'maintenance_extra.knowledge_base', page=p, search=search, status=current_status if manage else '') }}">{{ p }}</a>
-    </li>
-    {% endfor %}
-</ul></nav>
-{% endif %}
-{% endblock %}
+{% extends "base.html" %}
+{% block title %}{{ '知识库管理' if manage else '知识库' }}{% endblock %}
+{% block page_title %}{{ '知识库管理' if manage else '知识库' }}{% endblock %}
+{% block page_subtitle %}{{ '管理所有知识文章' if manage else '运维知识管理与经验沉淀' }}{% endblock %}
+{% block header_actions %}
+{% if has_permission(current_user, 'maintenance:edit') %}
+<a href="{{ url_for('maintenance_extra.kb_create') }}" class="btn btn-primary">
+    <i class="fas fa-plus"></i> 新增文章
+</a>
+{% if not manage %}
+<a href="{{ url_for('maintenance_extra.kb_manage') }}" class="btn btn-outline-secondary">
+    <i class="fas fa-cog"></i> 管理
+</a>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- 搜索 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-2">
+            <div class="col-md-10">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" name="search" class="form-control" placeholder="搜索文章标题或内容..." value="{{ search }}">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> 搜索</button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('maintenance_extra.kb_manage' if manage else 'maintenance_extra.knowledge_base') }}" class="btn btn-secondary w-100"><i class="fas fa-undo"></i> 重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if manage %}
+<!-- 管理视图：状态导航 -->
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-3">
+            <span class="fw-medium me-2">筛选状态:</span>
+            <a href="{{ url_for('maintenance_extra.kb_manage', search=search) }}" class="btn btn-sm {{ 'btn-primary' if not current_status else 'btn-outline-secondary' }}">全部 ({{ counts.get('draft', 0) + counts.get('published', 0) + counts.get('archived', 0) }})</a>
+            <a href="{{ url_for('maintenance_extra.kb_manage', status='draft', search=search) }}" class="btn btn-sm {{ 'btn-warning' if current_status == 'draft' else 'btn-outline-warning' }}">草稿 ({{ counts.get('draft', 0) }})</a>
+            <a href="{{ url_for('maintenance_extra.kb_manage', status='published', search=search) }}" class="btn btn-sm {{ 'btn-success' if current_status == 'published' else 'btn-outline-success' }}">已发布 ({{ counts.get('published', 0) }})</a>
+            <a href="{{ url_for('maintenance_extra.kb_manage', status='archived', search=search) }}" class="btn btn-sm {{ 'btn-secondary' if current_status == 'archived' else 'btn-outline-secondary' }}">归档 ({{ counts.get('archived', 0) }})</a>
+        </div>
+    </div>
+</div>
+
+<!-- 管理视图：表格 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>标题</th>
+                    <th>分类</th>
+                    <th>状态</th>
+                    <th>阅读</th>
+                    <th>作者</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in articles.items %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('maintenance_extra.kb_article', id=article.id) }}">{{ article.title }}</a>
+                        {% if article.is_featured %}<span class="badge bg-warning ms-1">推荐</span>{% endif %}
+                    </td>
+                    <td>{% if article.category %}<span class="badge bg-info">{{ article.category }}</span>{% endif %}</td>
+                    <td>
+                        {% if article.status == 'published' %}<span class="badge bg-success">已发布</span>
+                        {% elif article.status == 'draft' %}<span class="badge bg-warning text-dark">草稿</span>
+                        {% else %}<span class="badge bg-secondary">归档</span>{% endif %}
+                    </td>
+                    <td>{{ article.view_count or 0 }}</td>
+                    <td><small>{{ article.author.username if article.author else article.author_id }}</small></td>
+                    <td><small>{{ article.updated_at.strftime('%Y-%m-%d') if article.updated_at else '-' }}</small></td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('maintenance_extra.kb_edit', id=article.id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
+                            <form method="POST" action="{{ url_for('maintenance_extra.kb_delete', id=article.id) }}" style="display:inline"
+                                  onsubmit="return confirm('确定要删除文章「{{ article.title }}」吗？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-4">暂无文章</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% else %}
+<!-- 公开视图：统计 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary text-center">
+            <div class="card-body"><h3 class="text-primary">{{ articles.total }}</h3><small>文章总数</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        {% set featured = articles.items|selectattr('is_featured', 'equalto', true)|list %}
+        <div class="card border-warning text-center">
+            <div class="card-body"><h3 class="text-warning">{{ featured|length }}</h3><small>精选推荐</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        {% set total_views = articles.items|sum(attribute='view_count') %}
+        <div class="card border-info text-center">
+            <div class="card-body"><h3 class="text-info">{{ total_views }}</h3><small>总阅读</small></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success text-center">
+            <div class="card-body"><h3 class="text-success">{{ articles.items|selectattr('helpful_count', 'gt', 0)|list|length }}</h3><small>有帮助</small></div>
+        </div>
+    </div>
+</div>
+
+<!-- 公开视图：卡片列表 -->
+<div class="row">
+    {% for article in articles.items %}
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title mb-1">
+                        <a href="{{ url_for('maintenance_extra.kb_article', id=article.id) }}" class="text-decoration-none">
+                            {{ article.title }}
+                        </a>
+                    </h5>
+                    {% if article.is_featured %}<span class="badge bg-warning ms-2">推荐</span>{% endif %}
+                </div>
+                <p class="card-text text-muted small mb-2">
+                    {{ (article.content|striptags)[:150] if article.content else '暂无内容' }}...
+                </p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        {% if article.category %}<span class="badge bg-info me-1">{{ article.category }}</span>{% endif %}
+                        {% if article.tags %}
+                            {% for tag in article.tags.split(',')[:3] %}
+                            <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-eye me-1"></i>{{ article.view_count or 0 }}
+                        <i class="fas fa-thumbs-up ms-2 me-1"></i>{{ article.helpful_count or 0 }}
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <small class="text-muted">
+                    <i class="fas fa-user me-1"></i>{{ article.author.username if article.author else article.author_id }}
+                    <i class="fas fa-calendar ms-2 me-1"></i>{{ article.created_at.strftime('%Y-%m-%d') if article.created_at else '-' }}
+                </small>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card"><div class="card-body text-center text-muted py-5">
+            <i class="fas fa-book-open fa-3x mb-3"></i>
+            <p>{{ '没有找到匹配的文章' if search else '知识库暂无文章' }}</p>
+            {% if search %}<a href="{{ url_for('maintenance_extra.knowledge_base') }}" class="btn btn-outline-primary">浏览全部</a>{% endif %}
+        </div></div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 分页 -->
+{% if articles.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in range(1, articles.pages + 1) %}
+    <li class="page-item {% if p == articles.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('maintenance_extra.kb_manage' if manage else 'maintenance_extra.knowledge_base', page=p, search=search, status=current_status if manage else '') }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}

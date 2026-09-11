@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}API令牌 - 自动化{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h1 class="h2"><i class="fas fa-key me-2"></i>API令牌</h1>
+            <p class="text-muted mb-0">供外部系统/脚本调用 /automation/api/v1/* 接口</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">生成新令牌</h5></div>
+                <div class="card-body">
+                    {% if has_permission(current_user, 'exec:run') %}
+                    <form method="post" action="{{ url_for('automation.api_key_create') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label">令牌名称</label>
+                            <input type="text" name="name" class="form-control" required placeholder="如：监控系统对接">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">权限范围</label>
+                            <select name="scope" class="form-select">
+                                <option value="read">只读（查询设备/子网/IP/任务）</option>
+                                <option value="write">读写（可创建并执行任务）</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100"><i class="fas fa-plus"></i> 生成令牌</button>
+                    </form>
+                    {% else %}
+                    <div class="alert alert-light border small mb-0">仅拥有“创建/执行任务”权限的用户可生成或管理 API 令牌。</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light"><tr>
+                            <th>名称</th><th>前缀</th><th>范围</th><th>状态</th><th>最后使用</th><th class="text-end">操作</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for k in keys %}
+                            <tr>
+                                <td>{{ k.name }}</td>
+                                <td><code>{{ k.key_prefix }}...</code></td>
+                                <td><span class="badge bg-{{ 'success' if k.scope == 'write' else 'secondary' }}">{{ '读写' if k.scope == 'write' else '只读' }}</span></td>
+                                <td><span class="badge bg-{{ 'success' if k.is_active else 'secondary' }}">{{ '启用' if k.is_active else '停用' }}</span></td>
+                                <td class="small">{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') if k.last_used_at else '从未使用' }}</td>
+                                <td class="text-end">
+                                    {% if has_permission(current_user, 'exec:run') %}
+                                    <form method="post" action="{{ url_for('automation.api_key_toggle', id=k.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-outline-{{ 'warning' if k.is_active else 'success' }}">{{ '停用' if k.is_active else '启用' }}</button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('automation.api_key_delete', id=k.id) }}" class="d-inline" onsubmit="return confirm('确认删除令牌 {{ k.name }}？删除后立即失效。');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted small">无管理权限</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center text-muted py-4">暂无令牌</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card mt-3">
+                <div class="card-body small">
+                    <h6 class="mb-2">调用方式</h6>
+                    <pre class="bg-light p-2 rounded mb-0">curl -H "Authorization: Bearer &lt;令牌&gt;" http://your-host/automation/api/v1/devices
+curl -X POST -H "Authorization: Bearer &lt;令牌&gt;" -H "Content-Type: application/json" \
+  -d '{"name":"测试","device_ids":[1,2],"content":"echo hello","task_type":"command","auto_run":true}' \
+  http://your-host/automation/api/v1/tasks</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

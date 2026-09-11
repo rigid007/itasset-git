@@ -235,7 +235,6 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {% set total_count = type_stats|sum(attribute='count') %}
                                             {% for stat in type_stats|sort(attribute='count', reverse=true) %}
                                             <tr>
                                                 <td>
@@ -258,7 +257,7 @@
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                                                    <a href="{{ url_for('device.device_list') }}?device_type={{ stat.device_type }}" 
                                                        class="btn btn-sm btn-outline-primary">
                                                         <i class="fas fa-eye"></i> 查看
                                                     </a>
@@ -294,7 +293,7 @@
                                             </div>
                                         </div>
                                         <div class="mt-3">
-                                            <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                                            <a href="{{ url_for('device.device_list') }}?device_type={{ stat.device_type }}" 
                                                class="btn btn-sm btn-outline-{{ get_type_color_class(stat.device_type|default('other')) }} btn-block">
                                                 查看详情 <i class="fas fa-arrow-right ml-1"></i>
                                             </a>
@@ -326,7 +325,6 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {% set vendor_total = vendor_stats|sum(attribute='count') %}
                                             {% for stat in vendor_stats|sort(attribute='count', reverse=true) %}
                                             <tr>
                                                 <td>
@@ -352,7 +350,7 @@
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                                                    <a href="{{ url_for('device.device_list') }}?brand={{ stat.brand }}" 
                                                        class="btn btn-sm btn-outline-info">
                                                         <i class="fas fa-eye"></i> 查看
                                                     </a>
@@ -378,7 +376,7 @@
                                         <p class="card-text mb-2">
                                             <span class="font-weight-bold">{{ stat.count }}</span> 台设备
                                         </p>
-                                        <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                                        <a href="{{ url_for('device.device_list') }}?brand={{ stat.brand }}" 
                                            class="btn btn-sm btn-outline-info">
                                             查看设备
                                         </a>
@@ -416,7 +414,8 @@
                             <div class="col-md-6">
                                 <h5 class="mb-3">Top 5 品牌</h5>
                                 <div class="list-group">
-                                    {% for stat in vendor_stats|sort(attribute='count', reverse=true)|slice(5) %}
+                                    {% for stat in vendor_stats|sort(attribute='count', reverse=true) %}
+                                    {% if loop.index <= 5 %}
                                     <div class="list-group-item d-flex justify-content-between align-items-center">
                                         <div class="d-flex align-items-center">
                                             <div class="vendor-logo mr-2">
@@ -431,6 +430,7 @@
                                             </span>
                                         </div>
                                     </div>
+                                    {% endif %}
                                     {% endfor %}
                                 </div>
                             </div>
@@ -452,7 +452,7 @@
                     <h6 class="mb-2">按设备类型筛选:</h6>
                     <div class="mb-4">
                         {% for stat in type_stats|sort(attribute='count', reverse=true) %}
-                        <a href="{{ url_for('device.index') }}?device_type={{ stat.device_type }}" 
+                        <a href="{{ url_for('device.device_list') }}?device_type={{ stat.device_type }}" 
                            class="btn btn-sm btn-outline-{{ get_type_color_class(stat.device_type|default('other')) }} filter-btn">
                             <i class="fas {{ get_type_icon(stat.device_type|default('other')) }} mr-1"></i>
                             {{ stat.device_type|default('其他') }}
@@ -464,7 +464,7 @@
                     <h6 class="mb-2">按品牌筛选:</h6>
                     <div>
                         {% for stat in vendor_stats|sort(attribute='count', reverse=true) if stat.brand %}
-                        <a href="{{ url_for('device.index') }}?brand={{ stat.brand }}" 
+                        <a href="{{ url_for('device.device_list') }}?brand={{ stat.brand }}" 
                            class="btn btn-sm btn-outline-secondary filter-btn">
                             {{ stat.brand }}
                             <span class="badge badge-light ml-1">{{ stat.count }}</span>
@@ -667,7 +667,7 @@
         csvContent += "设备类型,数量,百分比\r\n";
         
         typeStats.forEach(stat => {
-            const percentage = typeTotal > 0 ? (stat.count / typeTotal * 100).toFixed(2) : 0;
+            const percentage = typeTotal > 0 ? (stat.count / total_countTotal * 100).toFixed(2) : 0;
             csvContent += `${stat.type},${stat.count},${percentage}%\r\n`;
         });
         
@@ -675,7 +675,7 @@
         csvContent += "品牌,数量,百分比\r\n";
         
         vendorStats.forEach(stat => {
-            const percentage = vendorTotal > 0 ? (stat.count / vendorTotal * 100).toFixed(2) : 0;
+            const percentage = vendorTotal > 0 ? (stat.count / vendor_totalTotal * 100).toFixed(2) : 0;
             csvContent += `${stat.vendor},${stat.count},${percentage}%\r\n`;
         });
         
@@ -729,7 +729,7 @@
                             <tr>
                                 <td>${stat.type.toUpperCase()}</td>
                                 <td>${stat.count}</td>
-                                <td>${typeTotal > 0 ? (stat.count / typeTotal * 100).toFixed(1) : 0}%</td>
+                                <td>${typeTotal > 0 ? (stat.count / total_countTotal * 100).toFixed(1) : 0}%</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -749,7 +749,7 @@
                             <tr>
                                 <td>${stat.vendor}</td>
                                 <td>${stat.count}</td>
-                                <td>${vendorTotal > 0 ? (stat.count / vendorTotal * 100).toFixed(1) : 0}%</td>
+                                <td>${vendorTotal > 0 ? (stat.count / vendor_totalTotal * 100).toFixed(1) : 0}%</td>
                             </tr>
                         `).join('')}
                     </tbody>

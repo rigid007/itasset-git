@@ -14,6 +14,9 @@ config = context.config
 fileConfig(config.config_file_name)
 logger = logging.getLogger('alembic.env')
 
+from app import app
+app.app_context().push()
+
 
 def get_engine():
     try:

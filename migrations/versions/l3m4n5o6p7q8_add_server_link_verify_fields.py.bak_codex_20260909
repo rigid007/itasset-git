@@ -1,0 +1,37 @@
+"""add server/hypervisor link verify fields to devices
+
+Revision ID: l3m4n5o6p7q8
+Revises: k7l8m9n0p1q2
+Create Date: 2026-08-19
+
+为服务器-交换机连接核对表新增字段：
+- bmc_ip / bmc_mac：服务器 BMC（iLO/iDRAC/XCC 等带外管理）信息
+- virtualization_type：虚拟化平台标识
+- is_virtual_host：是否虚拟化宿主机
+"""
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision = 'l3m4n5o6p7q8'
+down_revision = 'k7l8m9n0p1q2'
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    op.add_column('devices', sa.Column('bmc_ip', sa.String(length=45), nullable=True))
+    op.add_column('devices', sa.Column('bmc_mac', sa.String(length=17), nullable=True))
+    op.add_column('devices', sa.Column('virtualization_type', sa.String(length=32),
+                                       nullable=True, server_default=sa.text("''")))
+    op.add_column('devices', sa.Column('is_virtual_host', sa.Boolean(),
+                                       nullable=False, server_default=sa.text('0')))
+    op.create_index(op.f('ix_devices_is_virtual_host'), 'devices', ['is_virtual_host'])
+
+
+def downgrade():
+    op.drop_index(op.f('ix_devices_is_virtual_host'), table_name='devices')
+    op.drop_column('devices', 'is_virtual_host')
+    op.drop_column('devices', 'virtualization_type')
+    op.drop_column('devices', 'bmc_mac')
+    op.drop_column('devices', 'bmc_ip')

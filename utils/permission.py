@@ -149,6 +149,16 @@ def create_default_roles_and_permissions():
         ('location:view', '查看位置', 'location', 'location', False),
         ('location:edit', '编辑位置', 'location', 'location', False),
 
+        ('network:view', '查看网络管理', 'network', 'network', False),
+        ('network:edit', '编辑网络管理', 'network', 'network', False),
+
+        ('netflow:view', '查看流量分析', 'netflow', 'netflow', False),
+        ('netflow:edit', '管理流量采集', 'netflow', 'netflow', False),
+
+        ('exec:view', '查看自动化执行', 'exec', 'exec', False),
+        ('exec:run', '创建/执行任务', 'exec', 'exec', False),
+        ('exec:approve', '审批执行任务', 'exec', 'exec', False),
+
         ('device_group:view', '查看设备分组', 'device_group', 'device_group', False),
         ('device_group:edit', '管理设备分组', 'device_group', 'device_group', False),
 
@@ -203,6 +213,9 @@ def create_default_roles_and_permissions():
                 'log:view',
                 'cabinet:view', 'cabinet:edit',
                 'location:view', 'location:edit',
+                'network:view', 'network:edit',
+                'netflow:view', 'netflow:edit',
+                'exec:view', 'exec:run', 'exec:approve',
                 'device_group:view', 'device_group:edit',
                 'system:jobs', 'system:jobs:run',
             ],
@@ -228,6 +241,8 @@ def create_default_roles_and_permissions():
                 'log:view',
                 'cabinet:view',
                 'location:view',
+                'network:view', 'netflow:view',
+                'exec:view',
                 'device_group:view',
             ],
         },
@@ -252,6 +267,8 @@ def create_default_roles_and_permissions():
                 'log:view',
                 'cabinet:view',
                 'location:view',
+                'network:view', 'netflow:view',
+                'exec:view',
                 'device_group:view',
             ],
         },

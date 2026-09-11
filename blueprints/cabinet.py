@@ -1240,6 +1240,9 @@ def delete_device(id):
     device = Device.query.get_or_404(id)
     
     try:
+        # 与 devices 列表删除同源：清空全部 FK 子行，避免 ORM 对 NOT NULL 外键置 NULL 报 1048
+        from blueprints.device import _purge_device_children
+        _purge_device_children([device.id])
         db.session.delete(device)
         db.session.commit()
         log_audit('delete', 'device', id, f"删除设备: {device.name}")

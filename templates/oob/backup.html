@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}带外管理 - 配置备份{% endblock %}
+{% block page_title %}BMC 配置备份 / 恢复{% endblock %}
+{% block page_subtitle %}对标 DCOS「服务器备份」：快照 BIOS 属性 / 网络 / 系统信息，支持下载与一键恢复{% endblock %}
+{% block header_actions %}
+<button class="btn btn-primary" id="btn-create"><i class="bi bi-camera"></i> 创建备份</button>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card"><div class="card-header">创建实时备份</div>
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-7">
+              <label class="form-label">选择控制器</label>
+              <select class="form-select" id="bk-controller">
+                <option value="">— 请选择 —</option>
+                {% for c in controllers %}
+                <option value="{{ c.id }}">{{ c.name or c.bmc_ip }}（{{ c.bmc_ip }}）</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-5">
+              <label class="form-label">备份名称（可选）</label>
+              <input type="text" class="form-control" id="bk-name" placeholder="留空自动命名">
+            </div>
+            <div class="col-12">
+              <button class="btn btn-primary" id="bk-do">采集并保存快照</button>
+              <span class="text-muted small ms-2">需绑定凭据且 BMC 可达</span>
+            </div>
+          </div>
+          <div class="alert alert-danger d-none mt-2" id="bk-error"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100"><div class="card-body small text-muted">
+        <p class="mb-1"><b>备份内容</b>：Redfish 采集的系统信息（型号/序列号/BIOS 版本/电源状态）、BIOS 属性（Attributes）、主机网卡清单。</p>
+        <p class="mb-1"><b>恢复</b>：对 BIOS 属性执行 Redfish PATCH（best-effort）。只读/不支持的属性会被 BMC 拒绝，结果中标注 applied / failed。</p>
+        <p class="mb-0"><b>下载</b>：以 JSON 导出完整快照，便于离线比对与归档。</p>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">备份历史</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr>
+            <th>ID</th><th>控制器</th><th>BMC IP</th><th>名称</th>
+            <th>操作人</th><th>大小</th><th>SHA256</th><th>时间</th><th>操作</th>
+          </tr></thead>
+          <tbody id="bk-body">
+            <tr><td colspan="9" class="text-center text-muted">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const $ = (s) => document.querySelector(s);
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+      'X-CSRFToken': csrf, 'Content-Type': 'application/json' });
+    return fetch(path, opts).then(r => {
+      if (!r.ok) return r.json().then(j=>{throw j;}).catch(()=>{throw {error:'HTTP '+r.status};});
+      return r.json();
+    });
+  }
+  function shortSha(s){ return s ? s.slice(0,12)+'…' : '-'; }
+
+  function loadBackups(){
+    api('/oob/api/backups').then(list=>{
+      if(!list.length){
+        $('#bk-body').innerHTML='<tr><td colspan="9" class="text-center text-muted">暂无备份</td></tr>';
+        return;
+      }
+      $('#bk-body').innerHTML = list.map(b=>`
+        <tr>
+          <td>${b.id}</td>
+          <td>${b.controller_name||'-'}</td>
+          <td>${b.bmc_ip||'-'}</td>
+          <td>${b.name||'-'}</td>
+          <td>${b.operator||'-'}</td>
+          <td>${b.size} B</td>
+          <td><code title="${b.checksum||''}">${shortSha(b.checksum)}</code></td>
+          <td>${b.created_at||'-'}</td>
+          <td>
+            <a class="btn btn-sm btn-outline-secondary" href="/oob/api/backups/${b.id}/download">下载</a>
+            <button class="btn btn-sm btn-outline-primary" onclick="restoreBk(${b.id})">恢复</button>
+          </td>
+        </tr>`).join('');
+    });
+  }
+
+  $('#bk-do').addEventListener('click', ()=>{
+    const cid = $('#bk-controller').value;
+    const err = $('#bk-error'); err.classList.add('d-none');
+    if(!cid){ err.textContent='请选择控制器'; err.classList.remove('d-none'); return; }
+    const name = $('#bk-name').value.trim();
+    api('/oob/api/controllers/'+cid+'/backup',{method:'POST',
+      body:JSON.stringify({name:name||null})}).then(()=>{ loadBackups(); $('#bk-name').value=''; })
+      .catch(e=>{ err.textContent='备份失败：'+(e.error||'未知'); err.classList.remove('d-none'); });
+  });
+
+  window.restoreBk = function(bid){
+    if(!confirm('确认将该备份的 BIOS 属性恢复到对应 BMC？（只读属性会被忽略）')) return;
+    api('/oob/api/backups/'+bid+'/restore',{method:'POST'}).then(r=>{
+      const res = r.result||{};
+      alert('恢复结果\n已应用：'+(res.applied||[]).length+' 项\n失败：'+((res.failed||[]).join('; ')||'无'));
+    }).catch(e=>alert('恢复失败：'+(e.error||'未知')));
+  };
+
+  loadBackups();
+})();
+</script>
+{% endblock %}

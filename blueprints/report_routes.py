@@ -4,7 +4,7 @@ from extensions import db
 from utils.audit import log_audit
 from utils.permission import permission_required
 from models.report_models import ReportTemplate, ScheduledReport, ReportExecution, ReportFavorite
-from models.models import Device, Interface
+from models.models import Device, Interface, DeviceMonitor, DeviceMonitorConfig
 from models.device_performance_models import DevicePerformance
 from models.models import Alert
 from models.models import Cabinet,  Location
@@ -87,18 +87,22 @@ def device_type_distribution():
         Device.device_type,
         db.func.count(Device.id).label('count')
     ).group_by(Device.device_type).all()
-    
+    type_stats = [{'device_type': r.device_type, 'count': r.count} for r in type_stats]
+
     vendor_stats = db.session.query(
         Device.brand,
         db.func.count(Device.id).label('count')
     ).group_by(Device.brand).all()
-    
+    vendor_stats = [{'brand': r.brand, 'count': r.count} for r in vendor_stats]
+
     # 计算设备总数
     total_devices = db.session.query(db.func.count(Device.id)).scalar()
-    
+
     return render_template('report/device_type.html',
                          type_stats=type_stats,
                          vendor_stats=vendor_stats,
+                         total_count=sum(t['count'] for t in type_stats),
+                         vendor_total=sum(v['count'] for v in vendor_stats),
                          total_devices=total_devices)  # 添加了设备总数
 
 
@@ -235,11 +239,22 @@ def location_summary_report():
     for location in locations:
         device_count = Device.query.filter_by(location_id=location.id).count()
         cabinet_count = Cabinet.query.filter_by(location_id=location.id).count()
-        
+
+        total_u = 0
+        used_u = 0
+        for cabinet in location.cabinets:
+            total_u += (cabinet.height_u or 42)
+            try:
+                used_u += cabinet.get_used_u_count()
+            except Exception:
+                used_u += sum((d.height_u or 1) for d in cabinet.devices)
+
         location_stats.append({
             'location': location,
             'device_count': device_count,
-            'cabinet_count': cabinet_count
+            'cabinet_count': cabinet_count,
+            'total_u': total_u,
+            'used_u': used_u
         })
     
     return render_template('report/location_summary.html',
@@ -448,18 +463,20 @@ def performance_trend_report():
 def monitoring_coverage_report():
     """监控覆盖报表"""
     total_devices = Device.query.count()
-    monitored_devices = Device.query.filter_by(is_monitored=True).count()
-    
-    # 按监控类型统计
-    monitoring_stats = db.session.query(
-        Device.monitoring_type,
-        db.func.count(Device.id).label('count')
-    ).filter(
-        Device.is_monitored == True
-    ).group_by(Device.monitoring_type).all()
-    
+    monitored_devices = DeviceMonitor.query.filter_by(enabled=True).count()
+
+    # 按监控方式（ping/snmp/ssh/api）统计启用的设备数
+    monitors = DeviceMonitor.query.filter_by(enabled=True).all()
+    method_counter = {'ping': 0, 'snmp': 0, 'ssh': 0, 'api': 0}
+    for m in monitors:
+        methods = m.get_monitor_methods()
+        for key in method_counter:
+            if methods.get(key):
+                method_counter[key] += 1
+    monitoring_stats = [(k, v) for k, v in method_counter.items() if v > 0]
+
     coverage_percent = (monitored_devices / total_devices * 100) if total_devices > 0 else 0
-    
+
     return render_template('report/monitoring_coverage.html',
                          total_devices=total_devices,
                          monitored_devices=monitored_devices,
@@ -593,22 +610,29 @@ def maintenance_report():
 @permission_required('report:view')
 def compliance_report():
     """合规性报表"""
-    # 设备合规性检查
+    # 设备合规性检查（基于现有监控配置与带外信息判定）
     devices = Device.query.all()
     compliance_stats = []
-    
+
+    # 预加载监控状态，避免 N+1
+    monitored_ids = {dm.device_id for dm in DeviceMonitor.query.filter_by(enabled=True).all()}
+    config_ids = {mc.device_id for mc in DeviceMonitorConfig.query.filter_by(enabled=True).all()}
+
     for device in devices:
+        is_monitored = device.id in monitored_ids
+        has_config = device.id in config_ids
+        has_bmc = bool(device.bmc_ip)
         checks = {
-            'monitoring_enabled': device.is_monitored,
-            'backup_config': device.backup_enabled,
-            'security_patches': True,  # 实际应从补丁管理系统获取
-            'password_policy': True    # 实际应从安全系统获取
+            'monitoring_enabled': is_monitored,
+            'monitor_config': has_config,
+            'oob_managed': has_bmc,
+            'security_patches': bool(device.os_version),  # 有系统版本视为已纳管可打补丁
         }
-        
+
         passed_checks = sum(1 for check in checks.values() if check)
         total_checks = len(checks)
         compliance_percent = (passed_checks / total_checks * 100) if total_checks > 0 else 0
-        
+
         compliance_stats.append({
             'device': device,
             'checks': checks,
@@ -617,7 +641,7 @@ def compliance_report():
             'compliance_percent': round(compliance_percent, 2)
         })
     
-    return render_template('report/compliance.html',
+    return render_template('report/compliance_report.html',
                          compliance_stats=compliance_stats)
 
 

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}固件升级 - 带外管理{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="fas fa-microchip"></i> 固件升级 <small class="text-muted">Firmware Upgrade</small></h4>
+    <div>
+      <button class="btn btn-outline-secondary btn-sm" id="refreshList"><i class="fas fa-sync"></i> 刷新列表</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('oob.bios_page') }}"><i class="fas fa-sliders-h"></i> BIOS 模板</a>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 控制器 + 批量操作 -->
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between">
+          <span><i class="fas fa-server"></i> 控制器</span>
+          <span class="text-muted small" id="selInfo">已选 0 台</span>
+        </div>
+        <div class="card-body" style="max-height:340px;overflow:auto">
+          <table class="table table-sm table-hover" id="ctrlTable">
+            <thead><tr><th></th><th>名称</th><th>BMC IP</th><th>厂商</th><th>凭据</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card-footer">
+          <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text">固件 URL</span>
+            <input class="form-control" id="imgUrl" placeholder="http(s)://.../firmware.bin">
+            <button class="btn btn-primary" id="btnUpgrade"><i class="fas fa-upload"></i> 批量升级</button>
+          </div>
+          <div class="form-text text-muted">逐台调用各 BMC 的 Redfish UpdateService.SimpleUpdate，任务写入审计表。</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><i class="fas fa-history"></i> 升级任务审计</div>
+        <div class="card-body p-0" style="max-height:300px;overflow:auto">
+          <table class="table table-sm mb-0" id="jobTable">
+            <thead><tr><th>控制器</th><th>固件 URL</th><th>状态</th><th>时间</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 固件清单 -->
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between">
+          <span><i class="fas fa-list"></i> 固件/软件清单 <small class="text-muted" id="invCtrl"></small></span>
+          <button class="btn btn-outline-secondary btn-sm" id="btnInv"><i class="fas fa-sync"></i> 读取清单</button>
+        </div>
+        <div class="card-body" style="max-height:640px;overflow:auto">
+          <div id="invAlert"></div>
+          <table class="table table-sm table-hover" id="invTable" style="display:none">
+            <thead><tr><th>名称</th><th>版本</th><th>类型</th><th>可更新</th><th>状态</th><th>Release</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const api = (u, opt={}) => {
+  const hd = {'Content-Type':'application/json'};
+  const tk = document.querySelector('meta[name="csrf-token"]');
+  if (tk) hd['X-CSRFToken'] = tk.content;
+  return fetch(u, Object.assign({headers: hd}, opt)).then(r=>r.json().catch(()=>({})));
+};
+const sel = new Set();
+let controllers = [];
+
+function loadControllers(){
+  api('{{ url_for("oob.firmware_controllers") }}').then(list=>{
+    controllers = list; renderCtrlTable();
+  });
+}
+function renderCtrlTable(){
+  const tb = $('#ctrlTable tbody'); tb.innerHTML='';
+  controllers.forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="checkbox" class="form-check-input" data-id="${c.id}"></td>
+      <td>${c.name||''}</td><td>${c.bmc_ip||''}</td><td>${c.vendor||''}</td>
+      <td>${c.has_credential?'<span class="badge bg-success">有</span>':'<span class="badge bg-secondary">无</span>'}</td>`;
+    tr.querySelector('input').onchange = e=>{
+      if (e.target.checked) sel.add(c.id); else sel.delete(c.id);
+      $('#selInfo').textContent = '已选 '+sel.size+' 台';
+    };
+    tb.appendChild(tr);
+  });
+}
+function loadJobs(){
+  api('{{ url_for("oob.firmware_jobs") }}').then(list=>{
+    const tb = $('#jobTable tbody'); tb.innerHTML='';
+    const st = {submitted:['bg-info','已提交'],running:['bg-warning','运行中'],success:['bg-success','成功'],failed:['bg-danger','失败']};
+    list.forEach(j=>{
+      const [cls,txt] = st[j.status]||['bg-secondary',j.status];
+      const tr = document.createElement('tr');
+      const err = j.error ? `<div class="small text-danger" title="${j.error}">${j.error}</div>` : '';
+      const fin = j.finished_at ? `<div class="small text-muted">${j.finished_at.slice(0,19)}</div>` : '';
+      tr.innerHTML = `<td>${j.controller_name||j.controller_id}</td><td><small>${j.image_url}</small></td>
+        <td><span class="badge ${cls}">${txt}</span>${err}</td><td>${j.created_at?.slice(0,19)||''}${fin}</td>`;
+      tb.appendChild(tr);
+    });
+  });
+}
+$('#btnUpgrade').onclick = ()=>{
+  const url = $('#imgUrl').value.trim();
+  if (!url){ alert('请填写固件 URL'); return; }
+  if (sel.size===0){ alert('请先勾选控制器'); return; }
+  if (!confirm(`确认对 ${sel.size} 台控制器发起固件升级？`)) return;
+  let done=0, ok=0;
+  sel.forEach(id=>{
+    api(`/oob/api/firmware/${id}/upgrade`, {method:'POST', body:JSON.stringify({image_url:url})})
+      .then(()=>{ ok++; }).catch(()=>{}).finally(()=>{
+        done++; if (done===sel.size){ loadJobs(); alert(`已提交 ${ok}/${done} 台`); }});
+  });
+};
+$('#btnInv').onclick = ()=>{
+  const ids = [...sel];
+  if (ids.length!==1){ alert('请勾选「一台」控制器以读取其固件清单'); return; }
+  $('#invAlert').innerHTML = '<div class="text-info small">读取中…</div>';
+  api(`/oob/api/firmware/${ids[0]}/inventory`).then(d=>{
+    $('#invCtrl').textContent = d.controller||'';
+    if (d.error){ $('#invAlert').innerHTML=`<div class="alert alert-warning py-1">${d.error}</div>`; return; }
+    $('#invAlert').html = '';
+    const tb = $('#invTable tbody'); tb.innerHTML='';
+    (d.inventory||[]).forEach(it=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${it.name||''}</td><td>${it.version||''}</td>
+        <td><span class="badge bg-light text-dark">${it.kind||''}</span></td>
+        <td>${it.updateable?'<span class="badge bg-primary">可</span>':'<span class="badge bg-secondary">否</span>'}</td>
+        <td>${it.state||''}</td><td>${it.release_date||''}</td>`;
+      tb.appendChild(tr);
+    });
+    $('#invTable').style.display='table';
+  });
+};
+$('#refreshList').onclick = ()=>{ loadControllers(); loadJobs(); };
+loadControllers(); loadJobs();
+// 任务状态由后台回写（/oob/api/firmware/jobs），每 8s 自动刷新展示
+setInterval(loadJobs, 8000);
+</script>
+{% endblock %}

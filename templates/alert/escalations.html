@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}升级日志 - 告警{% endblock %}
+{% block page_title %}告警升级日志{% endblock %}
+{% block page_subtitle %}告警持续未确认自动升级的完整记录（含自动生成的工单）{% endblock %}
+{% block header_actions %}
+<button class="btn btn-primary" onclick="refreshLogs()"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+<a class="btn btn-outline-danger" href="/oob/escalations"><i class="bi bi-arrow-up-right-circle"></i> 升级策略管理</a>
+{% endblock %}
+
+{% block content %}
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link" href="/alert/list">告警列表</a></li>
+  <li class="nav-item"><a class="nav-link active" href="/alert/escalations">升级日志</a></li>
+</ul>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">累计升级次数</div>
+      <div class="fs-4 fw-bold">{{ total_escalations }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">涉及告警数（去重）</div>
+      <div class="fs-4 fw-bold">{{ distinct_alerts }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">升级后自动建工单</div>
+      <div class="fs-4 fw-bold">{{ auto_work_orders }}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>升级记录（最近 {{ limit }} 条）</span>
+    <form class="d-flex gap-2" method="GET" action="/alert/escalations">
+      <input type="text" name="search" class="form-control form-control-sm" value="{{ search }}" placeholder="搜索告警标题 / 渠道">
+      <button class="btn btn-sm btn-outline-secondary">搜索</button>
+    </form>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>时间</th><th>告警</th><th>设备</th><th>策略</th><th>级别</th>
+          <th>升级</th><th>渠道</th><th>目标</th><th>自动工单</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lg in logs %}
+        <tr>
+          <td class="text-nowrap">{{ lg.escalated_at.strftime('%Y-%m-%d %H:%M:%S') if lg.escalated_at else '-' }}</td>
+          <td>
+            <div>#{{ lg.alert_id }} {{ lg.alert_title or '-' }}</div>
+            <div class="small text-muted">{{ (lg.message or '')[:120] }}</div>
+          </td>
+          <td>{{ lg.device_name or '-' }}</td>
+          <td><span class="badge bg-secondary">{{ lg.policy_name }}</span></td>
+          <td>L{{ lg.level }}</td>
+          <td><span class="badge bg-warning">{{ lg.from_severity or '?' }}</span> &rarr; <span class="badge bg-danger">{{ lg.to_severity or '?' }}</span></td>
+          <td>{{ lg.channel or '-' }}</td>
+          <td class="text-muted small">{{ (lg.target or '')[:60] }}</td>
+          <td>
+            {% if lg.work_order_id %}
+            <a class="badge bg-success text-decoration-none" href="{{ url_for('maintenance.view_work_order', id=lg.work_order_id) }}">
+              {{ lg.work_order_number }}（{{ lg.work_order_status }}）
+            </a>
+            {% else %}-{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted">暂无升级记录。可在「升级策略管理」配置策略，告警持续未确认达到超时后自动升级并记录于此。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function refreshLogs() { location.reload(); }
+  document.querySelectorAll('[onclick="refreshLogs()"]').forEach(b => b.addEventListener('click', refreshLogs));
+})();
+</script>
+{% endblock %}

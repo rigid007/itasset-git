@@ -731,3 +731,125 @@ def test_device_connectivity(device) -> Dict:
     except Exception as e:
         return {'reachable': True, 'ssh_ok': False,
                 'error': f'SSH测试异常: {type(e).__name__}', 'latency_ms': latency}
+
+
+# ==================== 批量命令执行 / 配置下发 ====================
+
+
+def run_device_commands(device, commands, timeout=30, config_mode=False) -> Dict:
+    """在网络设备上执行命令（批量执行中心使用）。
+
+    Args:
+        device: Device ORM 对象
+        commands: 命令字符串（按行分割）或命令列表
+        timeout: 每条命令等待超时（秒）
+        config_mode: True 时进入配置模式（下发配置），华为系自动 save
+
+    Returns:
+        {'success': bool, 'output': str, 'error': str, 'exit_code': int}
+    """
+    host = device.management_ip or device.ip_address
+    if not host:
+        return {'success': False, 'output': '', 'error': '设备未配置 IP 地址', 'exit_code': 1}
+
+    username, password, port = resolve_device_credential(device)
+    if not username:
+        return {'success': False, 'output': '', 'error': '设备未配置 SSH 凭据（ssh_username 或统一凭据）', 'exit_code': 1}
+
+    if isinstance(commands, str):
+        cmd_list = [c for c in commands.splitlines() if c.strip()]
+    else:
+        cmd_list = [c for c in (commands or []) if c and str(c).strip()]
+    if not cmd_list:
+        return {'success': False, 'output': '', 'error': '没有可执行的命令', 'exit_code': 1}
+
+    vendor = resolve_vendor_family(device)
+    try:
+        if vendor in VENDOR_TO_NETMIKO:
+            output = _netmiko_run_commands(host, username, password, port,
+                                           vendor, cmd_list, timeout, config_mode)
+        else:
+            output = _paramiko_run_commands(host, username, password, port,
+                                            vendor, cmd_list, timeout, config_mode)
+        return {'success': True, 'output': output or '', 'error': '', 'exit_code': 0}
+    except Exception as e:
+        msg = ERROR_MESSAGES.get(type(e).__name__, str(e))
+        logger.error(f"[run_device_commands] {host} 执行失败: {msg}")
+        return {'success': False, 'output': '', 'error': msg, 'exit_code': 1}
+
+
+def _netmiko_run_commands(host, username, password, port, vendor, cmd_list, timeout, config_mode):
+    from netmiko import ConnectHandler
+    device_params = {
+        'device_type': VENDOR_TO_NETMIKO[vendor],
+        'host': host,
+        'username': username,
+        'password': password,
+        'port': port,
+        'timeout': timeout,
+        'conn_timeout': timeout,
+        'auth_timeout': timeout,
+        'banner_timeout': 15,
+        'global_cmd_verify': False,
+    }
+    with ConnectHandler(**device_params) as conn:
+        if config_mode:
+            output = conn.send_config_set(cmd_list, read_timeout=timeout, cmd_verify=False)
+            try:
+                output += '\n' + conn.save_config()
+            except Exception:
+                pass
+        else:
+            output = '\n'.join(conn.send_command_timing(c, read_timeout=timeout) for c in cmd_list)
+    return output
+
+
+def _paramiko_run_commands(host, username, password, port, vendor, cmd_list, timeout, config_mode):
+    """华为/H3C 及通用设备：paramiko 交互式执行，配置模式自动 save。"""
+    import paramiko
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        host, port=port, username=username, password=password,
+        timeout=timeout, look_for_keys=False, allow_agent=False,
+    )
+    channel = client.invoke_shell()
+    time.sleep(0.5)
+    _drain_channel(channel)
+
+    output_parts = []
+    if config_mode and vendor == 'huawei':
+        channel.send('system-view\n')
+        output_parts.append(_read_until_prompt(channel, max_wait=timeout))
+
+    for cmd in cmd_list:
+        channel.send(cmd + '\n')
+        output_parts.append(_read_until_prompt(channel, max_wait=timeout))
+
+    if config_mode:
+        if vendor == 'huawei':
+            channel.send('return\n')
+            time.sleep(0.5)
+            _drain_channel(channel)
+            channel.send('save\n')
+            time.sleep(0.5)
+            _drain_channel(channel)
+            channel.send('y\n')
+            output_parts.append(_read_until_prompt(channel, max_wait=timeout))
+        else:
+            channel.send('end\n')
+            output_parts.append(_read_until_prompt(channel, max_wait=timeout))
+
+    channel.close()
+    client.close()
+    return '\n'.join(output_parts)
+
+
+def push_device_config(device, config_content, timeout=30) -> Dict:
+    """下发配置到设备（进入配置模式）。"""
+    return run_device_commands(device, config_content, timeout=timeout, config_mode=True)
+
+
+def rollback_device_config(device, config_content, timeout=30) -> Dict:
+    """按已保存的配置内容回滚（重新下发该内容）。"""
+    return run_device_commands(device, config_content, timeout=timeout, config_mode=True)

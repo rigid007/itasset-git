@@ -46,9 +46,24 @@ from models.models import (
 )
 
 from models.config_models import SystemLog
+from models.san_models import SanNode, SanLink
 from utils.audit import log_audit
 from utils.permission import permission_required
-from utils.utils import save_discovered_interfaces, snmp_get_device_info,snmp_get,snmp_walk
+from utils.utils import parse_if_status, save_discovered_interfaces, snmp_get_device_info, snmp_get, snmp_walk
+from utils.topology_discovery import (
+    DeviceIndex,
+    PROTOCOL_PRIORITY,
+    expand_subnet_targets,
+    normalize_mac as service_normalize_mac,
+)
+
+from utils.vm_oui import (
+    classify_lldp_capabilities,
+    classify_port_macs,
+    detect_hypervisor_platform,
+    normalize_mac as vm_normalize_mac,
+    pick_physical_nic_mac,
+)
 
 topology_bp = Blueprint('topology', __name__, url_prefix='/topology')
 
@@ -74,7 +89,7 @@ def detect_encoding_and_fix(text):
     # 常见编码错误修复映射
     fix_map = {
         '¥': '楼',      # 常见于 "10楼" 显示为 "10¥"
-        '�': '',         # 替换问号
+        '\ufffd': '',    # 替换损坏字符（U+FFFD）
         'À': '楼',      
         'Â': '楼',      
         '¢': '楼',      
@@ -281,104 +296,15 @@ def find_real_physical_port(target_device_id, target_ip, community, bad_port):
 
 
 def is_snmp_available(ip, community='public', timeout=3, retries=2):
-    """
-    使用 snmpget 快速检查 SNMP 服务是否可用
-    增加重试机制，避免网络波动导致误判
-    """
-    import subprocess
-    import time
-    
-    for attempt in range(retries):
-        try:
-            cmd = [
-                'snmpget',
-                '-v', '2c',
-                '-c', community,
-                '-t', str(timeout),
-                '-r', '1',
-                ip,
-                '1.3.6.1.2.1.1.1.0'  # sysDescr
-            ]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout + 2
-            )
-            
-            # 检查是否成功
-            if result.returncode == 0 and 'Timeout' not in result.stderr:
-                return True
-            
-            # 如果返回结果中有有效数据，也算成功
-            if result.stdout and 'STRING' in result.stdout:
-                return True
-                
-            # 如果还没超时，短暂等待后重试
-            if attempt < retries - 1:
-                time.sleep(0.5)
-                
-        except subprocess.TimeoutExpired:
-            print(f"[SNMP检查] {ip} 第{attempt+1}次尝试超时")
-            continue
-        except Exception as e:
-            print(f"[SNMP检查] {ip} 第{attempt+1}次尝试异常: {e}")
-            continue
-    
-    return False
-
-
-def quick_udp_check(ip, port=161, timeout=2):
-    """
-    使用 UDP socket 快速检查端口是否开放
-    增加超时时间，避免网络延迟误判
-    """
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(timeout)
-        sock.connect((ip, port))
-        sock.close()
-        return True
-    except socket.timeout:
-        print(f"[UDP检查] {ip}:{port} 连接超时")
-        return False
-    except socket.error as e:
-        print(f"[UDP检查] {ip}:{port} 连接失败: {e}")
-        return False
-    except Exception as e:
-        print(f"[UDP检查] {ip}:{port} 异常: {e}")
-        return False
+    """统一使用 SnmpClient 做真实 SNMP GET 检测（不再依赖 UDP connect / 外部 snmpget）。"""
+    from utils.topology_discovery import is_snmp_available as _check
+    return _check(ip, community=community, timeout=timeout)
 
 
 def check_snmp_with_retry(ip, community='public', max_attempts=2):
-    """
-    综合检查 SNMP 服务可用性
-    1. 先检查 UDP 端口是否开放
-    2. 再尝试 SNMP get
-    3. 失败后等待重试
-    """
-    # 第一步：UDP端口检查
-    if not quick_udp_check(ip, timeout=2):
-        print(f"[SNMP检查] {ip} UDP端口不可达，可能网络问题")
-        # UDP端口检查失败不立即返回，尝试SNMP直接连接
-        # 因为有些设备可能不响应UDP探测但能响应SNMP
-    
-    # 第二步：SNMP get 检查（带重试）
-    return is_snmp_available(ip, community, timeout=3, retries=2)
+    """保留兼容入口：直接走统一 SNMP 检测。"""
+    return is_snmp_available(ip, community=community, timeout=3)
 
-def quick_udp_check(ip, port=161, timeout=1):
-    """
-    使用 UDP socket 快速检查端口是否开放
-    比 snmpget 更快，但只能检查端口是否可达
-    """
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(timeout)
-        sock.connect((ip, port))
-        sock.close()
-        return True
-    except:
-        return False
 
 
 # ---------- 辅助函数 ----------
@@ -939,46 +865,8 @@ def run_protocol_discovery(task, stop_event, app=None):
     import ipaddress
     import traceback
     import re
-    import socket
-    import subprocess
+    # ========== 辅助函数：统一使用 SnmpClient 检测 SNMP 可用性 ==========
 
-    # ========== 辅助函数：快速SNMP检查 ==========
-    def quick_udp_check(ip, port=161, timeout=1):
-        """使用 UDP socket 快速检查端口是否开放"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(timeout)
-            sock.connect((ip, port))
-            sock.close()
-            return True
-        except:
-            return False
-
-    def is_snmp_available(ip, community='public', timeout=2):
-        """使用 snmpget 快速检查 SNMP 服务是否可用"""
-        try:
-            cmd = [
-                'snmpget',
-                '-v', '2c',
-                '-c', community,
-                '-t', str(timeout),
-                '-r', '1',
-                ip,
-                '1.3.6.1.2.1.1.1.0'
-            ]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout + 1
-            )
-            if result.returncode == 0 and 'Timeout' not in result.stderr:
-                return True
-            return False
-        except subprocess.TimeoutExpired:
-            return False
-        except Exception:
-            return False
 
     def normalize_mac(mac):
         if not mac:
@@ -994,6 +882,10 @@ def run_protocol_discovery(task, stop_event, app=None):
         except (ValueError, TypeError):
             return False
 
+    # ========== 预加载设备索引（供解析设备种子和发现循环使用）==========
+    device_index = DeviceIndex()
+    device_index.load()
+
     # ========== 解析目标 ==========
     target_value = task.get_target_value()
     seeds = target_value.get('seeds', [])
@@ -1007,17 +899,15 @@ def run_protocol_discovery(task, stop_event, app=None):
     
     for subnet_str in subnets:
         try:
-            network = ipaddress.ip_network(subnet_str.strip(), strict=False)
-            hosts = list(network.hosts())[:20]
-            for host in hosts:
-                ip_str = str(host)
+            max_subnet_hosts = int(target_value.get('max_subnet_hosts', 4096) or 4096)
+            for ip_str in expand_subnet_targets(subnet_str, max_hosts=max_subnet_hosts):
                 if is_valid_target_ip(ip_str):
                     scan_queue.append((ip_str, 1))
         except Exception as e:
             print(f"[协议发现] 子网解析失败 {subnet_str}: {e}")
     
     for dev_id in device_ids:
-        dev = Device.query.get(dev_id)
+        dev = device_index.by_id_get(dev_id)
         if dev:
             ip = dev.management_ip or dev.ip_address
             if is_valid_target_ip(ip):
@@ -1039,6 +929,8 @@ def run_protocol_discovery(task, stop_event, app=None):
     use_snmp_mac = getattr(task, 'use_snmp_mac', True)
     max_threads = task.max_threads or 5
     auto_save = task.auto_save
+    snmp_timeout = task.snmp_timeout or 5
+    snmp_retries = task.snmp_retries or 2
 
     total_steps = max(len(scan_queue) * max_depth, 1)
     step = 0
@@ -1052,10 +944,8 @@ def run_protocol_discovery(task, stop_event, app=None):
             if ip in discovered_ips or depth > max_depth:
                 return None
 
-            # 从数据库获取设备
-            device = Device.query.filter(
-                (Device.management_ip == ip) | (Device.ip_address == ip)
-            ).first()
+            # 从预加载索引获取设备
+            device = device_index.by_ip_get(ip)
             
             # 优先使用数据库中存储的 community
             community = snmp_community
@@ -1065,12 +955,8 @@ def run_protocol_discovery(task, stop_event, app=None):
             else:
                 print(f"[协议发现] {ip} 使用任务默认 community: {community}")
 
-            # 快速 SNMP 检查
-            if not quick_udp_check(ip, timeout=1):
-                print(f"[协议发现] {ip} UDP 161端口不可达，跳过")
-                return None
-            
-            if not is_snmp_available(ip, community, timeout=2):
+            # 统一 SNMP 可用性检测（真实 sysDescr GET）
+            if not is_snmp_available(ip, community, timeout=max(2, snmp_timeout or 2)):
                 print(f"[协议发现] {ip} SNMP服务未响应 (community: {community})，跳过")
                 return None
 
@@ -1129,7 +1015,7 @@ def run_protocol_discovery(task, stop_event, app=None):
                             except Exception as e:
                                 print(f"[LLDP] 十六进制转换失败: {e}")
                         
-                        neighbor_ip = resolve_neighbor_ip_enhanced(n, addr_map)
+                        neighbor_ip = resolve_neighbor_ip_enhanced(n, addr_map, device_index=device_index)
                         neighbor_mac = extract_mac_from_chassis(n.get('remote_chassis', ''))
                         
                         has_ip = neighbor_ip and is_valid_target_ip(neighbor_ip)
@@ -1138,7 +1024,7 @@ def run_protocol_discovery(task, stop_event, app=None):
 
                         # ===== 如果 MAC 有效，尝试通过 MAC 查找已有设备 =====
                         if has_mac and not matched_device:
-                            matched_device = find_device_by_mac(neighbor_mac)
+                            matched_device = device_index.by_mac_get(neighbor_mac)
                             if matched_device:
                                 print(f"[LLDP] 通过 MAC 匹配到设备: {matched_device.name} ({neighbor_mac})")
                                 # 补充 IP（如果设备有 IP 但 neighbor_ip 为空）
@@ -1160,14 +1046,9 @@ def run_protocol_discovery(task, stop_event, app=None):
                         if not has_ip and not has_mac:
                             if valid_name:
                                 # 精确匹配
-                                matched_device = Device.query.filter(func.lower(Device.name) == remote_sysname.lower()).first()
+                                matched_device = device_index.by_name_exact(remote_sysname)
                                 if not matched_device:
-                                    # 模糊匹配
-                                    clean_sysname = ''.join(c for c in remote_sysname if c.isalnum() or c in '-_.' or '\u4e00' <= c <= '\u9fff')
-                                    if clean_sysname and len(clean_sysname) >= 2:
-                                        matched_device = Device.query.filter(
-                                            Device.name.ilike(f'%{clean_sysname}%')
-                                        ).first()
+                                    matched_device = device_index.by_name_fuzzy(remote_sysname)
 
                                 if matched_device:
                                     neighbor_ip = matched_device.management_ip or matched_device.ip_address
@@ -1218,6 +1099,21 @@ def run_protocol_discovery(task, stop_event, app=None):
                             print(f"[LLDP] 跳过连接：两端端口均未知 ({remote_sysname})")
                             continue
 
+                        # ===== 邻居类型分类：交换机(级联) / 路由器 / 服务器主机 =====
+                        neighbor_class = classify_lldp_capabilities(n.get('cap_enabled', ''))
+                        # 通过 sysDesc/sysName 关键字识别虚拟化平台（宿主机）
+                        platform = detect_hypervisor_platform(
+                            n.get('remote_sysdesc', '') or n.get('remote_sysname', '')
+                        )
+                        if neighbor_class == 'switch':
+                            neighbor_type = 'switch'
+                        elif neighbor_class == 'router':
+                            neighbor_type = 'router'
+                        elif neighbor_class == 'host':
+                            neighbor_type = 'hypervisor' if platform else 'server'
+                        else:
+                            neighbor_type = 'hypervisor' if platform else 'unknown'
+
                         result['lldp_neighbors'].append({
                             'source_ip': ip,
                             'source_device_id': device.id if device else None,
@@ -1230,7 +1126,10 @@ def run_protocol_discovery(task, stop_event, app=None):
                             'remote_sysname': n.get('remote_sysname', ''),
                             'remote_chassis': n.get('remote_chassis', ''),
                             'remote_mac': neighbor_mac,
-                            'target_device_id': matched_device.id if matched_device else None
+                            'target_device_id': matched_device.id if matched_device else None,
+                            'neighbor_type': neighbor_type,
+                            'hypervisor_platform': platform,
+                            'neighbor_class': neighbor_class,
                         })
                         
                 except Exception as e:
@@ -1273,7 +1172,7 @@ def run_protocol_discovery(task, stop_event, app=None):
             # 4. SNMP MAC 发现
             if use_snmp_mac:
                 try:
-                    mac_neighbors = discover_neighbors_via_snmp_mac(ip, community, interface_map)
+                    mac_neighbors = discover_neighbors_via_snmp_mac(ip, community, interface_map, device_index=device_index)
                     print(f"[SNMP MAC] 从 {ip} 发现 {len(mac_neighbors)} 个邻居")
                     
                     for n in mac_neighbors:
@@ -1296,7 +1195,10 @@ def run_protocol_discovery(task, stop_event, app=None):
                             'protocol': 'snmp_mac',
                             'remote_sysname': '',
                             'remote_chassis': '',
-                            'remote_mac': neighbor_mac
+                            'remote_mac': neighbor_mac,
+                            'neighbor_type': n.get('neighbor_type', 'device'),
+                            'vm_mac_count': n.get('vm_mac_count', 0),
+                            'hypervisor_platform': n.get('hypervisor_platform', ''),
                         })
                         
                 except Exception as e:
@@ -1367,9 +1269,7 @@ def run_protocol_discovery(task, stop_event, app=None):
                     # 保存接口
                     if result['interfaces']:
                         all_interfaces[ip] = result['interfaces']
-                        device = Device.query.filter(
-                            (Device.management_ip == ip) | (Device.ip_address == ip)
-                        ).first()
+                        device = device_index.by_ip_get(ip)
                         if device and auto_save:
                             for iface in result['interfaces']:
                                 existing = Interface.query.filter_by(
@@ -1668,30 +1568,46 @@ def run_ipmac_discovery(task, stop_event):
         db.session.commit()
         return
 
-    # ---- 核心级联端口识别 ----
-    core_port_mac_count = {}
+    # ---- 核心端口分类：真级联口 vs 虚拟化宿主机上行口 ----
+    core_port_mac_lists = defaultdict(list)
     for mac, dot1d_port in core_mac_table.items():
         if_index = dot1d_to_ifindex.get(dot1d_port)
         if if_index:
-            core_port_mac_count[if_index] = core_port_mac_count.get(if_index, 0) + 1
+            core_port_mac_lists[if_index].append(mac)
 
-    cascade_threshold = 2
     core_cascade_ports = set()
-    for if_index, count in core_port_mac_count.items():
-        if count >= cascade_threshold:
+    core_vm_skip_macs = set()      # 虚拟网卡 MAC，不参与建链
+    core_hypervisor_ports = {}     # if_index -> platform
+    for if_index, macs in core_port_mac_lists.items():
+        info = classify_port_macs(macs)
+        if info['class'] == 'switch_cascade':
             core_cascade_ports.add(if_index)
             port_name = core_port_map.get(if_index, f"Index-{if_index}")
-            print(f"[IPMAC] 核心端口 {port_name} 视为级联端口")
+            print(f"[IPMAC] 核心端口 {port_name} 上有 {len(macs)} 个非虚拟化 MAC，视为级联/上行口")
+        elif info['class'] == 'hypervisor':
+            core_vm_skip_macs.update(info['vm_macs'])
+            core_hypervisor_ports[if_index] = info['platform']
+            port_name = core_port_map.get(if_index, f"Index-{if_index}")
+            print(f"[IPMAC] 核心端口 {port_name} 判定为虚拟化宿主机上行口"
+                  f"（{info['vm_count']} 个 VM MAC，平台={info['platform'] or 'unknown'}）")
 
-    # 核心非级联端口 MAC 映射（用于有 IP 设备）
+    # 核心非级联端口 MAC 映射（用于有 IP 设备；宿主机口仅保留物理网卡 MAC）
     mac_to_core = {}
     for mac, dot1d_port in core_mac_table.items():
         mac_norm = normalize_mac(mac)
         if_index = dot1d_to_ifindex.get(dot1d_port)
         if not if_index or if_index in core_cascade_ports:
             continue
+        if mac_norm in core_vm_skip_macs:
+            continue
         port_name = core_port_map.get(if_index, f"Port-{dot1d_port}")
-        mac_to_core[mac_norm] = {'device_id': core.id, 'port': port_name}
+        mac_to_core[mac_norm] = {
+            'device_id': core.id,
+            'port': port_name,
+            'hypervisor': if_index in core_hypervisor_ports,
+            'platform': core_hypervisor_ports.get(if_index, ''),
+            'vm_count': len(core_port_mac_lists.get(if_index, [])) - 1,
+        }
     print(f"[IPMAC] 核心非级联端口 MAC 数量: {len(mac_to_core)}")
 
     # ==================== 2. 接入交换机处理 ====================
@@ -1718,29 +1634,41 @@ def run_ipmac_discovery(task, stop_event):
             ifaces = discover_interfaces_via_snmp(access_ip, access_community)
             access_port_map = {iface['index']: iface['name'] for iface in ifaces}
 
-            # ---- 接入交换机端口 MAC 计数（识别级联端口）----
-            port_mac_count = {}
+            # ---- 接入交换机端口分类：真级联口 vs 虚拟化宿主机上行口 ----
+            port_mac_lists = defaultdict(list)
             for mac, dot1d_port in filtered_mac_table.items():
                 if_index = dot1d_map.get(dot1d_port)
                 if if_index:
-                    port_mac_count[if_index] = port_mac_count.get(if_index, 0) + 1
+                    port_mac_lists[if_index].append(mac)
 
             cascade_ports = set()
-            for if_index, count in port_mac_count.items():
-                if count >= cascade_threshold:
+            vm_skip_macs = set()
+            hypervisor_ports = {}     # if_index -> platform
+            for if_index, macs in port_mac_lists.items():
+                info = classify_port_macs(macs)
+                if info['class'] == 'switch_cascade':
                     cascade_ports.add(if_index)
                     port_name = access_port_map.get(if_index, f"Index-{if_index}")
-                    print(f"[IPMAC] 接入交换机 {aid} 端口 {port_name} 上有 {count} 个 MAC，视为级联端口")
+                    print(f"[IPMAC] 接入交换机 {aid} 端口 {port_name} 上有 {len(macs)} 个非虚拟化 MAC，视为级联/上行口")
+                elif info['class'] == 'hypervisor':
+                    vm_skip_macs.update(info['vm_macs'])
+                    hypervisor_ports[if_index] = info['platform']
+                    port_name = access_port_map.get(if_index, f"Index-{if_index}")
+                    print(f"[IPMAC] 接入交换机 {aid} 端口 {port_name} 判定为虚拟化宿主机上行口"
+                          f"（{info['vm_count']} 个 VM MAC，平台={info['platform'] or 'unknown'}）")
 
             access_devices_info.append({
                 'aid': aid,
                 'mac_table': filtered_mac_table,
                 'dot1d_map': dot1d_map,
                 'port_map': access_port_map,
-                'cascade_ports': cascade_ports
+                'cascade_ports': cascade_ports,
+                'vm_skip_macs': vm_skip_macs,
+                'hypervisor_ports': hypervisor_ports,
+                'port_mac_lists': port_mac_lists,
             })
 
-            # 构建有 IP 设备映射（排除级联端口上的 MAC）
+            # 构建有 IP 设备映射（排除级联端口；宿主机口排除 VM MAC）
             for mac, dot1d_port in filtered_mac_table.items():
                 mac_norm = normalize_mac(mac)
                 if mac_norm in mac_to_access:
@@ -1748,8 +1676,16 @@ def run_ipmac_discovery(task, stop_event):
                 if_index = dot1d_map.get(dot1d_port)
                 if not if_index or if_index in cascade_ports:
                     continue
+                if mac_norm in vm_skip_macs:
+                    continue
                 port_name = access_port_map.get(if_index, f"Port-{dot1d_port}")
-                mac_to_access[mac_norm] = {'device_id': aid, 'port': port_name}
+                mac_to_access[mac_norm] = {
+                    'device_id': aid,
+                    'port': port_name,
+                    'hypervisor': if_index in hypervisor_ports,
+                    'platform': hypervisor_ports.get(if_index, ''),
+                    'vm_count': len(port_mac_lists.get(if_index, [])) - 1,
+                }
                 print(f"[IPMAC] 接入交换机 {aid} MAC {mac_norm} -> 端口 {port_name}")
 
         except Exception as e:
@@ -1798,7 +1734,10 @@ def run_ipmac_discovery(task, stop_event):
             'target_mac': mac_norm,
             'target_device_id': target_device_id,
             'target_port': 'unknown',
-            'protocol': 'ipmac'
+            'protocol': 'ipmac',
+            'neighbor_type': 'hypervisor' if info.get('hypervisor') else 'device',
+            'hypervisor_platform': info.get('platform', ''),
+            'vm_mac_count': info.get('vm_count', 0) if info.get('hypervisor') else 0,
         })
 
     # ---- 3.2 无 IP 的设备（MAC 表中未被 ARP 覆盖的 MAC）----
@@ -1812,6 +1751,8 @@ def run_ipmac_discovery(task, stop_event):
             continue
         if_index = dot1d_to_ifindex.get(dot1d_port)
         if not if_index or if_index in core_cascade_ports:
+            continue
+        if mac_norm in core_vm_skip_macs:
             continue
         port_name = core_port_map.get(if_index, f"Port-{dot1d_port}")
         src_dev_id = core.id
@@ -1856,7 +1797,11 @@ def run_ipmac_discovery(task, stop_event):
             'target_mac': mac_norm,
             'target_device_id': target_device_id,
             'target_port': target_port,
-            'protocol': 'ipmac_no_ip'
+            'protocol': 'ipmac_no_ip',
+            'neighbor_type': 'hypervisor' if if_index in core_hypervisor_ports else 'device',
+            'hypervisor_platform': core_hypervisor_ports.get(if_index, ''),
+            'vm_mac_count': max(len(core_port_mac_lists.get(if_index, [])) - 1, 0)
+                            if if_index in core_hypervisor_ports else 0,
         })
         print(f"[IPMAC] 发现无 IP 终端: MAC {mac_norm} 接在核心端口 {port_name}")
 
@@ -1867,12 +1812,17 @@ def run_ipmac_discovery(task, stop_event):
         dot1d_map = item['dot1d_map']
         port_map = item['port_map']
         cascade_ports = item['cascade_ports']
+        vm_skip_macs = item['vm_skip_macs']
+        hypervisor_ports = item['hypervisor_ports']
+        port_mac_lists = item['port_mac_lists']
         for mac, dot1d_port in mac_table.items():
             mac_norm = normalize_mac(mac)
             if mac_norm in matched_macs:
                 continue
             if_index = dot1d_map.get(dot1d_port)
             if not if_index or if_index in cascade_ports:
+                continue
+            if mac_norm in vm_skip_macs:
                 continue
             port_name = port_map.get(if_index, f"Port-{dot1d_port}")
             src_dev_id = aid
@@ -1919,7 +1869,11 @@ def run_ipmac_discovery(task, stop_event):
                 'target_mac': mac_norm,
                 'target_device_id': target_device_id,
                 'target_port': target_port,
-                'protocol': 'ipmac_no_ip'
+                'protocol': 'ipmac_no_ip',
+                'neighbor_type': 'hypervisor' if if_index in hypervisor_ports else 'device',
+                'hypervisor_platform': hypervisor_ports.get(if_index, ''),
+                'vm_mac_count': max(len(port_mac_lists.get(if_index, [])) - 1, 0)
+                                if if_index in hypervisor_ports else 0,
             })
             print(f"[IPMAC] 发现无 IP 终端: MAC {mac_norm} 接在接入交换机 {aid} 端口 {port_name}")
 
@@ -2091,12 +2045,29 @@ def _mark_stale_lldp_links(lldp_seen_ips, touched):
 
     now = datetime.now(timezone.utc)
     pruned = 0
+    from models.models import Interface
+    from utils.link_integrity import derive_link_status
+    _iface_cache = {}
     for cp in candidates:
         if cp.id in touched_ids:
             # 本次仍可见：确保为 active
             if cp.link_status != 'active':
                 cp.link_status = 'active'
                 cp.updated_at = now
+            continue
+        # 未再发现 ≠ 链路断开：先按两端接口真实状态判定，接口仍 up 则只降置信度，
+        # 避免"端口 up/up 却显示断开"（界面状态口径以接口状态为准）
+        if cp.source_interface_id and cp.source_interface_id not in _iface_cache:
+            _iface_cache[cp.source_interface_id] = Interface.query.get(cp.source_interface_id)
+        if cp.target_interface_id and cp.target_interface_id not in _iface_cache:
+            _iface_cache[cp.target_interface_id] = Interface.query.get(cp.target_interface_id)
+        real = derive_link_status(_iface_cache.get(cp.source_interface_id),
+                                  _iface_cache.get(cp.target_interface_id))
+        if real == 'active':
+            cp.confidence = min(cp.confidence or 0, 60)
+            cp.description = ((cp.description or '') +
+                              ' 本次扫描未见 LLDP 邻居，但接口状态为 up，保留 active').strip()
+            cp.updated_at = now
             continue
         if cp.link_status != 'down':
             cp.link_status = 'down'
@@ -2120,6 +2091,25 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
     from utils.snmp_utils import snmp_detect_trunk_ports
     import re
 
+    # 预加载设备索引，避免保存阶段逐条查库
+    device_index = DeviceIndex()
+    device_index.load()
+
+    # 预加载现有连接，供内存去重
+    all_conns = ConnectionPath.query.all()
+    conn_by_pair = {}
+    conns_by_device = defaultdict(list)
+    conns_by_endpoint = defaultdict(list)
+    for _c in all_conns:
+        _pair = (min(_c.source_device_id, _c.target_device_id), max(_c.source_device_id, _c.target_device_id))
+        conn_by_pair.setdefault(_pair, _c)
+        conns_by_device[_c.source_device_id].append(_c)
+        conns_by_device[_c.target_device_id].append(_c)
+        if _c.source_port and _c.source_port != 'unknown':
+            conns_by_endpoint[(_c.source_device_id, _c.source_port)].append(_c)
+        if _c.target_port and _c.target_port != 'unknown':
+            conns_by_endpoint[(_c.target_device_id, _c.target_port)].append(_c)
+
     # ========== 预扫描：对每个源设备查询 trunk 端口 ==========
     trunk_port_cache = {}  # {device_id: {port_name: True}}
     src_ips_seen = set()
@@ -2130,9 +2120,7 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
 
     # 查询数据库中这些 IP 对应的设备
     for ip in src_ips_seen:
-        dev = Device.query.filter(
-            (Device.management_ip == ip) | (Device.ip_address == ip)
-        ).first()
+        dev = device_index.by_ip_get(ip)
         if dev and dev.id not in trunk_port_cache:
             community = getattr(dev, 'snmp_community', None) or 'public'
             version = str(getattr(dev, 'snmp_version', '2c') or '2c')
@@ -2176,13 +2164,11 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
         src_dev = None
         src_device_id = conn.get('source_device_id')
         if src_device_id:
-            src_dev = Device.query.get(src_device_id)
+            src_dev = device_index.by_id_get(src_device_id)
             if src_dev:
                 print(f"[保存] 使用预解析的源设备: {src_dev.name} (ID={src_device_id})")
         if not src_dev:
-            src_dev = Device.query.filter(
-                (Device.management_ip == src_ip) | (Device.ip_address == src_ip)
-            ).first()
+            src_dev = device_index.by_ip_get(src_ip)
         if not src_dev:
             print(f"[保存] 源设备 {src_ip} 不存在，跳过（请确认设备已在数据库内，或先通过IP/MAC发现建立设备）")
             continue
@@ -2192,7 +2178,7 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
         tgt_dev = None
 
         if pre_resolved_device_id:
-            tgt_dev = Device.query.get(pre_resolved_device_id)
+            tgt_dev = device_index.by_id_get(pre_resolved_device_id)
             if tgt_dev:
                 print(f"[保存] 使用预解析的目标设备: {tgt_dev.name} (ID={pre_resolved_device_id})")
             else:
@@ -2232,6 +2218,22 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
                 print(f"[保存] 创建目标设备失败，跳过")
                 continue
 
+        # ===== 2.4 宿主机标记：MAC 表识别到大量 VM MAC / LLDP 识别到虚拟化平台 =====
+        neighbor_type = conn.get('neighbor_type', '')
+        platform = conn.get('hypervisor_platform', '') or ''
+        vm_count = conn.get('vm_mac_count', 0) or 0
+        if neighbor_type == 'hypervisor' or platform or vm_count > 0:
+            marked = False
+            if not tgt_dev.is_virtual_host:
+                tgt_dev.is_virtual_host = True
+                marked = True
+            if platform and (not tgt_dev.virtualization_type or tgt_dev.virtualization_type in ('', 'other')):
+                tgt_dev.virtualization_type = platform
+                marked = True
+            if marked:
+                print(f"[保存] 标记 {tgt_dev.name} 为虚拟化宿主机"
+                      f"（neighbor_type={neighbor_type}, platform={platform or '-'}, vm_mac_count={vm_count}）")
+
         # ========== 2.5 端口名验证：过滤/修正非物理端口名（方向归一化之前） ==========
         # r01 的 Cellular0/0、Aux0、NULL0 等是虚拟/逻辑接口，不连物理设备
         # 必须在归一化之前校验，这样才能正确追踪哪台设备的端口有问题
@@ -2268,23 +2270,9 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
             # 端口描述随方向一并交换，保持与端口名一致
             source_port_desc, target_port_desc = target_port_desc, source_port_desc
 
-        # ========== 4. 检查源端口是否已被占用（在方向归一化之后） ==========
-        port_occupied = ConnectionPath.query.filter(
-            ((ConnectionPath.source_device_id == src_dev.id) & (ConnectionPath.source_port == src_port)) |
-            ((ConnectionPath.target_device_id == src_dev.id) & (ConnectionPath.target_port == src_port))
-        ).first()
-        if port_occupied:
-            print(f"[保存] 端口 {src_dev.name}:{src_port} 已被占用，跳过新连接")
-            # 占用该端口的链路就是本次 LLDP 再次看到的同一链路时，视为本次已见
-            touched.add(port_occupied)
-            continue
+        # ========== 4. 端口冲突统一交给 4e 按协议优先级处理，这里不再简单跳过 ==========
 
-        existing = ConnectionPath.query.filter(
-            db.and_(
-                ConnectionPath.source_device_id == src_dev.id,
-                ConnectionPath.target_device_id == tgt_dev.id,
-            )
-        ).first()
+        existing = conn_by_pair.get((min(src_dev.id, tgt_dev.id), max(src_dev.id, tgt_dev.id)))
         if existing:
             touched.add(existing)
             # 已有链路，仅更新端口 / 协议 / 状态（如果新数据更精确）
@@ -2312,20 +2300,12 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
         # ========== 4b. 目标设备去重：防止上联口产生重复连接 ==========
         # 如果目标设备在其它源设备上已有连接（同一个 MAC 被多个交换机报告），
         # 优先保留非上联口/LLDP 的连接，跳过来自上联口的重复连接
-        existing_for_target = ConnectionPath.query.filter(
-            db.or_(
-                ConnectionPath.source_device_id == tgt_dev.id,
-                ConnectionPath.target_device_id == tgt_dev.id
-            )
-        ).filter(
-            # 只要已存在连接的"另一端"不是当前 src，就视为冲突
-            # 必须用 OR：方向反转时 (source == 本次 src, target == 本次 tgt)，
-            # 也就是 (83, 81) → 经 swap 后 (81, 83) 的反向命中场景
-            db.or_(
-                ConnectionPath.source_device_id != src_dev.id,
-                ConnectionPath.target_device_id != src_dev.id
-            )
-        ).first()
+        existing_for_target = None
+        for _c in conns_by_device.get(tgt_dev.id, []):
+            _other_id = _c.source_device_id if _c.target_device_id == tgt_dev.id else _c.target_device_id
+            if _other_id != src_dev.id:
+                existing_for_target = _c
+                break
 
         if existing_for_target:
             # 完全跳过：目标设备已被其他设备连接
@@ -2333,7 +2313,7 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
             other_src_id = (existing_for_target.source_device_id
                             if existing_for_target.source_device_id != tgt_dev.id
                             else existing_for_target.target_device_id)
-            other_src = Device.query.get(other_src_id)
+            other_src = device_index.by_id_get(other_src_id)
             other_src_name = other_src.name if other_src else f"Device#{other_src_id}"
 
             # 端口是否完全一致（反向也算一致）
@@ -2378,9 +2358,21 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
                 print(f"[保存] 目标设备 {tgt_dev.name} 已有连接 ({other_src_name})，跳过来自 {src_dev.name} 的重复")
                 continue
 
+        # ========== 4c. 端口名归一：MAC 不能当端口名（未识别设备常以 MAC 建接口）==========
+        from utils.link_integrity import looks_like_mac
+        _mac_notes = []
+        if looks_like_mac(src_port):
+            _mac_notes.append(f"源端口未识别(原值 {src_port})")
+            src_port = 'unknown'
+        if looks_like_mac(tgt_port):
+            _mac_notes.append(f"目标端口未识别(原值 {tgt_port})")
+            tgt_port = 'unknown'
+
         # 确保源接口存在
-        src_iface = Interface.query.filter_by(device_id=src_dev.id, name=src_port).first()
-        if not src_iface:
+        src_iface = None
+        if src_port != 'unknown':
+            src_iface = Interface.query.filter_by(device_id=src_dev.id, name=src_port).first()
+        if not src_iface and src_port != 'unknown':
             src_iface = Interface(
                 device_id=src_dev.id,
                 name=src_port,
@@ -2422,10 +2414,52 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
             determined_type = 'trunk'
             print(f"[保存] 检测到 trunk 端口: {src_dev.name}:{src_port}(trunk={src_port in src_trunks}) ↔ {tgt_dev.name}:{tgt_port}(trunk={tgt_port in tgt_trunks})")
 
+        # ========== 4e. 端口占用护栏：一个物理口只能有一个对端 ==========
+        # 精确去重（同对设备+同端口）已在上面处理；这里拦截"同端口、不同对端"的情形
+        # （多因设备改接后旧 LLDP 记录未老化），以本次发现为准更新旧记录而非再建一条。
+        if src_port != 'unknown' or tgt_port != 'unknown':
+            _occupied = None
+            for _ep in ((src_dev.id, src_port), (tgt_dev.id, tgt_port)):
+                if not _ep[1] or _ep[1] == 'unknown':
+                    continue
+                for _c in conns_by_endpoint.get(_ep, []):
+                    if _c not in touched:
+                        _occupied = _c
+                        break
+                if _occupied:
+                    break
+            if _occupied and _occupied not in touched:
+                _same = ((_occupied.source_device_id == src_dev.id
+                          and _occupied.target_device_id == tgt_dev.id)
+                         or (_occupied.source_device_id == tgt_dev.id
+                             and _occupied.target_device_id == src_dev.id))
+                if not _same:
+                    _old_proto = (_occupied.discovered_by or _occupied.discovery_protocol or 'unknown')
+                    _old_pri = PROTOCOL_PRIORITY.get(str(_old_proto), 0)
+                    _new_pri = PROTOCOL_PRIORITY.get(str(protocol), 0)
+                    if _new_pri < _old_pri:
+                        print(f"[保存] 端口已被连接 #{_occupied.id} 占用，且旧协议优先级更高({_old_proto})，跳过本次")
+                        continue
+                    print(f"[保存] 端口已被连接 #{_occupied.id} 占用，按本次发现更新对端: "
+                          f"{src_dev.name}:{src_port} ↔ {tgt_dev.name}:{tgt_port}")
+                    _occupied.source_device_id = src_dev.id
+                    _occupied.source_port = src_port
+                    _occupied.source_interface_id = src_iface.id if src_iface else None
+                    _occupied.target_device_id = tgt_dev.id
+                    _occupied.target_port = tgt_port
+                    _occupied.target_interface_id = tgt_iface.id if tgt_iface else None
+                    _occupied.discovery_time = datetime.now(timezone.utc)
+                    _occupied.last_seen = datetime.now(timezone.utc)
+                    _occupied.updated_at = datetime.now(timezone.utc)
+                    _occupied.link_status = 'active'
+                    touched.add(_occupied)
+                    db.session.flush()
+                    continue
+
         # 创建新连接
         new_conn = ConnectionPath(
             source_device_id=src_dev.id,
-            source_interface_id=src_iface.id,
+            source_interface_id=src_iface.id if src_iface else None,
             source_port=src_port,
             target_device_id=tgt_dev.id,
             target_interface_id=tgt_iface.id if tgt_iface else None,
@@ -2439,6 +2473,9 @@ def save_discovery_results(task_id, connections, discovered_ips, lldp_seen_ips=N
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
+        if _mac_notes:
+            new_conn.description = '；'.join(_mac_notes)
+            new_conn.confidence = 70
         db.session.add(new_conn)
         db.session.flush()
         saved_count += 1
@@ -2474,6 +2511,25 @@ def save_ipmac_results(task_id, connections, discovered_ips):
     from models.models import Device, ConnectionPath, db
     from utils.snmp_utils import snmp_detect_trunk_ports
 
+    # 预加载设备索引，避免保存阶段逐条查库
+    device_index = DeviceIndex()
+    device_index.load()
+
+    # 预加载现有连接，供内存去重
+    all_conns = ConnectionPath.query.all()
+    conn_by_pair = {}
+    conns_by_device = defaultdict(list)
+    conns_by_endpoint = defaultdict(list)
+    for _c in all_conns:
+        _pair = (min(_c.source_device_id, _c.target_device_id), max(_c.source_device_id, _c.target_device_id))
+        conn_by_pair.setdefault(_pair, _c)
+        conns_by_device[_c.source_device_id].append(_c)
+        conns_by_device[_c.target_device_id].append(_c)
+        if _c.source_port and _c.source_port != 'unknown':
+            conns_by_endpoint[(_c.source_device_id, _c.source_port)].append(_c)
+        if _c.target_port and _c.target_port != 'unknown':
+            conns_by_endpoint[(_c.target_device_id, _c.target_port)].append(_c)
+
     # ========== 预扫描：对每个源设备查询 trunk 端口 ==========
     trunk_port_cache = {}  # {device_id: {port_name: True}}
     src_dev_ids_seen = set()
@@ -2483,7 +2539,7 @@ def save_ipmac_results(task_id, connections, discovered_ips):
             src_dev_ids_seen.add(_src_id)
 
     for dev_id in src_dev_ids_seen:
-        dev = Device.query.get(dev_id)
+        dev = device_index.by_id_get(dev_id)
         if dev:
             ip = dev.management_ip or dev.ip_address
             if ip:
@@ -2505,10 +2561,7 @@ def save_ipmac_results(task_id, connections, discovered_ips):
         # 如果没有 target_device_id，尝试按 IP 或 MAC 查找/创建设备（兜底逻辑）
         if not target_device_id:
             if conn.get('target_ip'):
-                target_device = Device.query.filter(
-                    (Device.management_ip == conn['target_ip']) |
-                    (Device.ip_address == conn['target_ip'])
-                ).first()
+                target_device = device_index.by_ip_get(conn['target_ip'])
                 if not target_device:
                     target_device = Device(
                         name=f"Device-{conn['target_ip'].replace('.', '_')}",
@@ -2522,7 +2575,7 @@ def save_ipmac_results(task_id, connections, discovered_ips):
                 target_device_id = target_device.id
             elif conn.get('target_mac'):
                 # 仅通过MAC查到已有设备则复用，否则跳过（无确认IP不入库）
-                target_device = find_device_by_mac(conn['target_mac'])
+                target_device = device_index.by_mac_get(conn['target_mac'])
                 if target_device:
                     target_device_id = target_device.id
                     print(f"[IPMAC] 复用已有设备(仅MAC): {target_device.name}")
@@ -2532,6 +2585,22 @@ def save_ipmac_results(task_id, connections, discovered_ips):
             else:
                 print(f"[IPMAC] 连接缺少目标标识，跳过: {conn}")
                 continue
+
+        # ===== 1.5 宿主机标记：IP/MAC 发现识别到大量 VM MAC 的端口 =====
+        if conn.get('neighbor_type') == 'hypervisor' or conn.get('hypervisor_platform'):
+            td = device_index.by_id_get(target_device_id)
+            if td:
+                marked = False
+                if not td.is_virtual_host:
+                    td.is_virtual_host = True
+                    marked = True
+                platform = conn.get('hypervisor_platform', '') or ''
+                if platform and (not td.virtualization_type or td.virtualization_type in ('', 'other')):
+                    td.virtualization_type = platform
+                    marked = True
+                if marked:
+                    print(f"[IPMAC] 标记 {td.name} 为虚拟化宿主机"
+                          f"（platform={platform or '-'}, vm_mac_count={conn.get('vm_mac_count', 0)}）")
 
         # 2. 双向归一化：把较小的 device_id 永远放 source
         src_id = conn['source_device_id']
@@ -2544,12 +2613,7 @@ def save_ipmac_results(task_id, connections, discovered_ips):
             src_port, tgt_port = tgt_port, src_port
 
         # 3. 去重：同一个设备对只保留一条链路
-        existing = ConnectionPath.query.filter(
-            db.and_(
-                ConnectionPath.source_device_id == src_id,
-                ConnectionPath.target_device_id == tgt_id,
-            )
-        ).first()
+        existing = conn_by_pair.get((min(src_id, tgt_id), max(src_id, tgt_id)))
 
         if existing:
             # 已有链路，仅更新端口（如果新数据更精确）
@@ -2568,29 +2632,34 @@ def save_ipmac_results(task_id, connections, discovered_ips):
                 print(f"[IPMAC] 链路已存在，跳过: {src_id}:{src_port} ↔ {tgt_id}:{tgt_port}")
             continue
 
-        # 3b. 端口占用检查：源端口是否已被占用
-        port_occupied = ConnectionPath.query.filter(
-            ((ConnectionPath.source_device_id == src_id) & (ConnectionPath.source_port == src_port)) |
-            ((ConnectionPath.target_device_id == src_id) & (ConnectionPath.target_port == src_port))
-        ).first()
+        # 3b. 端口占用检查：源端口是否已被占用（低优先级不覆盖，高优先级交给后续去重）
+        port_occupied = None
+        if src_port and src_port != 'unknown':
+            for _c in conns_by_endpoint.get((src_id, src_port), []):
+                if _c not in touched:
+                    port_occupied = _c
+                    break
         if port_occupied:
-            print(f"[IPMAC] 端口 Device#{src_id}:{src_port} 已被占用，跳过新连接")
-            continue
+            _same = (port_occupied.source_device_id == src_id and port_occupied.target_device_id == tgt_id) or                     (port_occupied.source_device_id == tgt_id and port_occupied.target_device_id == src_id)
+            _old_proto = (port_occupied.discovered_by or port_occupied.discovery_protocol or 'unknown')
+            _old_pri = PROTOCOL_PRIORITY.get(str(_old_proto), 0)
+            _new_pri = PROTOCOL_PRIORITY.get(str(conn.get('protocol', 'ipmac')), 0)
+            if _same:
+                touched.add(port_occupied)
+                continue
+            if _new_pri < _old_pri:
+                print(f"[IPMAC] 端口 Device#{src_id}:{src_port} 已被更高优先级链路占用，跳过")
+                continue
+            # 否则允许后续 existing_for_target 决定，不再在此跳过
 
         # 3c. 目标设备去重：防止上联口产生重复连接
         # IP/MAC 发现的结果不能和已存在的 LLDP 连接冲突
-        existing_for_target = ConnectionPath.query.filter(
-            db.or_(
-                ConnectionPath.source_device_id == tgt_id,
-                ConnectionPath.target_device_id == tgt_id
-            )
-        ).filter(
-            # 同样用 OR：必须能命中 (B,A) 反向场景
-            db.or_(
-                ConnectionPath.source_device_id != src_id,
-                ConnectionPath.target_device_id != src_id
-            )
-        ).first()
+        existing_for_target = None
+        for _c in conns_by_device.get(tgt_id, []):
+            _other_id = _c.source_device_id if _c.target_device_id == tgt_id else _c.target_device_id
+            if _other_id != src_id:
+                existing_for_target = _c
+                break
 
         if existing_for_target:
             # 端口是否完全一致（反向也算一致）
@@ -2921,8 +2990,7 @@ def discover_cdp_neighbors(ip: str, community: str = 'public') -> List[Dict[str,
 
 
 
-def resolve_neighbor_ip_enhanced(neighbor, addr_map):
-    from models.models import Device
+def resolve_neighbor_ip_enhanced(neighbor, addr_map, device_index=None):
     import re
     import socket
 
@@ -2935,13 +3003,12 @@ def resolve_neighbor_ip_enhanced(neighbor, addr_map):
 
     sysname = neighbor.get('remote_sysname', '').strip()
     sysdesc = neighbor.get('remote_sysdesc', '').strip()
-    
-    # ===== 再次修复，确保名称正确 =====
+
     if sysname:
         sysname = detect_encoding_and_fix(sysname)
     if sysdesc:
         sysdesc = detect_encoding_and_fix(sysdesc)
-    
+
     ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
 
     # 1. 从 sysname 提取 IP
@@ -2964,39 +3031,36 @@ def resolve_neighbor_ip_enhanced(neighbor, addr_map):
             ip = socket.gethostbyname(sysname)
             if is_valid_target_ip(ip):
                 return ip
-        except:
+        except Exception:
             pass
 
-    # 4. ===== 在数据库中按设备名称查询 IP（支持模糊匹配）=====
+    # 4. 按设备名称查询 IP（优先走内存 DeviceIndex，避免逐条查库）
     if sysname:
-        # 精确匹配（大小写不敏感）
-        device = Device.query.filter(func.lower(Device.name) == sysname.lower()).first()
+        device = None
+        if device_index is not None:
+            device = device_index.by_name_exact(sysname)
+            if not device:
+                device = device_index.by_name_fuzzy(sysname)
+        else:
+            from models.models import Device
+
+            device = Device.query.filter(func.lower(Device.name) == sysname.lower()).first()
+            if not device:
+                def clean_name(name):
+                    if not name:
+                        return ''
+                    return ''.join(c for c in name if c.isalnum() or c.isspace()
+                                  or c in '-_.' or '\u4e00' <= c <= '\u9fff').strip()
+
+                clean_sysname = clean_name(sysname)
+                if clean_sysname and len(clean_sysname) >= 2:
+                    device = Device.query.filter(Device.name.ilike(f'%{clean_sysname}%')).first()
+
         if device:
             ip = device.management_ip or device.ip_address
             if ip and is_valid_target_ip(ip):
+                print(f"[LLDP] 通过名称匹配到设备: {device.name} -> {ip}")
                 return ip
-        
-        # ===== 模糊匹配：去除特殊字符后匹配 =====
-        def clean_name(name):
-            """清理设备名称，去除特殊字符，只保留字母数字和中文"""
-            if not name:
-                return ''
-            # 保留字母、数字、中文、空格
-            cleaned = ''.join(c for c in name if c.isalnum() or c.isspace()
-                              or c in '-_.'
-                              or '\u4e00' <= c <= '\u9fff')
-            return cleaned.strip()
-        
-        clean_sysname = clean_name(sysname)
-        if clean_sysname and len(clean_sysname) >= 2:
-            # 查询名称包含该字符串的设备
-            devices = Device.query.filter(Device.name.ilike(f'%{clean_sysname}%')).all()
-            if devices:
-                for dev in devices:
-                    ip = dev.management_ip or dev.ip_address
-                    if ip and is_valid_target_ip(ip):
-                        print(f"[LLDP] 通过模糊匹配找到设备: {dev.name} -> {ip}")
-                        return ip
 
     # 5. 兜底：从 addr_map 中取任意 IP
     for ip in addr_map.values():
@@ -3004,6 +3068,7 @@ def resolve_neighbor_ip_enhanced(neighbor, addr_map):
             return ip
 
     return None
+
 
 
 
@@ -3017,54 +3082,69 @@ logger = logging.getLogger(__name__)
 
 def discover_interfaces_via_snmp(ip, community='public'):
     interfaces = []
-    
+
     # ✅ 明确使用 ifDescr
     oid_if_descr = IF_MIB_DESCR
-    
+
     logger.debug(f"[DEBUG] 开始 SNMP ifDescr walk: {ip}")
-    
+
     entries = snmp_walk(
         ip=ip,
         oid=oid_if_descr,
         community=community
     )
-       
+
     if not entries:
         logger.debug(f"[DEBUG] 从 {ip} 未获取到接口信息，SNMP可能失败")
         return interfaces
-    
+
+    # 同时采集 ifOperStatus / ifAdminStatus（按 ifIndex 建索引），不再把状态写死为 up
+    def _status_map(oid):
+        m = {}
+        try:
+            for soid, val in snmp_walk(ip=ip, oid=oid, community=community):
+                idx = soid.split('.')[-1]
+                m[idx] = parse_if_status(val)
+        except Exception:
+            pass
+        return m
+
+    oper_map = _status_map('.1.3.6.1.2.1.2.2.1.8')
+    admin_map = _status_map('.1.3.6.1.2.1.2.2.1.7')
+
     logger.debug(f"[DEBUG] discover_interfaces_via_snmp for {ip} 获取到 {len(entries)} 个接口")
-    
+
     for oid, name in entries:
         # 安全解码
         if isinstance(name, bytes):
             name = name.decode('utf-8', errors='replace')
         else:
             name = str(name).strip()
-        
+
         # 提取 ifIndex
         parts = oid.split('.')
         if not parts or not parts[-1].isdigit():
             continue
-            
+
         idx = parts[-1]
         logger.debug(f"[DEBUG] 接口索引 {idx}: '{name}'")
-        
+
         # 过滤逻辑接口（保持你原来的逻辑）
         name_lower = name.lower()
         if any(k in name_lower for k in ['null', 'loopback', 'inloop', 'cpu', 'register-tunnel']):
             logger.debug(f"[DEBUG] 跳过逻辑接口: {name}")
             continue
-        
+
         interfaces.append({
             'index': idx,
             'name': name,
             'speed': 1000,
             'mtu': 1500,
             'mac_address': '',
-            'oper_status': 'up'
+            'oper_status': oper_map.get(idx, 'unknown'),
+            'admin_status': admin_map.get(idx, 'unknown'),
         })
-    
+
     logger.debug(f"[DEBUG] 设备 {ip} 最终保留 {len(interfaces)} 个物理接口")
     return interfaces
 # ====================== 后台发现任务 ======================
@@ -3137,7 +3217,7 @@ logger = logging.getLogger(__name__)
 
 from collections import defaultdict
 
-def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_community='public'):
+def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_community='public', device_index=None):
     """
     通过 SNMP MAC 表发现邻居设备
     适用于不支持 LLDP/CDP 但支持 SNMP 的设备
@@ -3194,12 +3274,13 @@ def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_commun
                 mac_clean = ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
         ip_to_mac[ip_str] = mac_clean
 
-    # 统计端口 MAC 数量，过滤级联端口
-    port_mac_count = {}
+    # 按端口分组 MAC，区分真级联口与虚拟化宿主机上行口
+    port_macs = defaultdict(list)
     for mac, port_idx in mac_to_port.items():
-        port_mac_count[port_idx] = port_mac_count.get(port_idx, 0) + 1
-    
-    CASCADE_THRESHOLD = 2
+        port_macs[port_idx].append(mac)
+    port_class_info = {}
+    for port_idx, macs in port_macs.items():
+        port_class_info[port_idx] = classify_port_macs(macs)
 
     # 匹配 MAC 和 IP
     processed_macs = set()
@@ -3207,12 +3288,24 @@ def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_commun
         # 跳过已经处理过的MAC
         if mac in processed_macs:
             continue
-            
-        # 跳过级联端口
-        if port_mac_count.get(port_idx, 0) >= CASCADE_THRESHOLD:
-            print(f"[SNMP MAC] 端口 {port_idx} 上有 {port_mac_count.get(port_idx, 0)} 个MAC，视为级联端口，跳过")
+
+        info = port_class_info.get(port_idx) or {}
+        cls = info.get('class', 'leaf')
+        if cls == 'switch_cascade':
+            print(f"[SNMP MAC] 端口 {port_idx} 上有 {len(port_macs.get(port_idx, []))} 个非虚拟化 MAC，视为级联/上行口，跳过")
             continue
-            
+        if cls == 'hypervisor':
+            # 宿主机上行口：只保留物理网卡 MAC，虚拟网卡 MAC 不参与建链
+            physical_set = {vm_normalize_mac(m) for m in info.get('physical_macs', [])}
+            if not physical_set:
+                print(f"[SNMP MAC] 端口 {port_idx} 上全部为虚拟机 MAC，无法确定宿主机物理网卡，跳过")
+                continue
+            if vm_normalize_mac(mac) not in physical_set:
+                continue
+            print(f"[SNMP MAC] 端口 {port_idx} 判定为虚拟化宿主机上行口"
+                  f"（{info.get('vm_count', 0)} 个 VM MAC，平台={info.get('platform') or 'unknown'}），"
+                  f"仅处理物理网卡 MAC {mac}")
+
         local_if_name = interface_map.get(port_idx, f"Port-{port_idx}")
         
         # 查找该 MAC 对应的 IP
@@ -3225,7 +3318,7 @@ def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_commun
         # 如果有 IP，尝试获取对端接口名
         remote_iface = 'unknown'
         if matched_ip:
-            remote_device = Device.query.filter(
+            remote_device = device_index.by_ip_get(matched_ip) if device_index else Device.query.filter(
                 (Device.management_ip == matched_ip) | (Device.ip_address == matched_ip)
             ).first()
             remote_community = remote_device.snmp_community if remote_device else default_community
@@ -3248,7 +3341,10 @@ def discover_neighbors_via_snmp_mac(ip, community, interface_map, default_commun
                 'local_interface': local_if_name,
                 'ip': matched_ip,
                 'remote_interface': remote_iface,
-                'remote_mac': mac  # 保存 MAC
+                'remote_mac': mac,  # 保存 MAC
+                'neighbor_type': 'hypervisor' if cls == 'hypervisor' else 'device',
+                'vm_mac_count': info.get('vm_count', 0) if cls == 'hypervisor' else 0,
+                'hypervisor_platform': info.get('platform', '') if cls == 'hypervisor' else '',
             }
             neighbors.append(neighbor)
             processed_macs.add(mac)
@@ -3281,6 +3377,137 @@ def physical_topology():
                            connections=connections,
                            devices_by_location=devices_by_location,
                            layout_type=layout_type)
+
+
+@topology_bp.route('/graph', endpoint='graph')
+@login_required
+@permission_required('topology:view')
+def topology_graph_view():
+    """G6 拓扑视图（AntV G6 渲染，对标 DCOS 拓扑）"""
+    from models.models import Device, ConnectionPath
+    device_count = Device.query.filter(Device.is_decommissioned.is_(False)).count()
+    link_count = ConnectionPath.query.count()
+    return render_template('topology/topology_view.html',
+                           device_count=device_count,
+                           link_count=link_count)
+
+
+@topology_bp.route('/server_link_verify')
+@login_required
+@permission_required('topology:view')
+def server_link_verify():
+    """服务器（宿主机）与交换机端口连接核对表。
+
+    把「交换机端口 ↔ 宿主机物理网卡 MAC ↔ BMC MAC ↔ 管理 IP」整理成一张对应表，
+    并标出每条链路的发现协议与状态，支持 CSV 导出。
+    """
+    import csv
+    import io as _io
+    from flask import Response
+    from utils.vm_oui import format_mac as fmt_mac, is_vm_mac
+
+    export_csv = request.args.get('export') == 'csv'
+
+    PLATFORM_LABELS = {
+        'vmware': 'VMware',
+        'hyperv': 'Hyper-V',
+        'kvm': 'KVM/QEMU',
+        'proxmox': 'Proxmox',
+        'xen': 'Xen/Citrix',
+        'virtualbox': 'VirtualBox',
+        'parallels': 'Parallels',
+        'other': '其他',
+    }
+
+    servers = Device.query.filter(
+        or_(
+            Device.device_type.in_(['server', 'virtualization_host', 'virtual']),
+            Device.is_virtual_host == True,
+        )
+    ).order_by(Device.name).all()
+
+    rows = []
+    for server in servers:
+        # 服务器侧物理网卡 MAC（排除虚拟网卡 OUI）
+        iface_macs = []
+        for iface in Interface.query.filter_by(device_id=server.id).all():
+            if iface.mac_address and not is_vm_mac(iface.mac_address)[0]:
+                mac_disp = fmt_mac(iface.mac_address)
+                if mac_disp:
+                    iface_macs.append(mac_disp)
+        iface_macs = list(dict.fromkeys(iface_macs))
+        if not iface_macs and server.mac_address:
+            iface_macs = [fmt_mac(server.mac_address)]
+
+        platform_label = PLATFORM_LABELS.get(server.virtualization_type or '', '') or \
+            ('虚拟化宿主机' if server.is_virtual_host else '')
+
+        conns = ConnectionPath.query.filter(
+            or_(
+                ConnectionPath.source_device_id == server.id,
+                ConnectionPath.target_device_id == server.id,
+            )
+        ).order_by(ConnectionPath.updated_at.desc()).all()
+
+        if not conns:
+            rows.append({
+                'server': server.name,
+                'mgmt_ip': server.management_ip or server.ip_address or '',
+                'bmc_ip': server.bmc_ip or '',
+                'bmc_mac': fmt_mac(server.bmc_mac),
+                'virtualization': platform_label,
+                'is_virtual_host': server.is_virtual_host or False,
+                'host_macs': '; '.join(iface_macs),
+                'switch': '',
+                'switch_port': '',
+                'protocol': '',
+                'link_status': '未发现连接',
+            })
+            continue
+
+        for cp in conns:
+            is_src = cp.source_device_id == server.id
+            other_dev = Device.query.get(cp.target_device_id if is_src else cp.source_device_id)
+            rows.append({
+                'server': server.name,
+                'mgmt_ip': server.management_ip or server.ip_address or '',
+                'bmc_ip': server.bmc_ip or '',
+                'bmc_mac': fmt_mac(server.bmc_mac),
+                'virtualization': platform_label,
+                'is_virtual_host': server.is_virtual_host or False,
+                'host_macs': '; '.join(iface_macs),
+                'switch': other_dev.name if other_dev else '未知',
+                'switch_port': (cp.target_port if is_src else cp.source_port) or 'unknown',
+                'protocol': cp.discovery_protocol or cp.discovered_by or '',
+                'link_status': cp.link_status or 'unknown',
+            })
+
+    if export_csv:
+        buf = _io.StringIO()
+        buf.write('\ufeff')  # Excel 识别 UTF-8
+        writer = csv.writer(buf)
+        writer.writerow(['服务器名称', '管理IP', 'BMC IP', 'BMC MAC', '虚拟化类型', '宿主机',
+                         '物理网卡MAC', '对端交换机', '交换机端口', '发现协议', '链路状态'])
+        for r in rows:
+            writer.writerow([
+                r['server'], r['mgmt_ip'], r['bmc_ip'], r['bmc_mac'],
+                r['virtualization'], '是' if r['is_virtual_host'] else '否',
+                r['host_macs'], r['switch'], r['switch_port'], r['protocol'], r['link_status'],
+            ])
+        return Response(
+            buf.getvalue(),
+            mimetype='text/csv; charset=utf-8',
+            headers={'Content-Disposition': 'attachment; filename=server_link_verify.csv'},
+        )
+
+    stats = {
+        'total': len(servers),
+        'virtual_hosts': sum(1 for s in servers if s.is_virtual_host),
+        'with_link': len({r['server'] for r in rows if r['switch']}),
+        'no_link': len(servers) - len({r['server'] for r in rows if r['switch']}),
+    }
+    return render_template('topology/server_link_verify.html', rows=rows, stats=stats)
+
 
 @topology_bp.route('/logical_topology')
 @login_required
@@ -3685,6 +3912,419 @@ def api_physical_data():
 
     return jsonify({'nodes': nodes, 'edges': edges, 'timestamp': datetime.utcnow().isoformat()})
 
+@topology_bp.route('/api/topology-graph')
+@login_required
+@permission_required('topology:view')
+def api_topology_graph():
+    """返回 AntV G6 格式的实时拓扑数据（节点/边/分组）。
+
+    数据来自 LLDP/CDP/SNMP 自动发现写入的 ConnectionPath 以及 Device 资产表，
+    与 DCOS 的 link/relationship 表同构。节点按设备类型着色、按位置/机柜分组(combos)。
+
+    scope=connected（默认）：仅展示参与连接的设备；scope=all：展示全部设备。
+    当 scope=connected 且尚无任何连接时，自动回退到全部设备，避免空白图。
+    """
+    from models.models import Device, ConnectionPath
+
+    scope = request.args.get('scope', 'connected').lower()
+    conns = ConnectionPath.query.all()
+    device_ids = set()
+    for c in conns:
+        if c.source_device_id:
+            device_ids.add(c.source_device_id)
+        if c.target_device_id:
+            device_ids.add(c.target_device_id)
+
+    fallback_all = False
+    if scope == 'all' or not device_ids:
+        if not device_ids:
+            fallback_all = True
+        all_ids = [did for (did,) in
+                   db.session.query(Device.id).all()]
+        device_ids = set(all_ids)
+
+    devices = Device.query.filter(Device.id.in_(device_ids)).all() if device_ids else []
+    dev_by_id = {d.id: d for d in devices}
+
+    # 设备类型 -> G6 形状 & 颜色（参照 DCOS 设备图标配色）
+    SHAPE = {
+        'router': 'circle', 'switch': 'rect', 'firewall': 'triangle',
+        'server': 'diamond', 'storage': 'rect', 'load_balancer': 'triangle',
+        'ap': 'circle', 'pc': 'rect', 'printer': 'rect', 'host': 'rect',
+        'virtual_machine': 'rect', 'unknown': 'circle',
+    }
+    COLOR = {
+        'router': '#1890ff', 'switch': '#13c2c2', 'firewall': '#fa8c16',
+        'server': '#722ed1', 'storage': '#2f54eb', 'load_balancer': '#eb2f96',
+        'ap': '#f759ab', 'pc': '#52c41a', 'printer': '#a0d911',
+        'host': '#13c2c2', 'virtual_machine': '#9254de', 'unknown': '#8c8c8c',
+    }
+
+    def group_of(d):
+        if d.location and getattr(d.location, 'name', None):
+            return d.location.name
+        if d.cabinet and getattr(d.cabinet, 'name', None):
+            return '机柜-%s' % d.cabinet.name
+        return '未分配'
+
+    nodes = []
+    combos = {}
+    for d in devices:
+        t = (d.device_type or 'unknown').lower()
+        color = COLOR.get(t, COLOR['unknown'])
+        online = (d.status or '').lower() == 'online'
+        combo_id = group_of(d)
+        combos.setdefault(combo_id, {'id': combo_id, 'label': combo_id})
+        nodes.append({
+            'id': str(d.id),
+            'label': d.name,
+            'type': SHAPE.get(t, 'circle'),
+            'deviceType': t,
+            'ip': d.management_ip or d.ip_address or '',
+            'status': d.status or 'unknown',
+            'online': online,
+            'vendor': d.brand or d.manufacturer or '',
+            'model': d.model or '',
+            'mac': d.mac_address or '',
+            'comboId': combo_id,
+            'color': color,
+        })
+
+    now = datetime.utcnow()
+
+    def _link_aging(conn):
+        last_seen = conn.last_seen
+        if not last_seen:
+            if conn.link_status == 'stale':
+                return {'state': 'stale', 'label': '已老化', 'hours': None}
+            return {'state': 'unknown', 'label': '未记录', 'hours': None}
+        if last_seen.tzinfo is not None:
+            last_seen = last_seen.replace(tzinfo=None)
+        hours = max(0.0, (now - last_seen).total_seconds() / 3600.0)
+        if conn.link_status == 'stale' or hours > 72:
+            return {'state': 'stale', 'label': '已老化', 'hours': round(hours, 1)}
+        if hours > 24:
+            return {'state': 'aging', 'label': '老化中', 'hours': round(hours, 1)}
+        return {'state': 'fresh', 'label': '正常', 'hours': round(hours, 1)}
+
+    edges = []
+    for c in conns:
+        if c.source_device_id not in dev_by_id or c.target_device_id not in dev_by_id:
+            continue
+        src = str(c.source_device_id)
+        tgt = str(c.target_device_id)
+        status = (c.link_status or 'unknown').lower()
+        aging = _link_aging(c)
+        edges.append({
+            'source': src,
+            'target': tgt,
+            'sourcePort': c.source_port or '',
+            'targetPort': c.target_port or '',
+            'label': '%s ↔ %s' % (c.source_port or '', c.target_port or ''),
+            'protocol': c.discovery_protocol or c.discovered_by or '',
+            'confidence': c.confidence if c.confidence is not None else 0,
+            'bandwidth': c.bandwidth or 0,
+            'media': c.media_type or '',
+            'status': status,
+            'connType': c.connection_type or 'physical',
+            'aging_state': aging['state'],
+            'aging_label': aging['label'],
+            'aging_hours': aging['hours'],
+            'last_seen': c.last_seen.isoformat() if c.last_seen else None,
+        })
+
+    return jsonify({
+        'nodes': nodes,
+        'edges': edges,
+        'combos': list(combos.values()),
+        'timestamp': datetime.utcnow().isoformat(),
+        'scope': scope,
+        'fallback_all': fallback_all,
+    })
+
+
+@topology_bp.route('/api/topology/ping/<int:device_id>')
+@login_required
+@permission_required('topology:view')
+def api_topology_ping(device_id):
+    """对设备管理 IP 执行 Ping 探测（按需调用，用于拓扑右键菜单）。"""
+    import os
+    import subprocess
+    from models.models import Device
+
+    d = Device.query.get_or_404(device_id)
+    ip = d.management_ip or d.ip_address
+    if not ip:
+        return jsonify({'success': False, 'message': '设备无管理 IP'}), 400
+    if os.name == 'nt':
+        cmd = ['ping', '-n', '1', '-w', '2000', ip]
+    else:
+        cmd = ['ping', '-c', '1', '-W', '2', ip]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=10)
+        ok = r.returncode == 0
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+    return jsonify({'success': ok, 'ip': ip, 'message': '可达' if ok else '不可达'})
+
+
+# ------------------------------------------------------------------ 存储光纤(SAN)拓扑（对标 DCOS「光纤拓扑」）
+SAN_NODE_COLOR = {
+    'switch': '#13c2c2',   # FC 交换机
+    'array':  '#2f54eb',   # 存储阵列
+    'server': '#722ed1',   # 服务器
+    'hba':    '#fa8c16',   # HBA 卡
+    'other':  '#8c8c8c',
+}
+SAN_NODE_SHAPE = {
+    'switch': 'rect', 'array': 'circle', 'server': 'diamond',
+    'hba': 'triangle', 'other': 'circle',
+}
+
+
+@topology_bp.route('/san')
+@login_required
+@permission_required('topology:view')
+def san_topology_view():
+    return render_template('topology/san_topology.html')
+
+
+@topology_bp.route('/api/san-graph')
+@login_required
+@permission_required('topology:view')
+def api_san_graph():
+    """返回 AntV G6 格式的 SAN 拓扑（节点/边/分区 combos）。"""
+    nodes = SanNode.query.all()
+    node_by_id = {n.id: n for n in nodes}
+    links = SanLink.query.all()
+
+    g6_nodes, combos = [], {}
+    for n in nodes:
+        t = (n.node_type or 'other').lower()
+        color = SAN_NODE_COLOR.get(t, SAN_NODE_COLOR['other'])
+        combo_id = n.zone or '未分区'
+        combos.setdefault(combo_id, {'id': combo_id, 'label': combo_id})
+        g6_nodes.append({
+            'id': str(n.id),
+            'label': n.name,
+            'type': SAN_NODE_SHAPE.get(t, 'circle'),
+            'nodeType': t,
+            'wwpn': n.wwpn or '',
+            'vendor': n.vendor or '',
+            'model': n.model or '',
+            'mgmt_ip': n.mgmt_ip or '',
+            'zone': n.zone or '',
+            'status': n.status or 'unknown',
+            'linked_device_id': n.linked_device_id,
+            'comboId': combo_id,
+            'color': color,
+        })
+
+    g6_edges = []
+    for lnk in links:
+        if lnk.source_id not in node_by_id or lnk.target_id not in node_by_id:
+            continue
+        st = (lnk.status or 'up').lower()
+        g6_edges.append({
+            'id': str(lnk.id),
+            'source': str(lnk.source_id),
+            'target': str(lnk.target_id),
+            'sourcePort': lnk.port_source or '',
+            'targetPort': lnk.port_target or '',
+            'label': '%s ↔ %s' % (lnk.port_source or '', lnk.port_target or ''),
+            'speed': lnk.speed or '',
+            'linkType': lnk.link_type or 'fc',
+            'status': st,
+        })
+    return jsonify({
+        'nodes': g6_nodes,
+        'edges': g6_edges,
+        'combos': list(combos.values()),
+        'timestamp': datetime.utcnow().isoformat(),
+    })
+
+
+@topology_bp.route('/api/san/nodes', methods=['GET'])
+@login_required
+@permission_required('topology:view')
+def san_nodes_list():
+    rows = SanNode.query.order_by(SanNode.zone, SanNode.name).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@topology_bp.route('/api/san/nodes', methods=['POST'])
+@login_required
+@permission_required('topology:edit')
+def san_nodes_create():
+    d = request.get_json(force=True, silent=True) or {}
+    if not d.get('name'):
+        return jsonify({'error': 'name required'}), 400
+    wwpn = (d.get('wwpn') or '').strip()
+    if wwpn:
+        dup = SanNode.query.filter_by(wwpn=wwpn).first()
+        if dup:
+            return jsonify({'error': 'WWPN 已存在 (节点 %s)' % dup.name}), 409
+    status = d.get('status') or 'unknown'
+    if status not in ('online', 'offline', 'unknown'):
+        status = 'unknown'
+    node = SanNode(
+        name=d['name'], node_type=d.get('node_type', 'switch'),
+        wwpn=wwpn, vendor=d.get('vendor'), model=d.get('model'),
+        mgmt_ip=d.get('mgmt_ip'), zone=d.get('zone'),
+        status=status,
+        linked_device_id=d.get('linked_device_id'), note=d.get('note'))
+    db.session.add(node)
+    db.session.commit()
+    log_audit('create', 'san_node', node.id,
+              '创建 SAN 节点 %s (%s)' % (node.name, node.node_type),
+              details={'name': node.name, 'node_type': node.node_type,
+                       'wwpn': wwpn, 'zone': node.zone, 'status': status})
+    return jsonify(node.to_dict()), 201
+
+
+@topology_bp.route('/api/san/nodes/<int:nid>', methods=['GET'])
+@login_required
+@permission_required('topology:view')
+def san_node_get(nid):
+    return jsonify(SanNode.query.get_or_404(nid).to_dict())
+
+
+@topology_bp.route('/api/san/nodes/<int:nid>', methods=['PUT', 'DELETE'])
+@login_required
+@permission_required('topology:edit')
+def san_node_detail(nid):
+    node = SanNode.query.get_or_404(nid)
+    if request.method == 'DELETE':
+        linked = SanLink.query.filter(
+            (SanLink.source_id == nid) | (SanLink.target_id == nid)).count()
+        SanLink.query.filter(
+            (SanLink.source_id == nid) | (SanLink.target_id == nid)).delete()
+        name = node.name
+        db.session.delete(node)
+        db.session.commit()
+        log_audit('delete', 'san_node', nid,
+                  '删除 SAN 节点 %s (%d 条链路已级联删除)' % (name, linked))
+        return jsonify({'ok': True, 'deleted_links': linked})
+    d = request.get_json(force=True, silent=True) or {}
+    changes = {}
+    for f in ('name', 'node_type', 'wwpn', 'vendor', 'model', 'mgmt_ip',
+             'zone', 'status', 'linked_device_id', 'note'):
+        if f in d and getattr(node, f) != d[f]:
+            changes[f] = {'from': getattr(node, f), 'to': d[f]}
+            setattr(node, f, d[f])
+    db.session.commit()
+    if changes:
+        log_audit('update', 'san_node', nid, '更新 SAN 节点 %s' % node.name,
+                  changes=changes)
+    return jsonify(node.to_dict())
+
+
+@topology_bp.route('/api/san/links', methods=['GET'])
+@login_required
+@permission_required('topology:view')
+def san_links_list():
+    rows = SanLink.query.order_by(SanLink.source_id, SanLink.target_id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@topology_bp.route('/api/san/links', methods=['POST'])
+@login_required
+@permission_required('topology:edit')
+def san_links_create():
+    d = request.get_json(force=True, silent=True) or {}
+    try:
+        source_id = int(d.get('source_id') or 0)
+        target_id = int(d.get('target_id') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'source_id and target_id required'}), 400
+    if source_id == target_id:
+        return jsonify({'error': '源和目的不能相同'}), 400
+    src = SanNode.query.get(source_id)
+    tgt = SanNode.query.get(target_id)
+    if not src or not tgt:
+        return jsonify({'error': '源/目的节点不存在'}), 400
+    dup = SanLink.query.filter_by(source_id=source_id, target_id=target_id).first()
+    if dup:
+        return jsonify({'error': '该链路已存在'}), 409
+    status = d.get('status') or 'up'
+    if status not in ('up', 'down', 'degraded'):
+        status = 'up'
+    lnk = SanLink(
+        source_id=source_id, target_id=target_id,
+        link_type=d.get('link_type', 'fc'), port_source=d.get('port_source'),
+        port_target=d.get('port_target'), speed=d.get('speed'),
+        status=status, note=d.get('note'))
+    db.session.add(lnk)
+    db.session.commit()
+    log_audit('create', 'san_link', lnk.id,
+              '创建 SAN 链路 %s -> %s (%s)' % (src.name, tgt.name, status),
+              details={'source_id': source_id, 'target_id': target_id,
+                       'source_name': src.name, 'target_name': tgt.name,
+                       'speed': lnk.speed, 'status': status})
+    return jsonify(lnk.to_dict()), 201
+
+
+@topology_bp.route('/api/san/links/<int:lid>', methods=['DELETE'])
+@login_required
+@permission_required('topology:edit')
+def san_link_detail(lid):
+    lnk = SanLink.query.get_or_404(lid)
+    db.session.delete(lnk)
+    db.session.commit()
+    log_audit('delete', 'san_link', lid, '删除 SAN 链路 #%d' % lid)
+    return jsonify({'ok': True})
+
+
+@topology_bp.route('/api/san/seed', methods=['POST'])
+@login_required
+@permission_required('topology:edit')
+def san_seed():
+    """写入一组示例 SAN 数据，便于体验 G6 光纤拓扑。
+
+    改为「补全式」幂等：仅当示例中的标志性节点/链路尚不存在时才补录，
+    不会因库里已有其他（可能是脏）节点而整体跳过，也不会删除已有数据。
+    这样无论当前库处于何种状态，点击「载入示例」都能得到完整的双分区示例拓扑。
+    """
+    sample = [
+        ('FC-SW-01', 'switch', '20:00:00:11:22:33:44:01', 'Brocade', 'G620', '10.1.0.11', 'Zone-A'),
+        ('FC-SW-02', 'switch', '20:00:00:11:22:33:44:02', 'Cisco',  'MDS-9148S', '10.1.0.12', 'Zone-B'),
+        ('SAN-ARRAY-01', 'array', '50:00:00:aa:bb:cc:dd:01', 'Dell EMC', 'Unity 480F', '10.1.0.21', 'Zone-A'),
+        ('SAN-ARRAY-02', 'array', '50:00:00:aa:bb:cc:dd:02', 'NetApp',  'AFF A400', '10.1.0.22', 'Zone-B'),
+        ('ESX-01', 'server', '10:00:00:ff:ee:dd:cc:01', 'Dell', 'R750', '10.1.0.31', 'Zone-A'),
+        ('ESX-02', 'server', '10:00:00:ff:ee:dd:cc:02', 'HPE',  'DL380', '10.1.0.32', 'Zone-B'),
+    ]
+    nodes = {}
+    for name, ntype, wwpn, vendor, model, ip, zone in sample:
+        cur = SanNode.query.filter_by(name=name).first()
+        if not cur:
+            cur = SanNode(name=name, node_type=ntype, wwpn=wwpn, vendor=vendor,
+                          model=model, mgmt_ip=ip, zone=zone, status='online')
+            db.session.add(cur); db.session.flush()
+        nodes[name] = cur.id
+    links = [
+        ('FC-SW-01', 'SAN-ARRAY-01', '0', '0', '32G'),
+        ('FC-SW-01', 'ESX-01', '1', '1', '16G'),
+        ('FC-SW-02', 'SAN-ARRAY-02', '0', '0', '32G'),
+        ('FC-SW-02', 'ESX-02', '1', '1', '16G'),
+        ('FC-SW-01', 'FC-SW-02', 'ISL', 'ISL', '64G'),
+    ]
+    added_links = 0
+    for s, t, ps, pt, sp in links:
+        if s in nodes and t in nodes:
+            exists = SanLink.query.filter_by(source_id=nodes[s], target_id=nodes[t]).first()
+            if not exists:
+                db.session.add(SanLink(source_id=nodes[s], target_id=nodes[t],
+                                       link_type='fc', port_source=ps, port_target=pt,
+                                       speed=sp, status='up'))
+                added_links += 1
+    db.session.commit()
+    total = SanNode.query.count()
+    log_audit('execute', 'san_seed', 0,
+              '载入 SAN 示例拓扑 (节点 %d, 链路 %d, 新增链路 %d)'
+              % (total, len(links), added_links))
+    return jsonify({'ok': True, 'nodes': total, 'links': len(links), 'added_links': added_links})
+
+
 @topology_bp.route('/api/trunk_stats')
 @login_required
 @permission_required('topology:view')
@@ -3785,6 +4425,127 @@ def api_trunk_stats():
         'connections': conn_list,
     })
 
+# ---------- 逻辑拓扑：列表 / 创建 / 设备 / 连接 ----------
+@topology_bp.route('/api/topologies')
+@login_required
+@permission_required('topology:view')
+def api_topologies():
+    """逻辑拓扑列表（JSON，供 logical.html 左侧面板加载）"""
+    topologies = LogicalTopology.query.order_by(LogicalTopology.name).all()
+    return jsonify({'success': True,
+                    'topologies': [t.to_dict() for t in topologies]})
+
+
+@topology_bp.route('/api/topologies/create', methods=['POST'])
+@login_required
+@permission_required('topology:edit')
+def create_topology():
+    """新建逻辑拓扑（前端 createTopology 调用）"""
+    data = request.get_json(force=True) or {}
+    name = (data.get('name') or '').strip()
+    topology_type = (data.get('topology_type') or 'custom').strip()
+    if not name:
+        return jsonify({'success': False, 'message': '拓扑名称不能为空'}), 400
+    dup = LogicalTopology.query.filter_by(name=name).first()
+    if dup:
+        return jsonify({'success': False,
+                        'message': '已存在同名逻辑拓扑「%s」' % name}), 400
+
+    topo = LogicalTopology(
+        name=name,
+        description=data.get('description'),
+        topology_type=topology_type,
+        group_by=data.get('group_by') or None,
+        group_value=data.get('group_value') or None,
+        layout_type=(data.get('layout_type') or 'force').strip() or 'force',
+        node_size=int(data.get('node_size') or 30),
+        link_distance=int(data.get('link_distance') or 100),
+        show_labels=bool(data.get('show_labels', True)),
+        show_icons=bool(data.get('show_icons', True)),
+        is_public=bool(data.get('is_public', True)),
+        enabled=bool(data.get('enabled', True)),
+        created_by=current_user.username if current_user.is_authenticated else None,
+    )
+    db.session.add(topo)
+    db.session.commit()
+    log_audit('create', 'logical_topology', topo.id,
+              '创建逻辑拓扑 %s（类型 %s）' % (topo.name, topology_type),
+              details={'name': topo.name, 'topology_type': topology_type,
+                       'group_by': topo.group_by})
+    return jsonify({'success': True, 'topology_id': topo.id,
+                    'topology': topo.to_dict()}), 201
+
+
+@topology_bp.route('/api/topologies/<int:tid>/devices')
+@login_required
+@permission_required('topology:view')
+def api_topology_devices(tid):
+    """某个逻辑拓扑视图下的设备列表（按当前分组方式取参与设备）"""
+    group_by = request.args.get('group_by', 'device_type')
+    devices, _connections = _logical_scope(group_by)
+    items = []
+    for d in devices:
+        items.append({
+            'id': d.id,
+            'name': d.name,
+            'ip': d.management_ip or d.ip_address or '',
+            'device_type': d.device_type or 'unknown',
+            'status': d.status or 'unknown',
+            'location': d.location.name if d.location else '',
+        })
+    return jsonify({'success': True, 'devices': items, 'group_by': group_by,
+                    'count': len(items)})
+
+
+@topology_bp.route('/api/topologies/<int:tid>/connections')
+@login_required
+@permission_required('topology:view')
+def api_topology_connections(tid):
+    """某个逻辑拓扑视图下的连接列表（活动链路）"""
+    connections = ConnectionPath.query.filter_by(link_status='active').all()
+    dev_ids = set()
+    for c in connections:
+        dev_ids.add(c.source_device_id)
+        dev_ids.add(c.target_device_id)
+    dev_map = {}
+    if dev_ids:
+        dev_map = {d.id: d for d in
+                   Device.query.filter(Device.id.in_(dev_ids)).all()}
+    items = []
+    for c in connections:
+        s = dev_map.get(c.source_device_id)
+        t = dev_map.get(c.target_device_id)
+        items.append({
+            'id': c.id,
+            'source_device': s.name if s else str(c.source_device_id),
+            'source_interface': c.source_port or '',
+            'target_device': t.name if t else str(c.target_device_id),
+            'target_interface': c.target_port or '',
+            'type': c.connection_type or 'physical',
+            'status': c.link_status or 'unknown',
+        })
+    return jsonify({'success': True, 'connections': items,
+                    'count': len(items)})
+
+
+def _logical_scope(group_by):
+    """返回 (devices, connections)，语义与 generate_*_topology 保持一致。
+
+    vlan 分组只包含参与活动链路的设备；其余分组包含全部设备。
+    """
+    connections = ConnectionPath.query.filter_by(link_status='active').all()
+    if group_by == 'vlan':
+        involved = set()
+        for c in connections:
+            involved.add(c.source_device_id)
+            involved.add(c.target_device_id)
+        devices = (Device.query.filter(Device.id.in_(involved)).all()
+                   if involved else [])
+    else:
+        devices = Device.query.all()
+    return devices, connections
+
+
 @topology_bp.route('/api/logical_data')
 @login_required
 @permission_required('topology:view')
@@ -3814,6 +4575,7 @@ def api_logical_data():
         return generate_device_type_topology(devices, connections)
 
 def generate_device_type_topology(devices, connections):
+    dev_by_id = {d.id: d for d in devices}
     type_groups = defaultdict(list)
     for device in devices:
         type_groups[device.device_type].append(device)
@@ -3859,8 +4621,8 @@ def generate_device_type_topology(devices, connections):
 
     edges = []
     for conn in connections:
-        source_device = Device.query.get(conn.source_device_id)
-        target_device = Device.query.get(conn.target_device_id)
+        source_device = dev_by_id.get(conn.source_device_id)
+        target_device = dev_by_id.get(conn.target_device_id)
         if not source_device or not target_device:
             continue
         if source_device.device_type == target_device.device_type:
@@ -3896,6 +4658,7 @@ def generate_device_type_topology(devices, connections):
     return jsonify({'nodes': nodes, 'edges': edges, 'timestamp': datetime.utcnow().isoformat()})
 
 def generate_location_topology(devices, connections):
+    dev_by_id = {d.id: d for d in devices}
     location_groups = defaultdict(list)
     for device in devices:
         location_name = device.location.name if device.location else "未分配位置"
@@ -3938,8 +4701,8 @@ def generate_location_topology(devices, connections):
 
     location_connections = defaultdict(int)
     for conn in connections:
-        source_device = Device.query.get(conn.source_device_id)
-        target_device = Device.query.get(conn.target_device_id)
+        source_device = dev_by_id.get(conn.source_device_id)
+        target_device = dev_by_id.get(conn.target_device_id)
         if not source_device or not target_device:
             continue
         source_location = source_device.location.name if source_device.location else "未分配位置"
@@ -4002,21 +4765,31 @@ def generate_vlan_topology(devices, connections):
                     device_vlans[conn.source_device_id].add(vlan)
                     device_vlans[conn.target_device_id].add(vlan)
 
+    # 仅保留参与活动链路的设备，避免 vlan 视图统计虚高（与 _logical_scope('vlan') 一致）
+    involved = {c.source_device_id for c in connections}
+    involved.update(c.target_device_id for c in connections)
+
     device_nodes = {}
     for device in devices:
+        if device.id not in involved:
+            continue
         color_map = {'online': '#28a745', 'offline': '#dc3545', 'warning': '#ffc107', 'unknown': '#6c757d'}
         color = color_map.get(device.status, '#6c757d')
+        vlans = list(device_vlans.get(device.id, set()))
+        # 只属于单个 VLAN 的设备归入对应组节点，多 VLAN 设备不归组（供前端聚类布局）
+        parent = group_nodes.get(vlans[0]) if len(vlans) == 1 else None
         device_nodes[device.id] = {
             'id': device.id,
             'label': device.name,
             'color': color,
             'shape': 'dot',
             'size': 20,
+            'parent': parent,
             'data': {
                 'type': 'device',
                 'ip': device.management_ip or device.ip_address,
                 'status': device.status,
-                'vlans': list(device_vlans.get(device.id, set()))
+                'vlans': vlans
             }
         }
         nodes.append(device_nodes[device.id])
@@ -4038,6 +4811,7 @@ def generate_vlan_topology(devices, connections):
     return jsonify({'nodes': nodes, 'edges': edges, 'timestamp': datetime.utcnow().isoformat()})
 
 def generate_subnet_topology(devices, connections):
+    dev_by_id = {d.id: d for d in devices}
     subnet_groups = defaultdict(list)
     for device in devices:
         ip = device.management_ip or device.ip_address
@@ -4089,8 +4863,8 @@ def generate_subnet_topology(devices, connections):
 
     subnet_connections = defaultdict(int)
     for conn in connections:
-        source_device = Device.query.get(conn.source_device_id)
-        target_device = Device.query.get(conn.target_device_id)
+        source_device = dev_by_id.get(conn.source_device_id)
+        target_device = dev_by_id.get(conn.target_device_id)
         if not source_device or not target_device:
             continue
         source_ip = source_device.management_ip or source_device.ip_address
@@ -4449,23 +5223,53 @@ def batch_delete_interfaces():
 def api_get_device_interfaces(device_id):
     device = Device.query.get_or_404(device_id)
     interfaces = Interface.query.filter_by(device_id=device_id).all()
-    interface_list = [{
-        'id': iface.id,
-        'name': iface.name,
-        'type': getattr(iface, 'type', 'Ethernet'),
-        'description': iface.description,
-        'admin_status': iface.admin_status,
-        'oper_status': iface.oper_status,
-        'speed': iface.speed,
-        'mtu': iface.mtu,
-        'mac_address': iface.mac_address,
-        'ip_address': iface.ip_address,
-        'subnet_mask': iface.subnet_mask,
-        'in_utilization': iface.in_utilization,
-        'out_utilization': iface.out_utilization,
-        'created_at': iface.created_at.isoformat() if iface.created_at else None,
-        'updated_at': iface.updated_at.isoformat() if iface.updated_at else None
-    } for iface in interfaces]
+
+    # 对端信息：本设备端口名 -> 对端设备名/对端端口（来自连接关系，批量查询一次）
+    peer_by_port = {}
+    conns = ConnectionPath.query.filter(
+        or_(
+            ConnectionPath.source_device_id == device_id,
+            ConnectionPath.target_device_id == device_id,
+        )
+    ).all()
+    peer_dev_ids = set()
+    for cp in conns:
+        if cp.source_device_id == device_id:
+            port, peer_dev_id, peer_iface = cp.source_port, cp.target_device_id, cp.target_port
+        else:
+            port, peer_dev_id, peer_iface = cp.target_port, cp.source_device_id, cp.source_port
+        if not port:
+            continue
+        peer_dev_ids.add(peer_dev_id)
+        peer_by_port[port] = (peer_dev_id, peer_iface)
+    peer_names = {}
+    if peer_dev_ids:
+        for pd in Device.query.filter(Device.id.in_(peer_dev_ids)).all():
+            peer_names[pd.id] = pd.name
+
+    interface_list = []
+    for iface in interfaces:
+        peer_dev_id, peer_iface = peer_by_port.get(iface.name, (None, None))
+        interface_list.append({
+            'id': iface.id,
+            'name': iface.name,
+            'type': getattr(iface, 'type', 'Ethernet'),
+            'description': iface.description,
+            'admin_status': iface.admin_status,
+            'oper_status': iface.oper_status,
+            'status': iface.admin_status or iface.oper_status or 'unknown',
+            'peer_device': peer_names.get(peer_dev_id) if peer_dev_id else None,
+            'peer_interface': peer_iface,
+            'speed': iface.speed,
+            'mtu': iface.mtu,
+            'mac_address': iface.mac_address,
+            'ip_address': iface.ip_address,
+            'subnet_mask': iface.subnet_mask,
+            'in_utilization': iface.in_utilization,
+            'out_utilization': iface.out_utilization,
+            'created_at': iface.created_at.isoformat() if iface.created_at else None,
+            'updated_at': iface.updated_at.isoformat() if iface.updated_at else None
+        })
     return jsonify({'success': True, 'device_id': device_id, 'device_name': device.name,
                     'interface_count': len(interface_list), 'interfaces': interface_list})
 
@@ -4529,26 +5333,49 @@ def api_snmp_discover_interfaces():
         discovered_interfaces = discover_interfaces_via_snmp(target_ip, snmp_community)
         saved_interfaces = []
         saved_count = 0
+        updated_count = 0
         if auto_save and discovered_interfaces:
             for iface in discovered_interfaces:
                 existing = Interface.query.filter_by(device_id=device_id, name=iface['name']).first()
-                if not existing:
+                idx = iface.get('index')
+                oper = iface.get('oper_status', 'unknown')
+                admin = iface.get('admin_status', 'unknown')
+                if existing:
+                    changed = False
+                    if oper and existing.oper_status != oper:
+                        existing.oper_status = oper
+                        changed = True
+                    if admin and existing.admin_status != admin:
+                        existing.admin_status = admin
+                        changed = True
+                    if idx and existing.ifindex != int(idx) and existing.ifindex is None:
+                        existing.ifindex = int(idx)
+                        changed = True
+                    if idx and existing.snmp_index != int(idx):
+                        existing.snmp_index = int(idx)
+                        changed = True
+                    if changed:
+                        existing.updated_at = datetime.utcnow()
+                        updated_count += 1
+                else:
                     new_iface = Interface(
                         device_id=device_id,
                         name=iface['name'],
-                        snmp_index=iface['index'],
+                        ifindex=int(idx) if idx else None,
+                        snmp_index=int(idx) if idx else None,
                         type='Ethernet',
                         speed=iface.get('speed', 0),
                         mtu=iface.get('mtu', 1500),
                         mac_address=iface.get('mac_address', ''),
-                        oper_status=iface.get('oper_status', 'unknown')
+                        admin_status=admin,
+                        oper_status=oper
                     )
                     db.session.add(new_iface)
                     saved_interfaces.append(iface['name'])
             db.session.commit()
             saved_count = len(saved_interfaces)
-            log_audit('create', 'interface', 0, f'SNMP发现并保存 {saved_count} 个接口',
-                      details={'device_id': device_id, 'saved_count': saved_count},
+            log_audit('update', 'interface', 0, f'SNMP发现并同步 {saved_count} 个新接口、{updated_count} 个已有接口',
+                      details={'device_id': device_id, 'saved_count': saved_count, 'updated_count': updated_count},
                       user_id=current_user.id)
 
         return jsonify({
@@ -4557,6 +5384,7 @@ def api_snmp_discover_interfaces():
             'device_name': device.name,
             'discovered_count': len(discovered_interfaces),
             'saved_count': saved_count,
+            'updated_count': updated_count,
             'interfaces': discovered_interfaces[:20],
             'auto_saved': auto_save
         })
@@ -4569,6 +5397,64 @@ def api_snmp_discover_interfaces():
 @permission_required('topology:edit')
 def refresh_interfaces():
     return jsonify({'success': True, 'message': '刷新成功'})
+
+
+@topology_bp.route('/api/interfaces/<int:interface_id>/refresh', methods=['POST'])
+@login_required
+@permission_required('topology:view')
+def api_refresh_single_interface(interface_id):
+    """重新通过 SNMP 获取单个接口的实时状态并更新"""
+    interface = Interface.query.get_or_404(interface_id)
+    device = Device.query.get(interface.device_id)
+    if not device:
+        return jsonify({'success': False, 'message': '接口没有关联设备'}), 404
+    ip = device.management_ip or device.ip_address
+    if not ip:
+        return jsonify({'success': False, 'message': '设备没有管理 IP，无法刷新'}), 400
+    community = getattr(device, 'snmp_community', 'public')
+    version = getattr(device, 'snmp_version', '2c')
+    idx = interface.ifindex or interface.snmp_index
+    if idx:
+        try:
+            oper_raw = snmp_get(ip, community, version, f'.1.3.6.1.2.1.2.2.1.8.{idx}', timeout=3)
+            adm_raw = snmp_get(ip, community, version, f'.1.3.6.1.2.1.2.2.1.7.{idx}', timeout=3)
+            oper = parse_if_status(oper_raw) if oper_raw is not None else None
+            adm = parse_if_status(adm_raw) if adm_raw is not None else None
+            if oper in ('up', 'down'):
+                interface.oper_status = oper
+            if adm in ('up', 'down'):
+                interface.admin_status = adm
+        except Exception as e:
+            logger.error(f"刷新接口 {interface.name} 失败: {e}")
+    new_status = interface.admin_status or interface.oper_status or 'unknown'
+    interface.status = new_status
+    interface.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'message': '接口数据刷新成功',
+        'interface': {
+            'id': interface.id,
+            'device_id': device.id,
+            'device_name': device.name,
+            'device_ip': device.ip_address or device.management_ip or 'N/A',
+            'interface_name': interface.name,
+            'interface_type': interface.type or 'Ethernet',
+            'status': new_status,
+            'oper_status': interface.oper_status,
+            'admin_status': interface.admin_status,
+            'speed': interface.speed,
+            'mtu': interface.mtu,
+            'description': interface.description or '',
+            'mac_address': interface.mac_address or '',
+            'ip_address': interface.ip_address or '',
+            'subnet_mask': interface.subnet_mask or '',
+            'vlan': interface.vlan,
+            'in_utilization': interface.in_utilization or 0,
+            'out_utilization': interface.out_utilization or 0,
+            'last_seen': interface.updated_at.strftime('%Y-%m-%d %H:%M:%S') if interface.updated_at else 'N/A'
+        }
+    })
 
 @topology_bp.route('/api/interfaces/manual', methods=['POST'])
 @login_required

@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% block title %}NetFlow 流量分析 - IT 资产与运维管理平台{% endblock %}
+{% block page_title %}NetFlow 流量分析{% endblock %}
+{% block page_subtitle %}NetFlow v5 / v9 流量采集、Top 分析与应用识别（参考 DCOS 平台 netflow 模块）{% endblock %}
+{% block header_actions %}
+<button class="btn btn-primary" id="btn-refresh"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+{% if has_permission(current_user, 'netflow:edit') %}
+<button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#probeModal"><i class="bi bi-plus"></i> 新增采集器</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">总流量 (窗口)</div>
+      <div class="fs-4 fw-bold" id="stat-octets">-</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">总包数</div>
+      <div class="fs-4 fw-bold" id="stat-packets">-</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">流记录数</div>
+      <div class="fs-4 fw-bold" id="stat-flows">-</div>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card"><div class="card-body">
+      <div class="text-muted small">运行采集器</div>
+      <div class="fs-4 fw-bold" id="stat-probes">-</div>
+    </div></div>
+  </div>
+</div>
+{% if request.args.get('probe') %}
+<div class="alert alert-info py-2 mb-3 d-flex justify-content-between align-items-center">
+  <span><i class="bi bi-funnel"></i> 正在按采集器（设备）下钻：ID {{ request.args.get('probe') }}，窗口：{{ request.args.get('window', 'h24') }}。以下流量统计 / Top / 记录均已按该采集器过滤。</span>
+  <a href="/netflow/" class="btn btn-sm btn-outline-secondary">清除筛选</a>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="card"><div class="card-header">流量趋势（分钟）</div>
+      <div class="card-body"><canvas id="trend-chart" height="120"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header">协议分布</div>
+      <div class="card-body p-0"><table class="table table-sm mb-0">
+        <thead><tr><th>协议</th><th class="text-end">字节</th></tr></thead>
+        <tbody id="proto-body"><tr><td colspan="2" class="text-muted">加载中...</td></tr></tbody>
+      </table></div>
+    </div>
+    <div class="card mt-3"><div class="card-header">Top 应用</div>
+      <div class="card-body p-0"><table class="table table-sm mb-0">
+        <thead><tr><th>应用</th><th class="text-end">字节</th><th class="text-end">流数</th></tr></thead>
+        <tbody id="app-body"><tr><td colspan="3" class="text-muted">加载中...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="card"><div class="card-header">Top 源地址</div>
+    <div class="card-body p-0"><table class="table table-sm mb-0">
+      <thead><tr><th>源 IP</th><th class="text-end">字节</th><th class="text-end">流数</th></tr></thead>
+      <tbody id="src-body"><tr><td colspan="3" class="text-muted">加载中...</td></tr></tbody>
+    </table></div>
+  </div></div>
+  <div class="col-lg-6"><div class="card"><div class="card-header">Top 目的地址</div>
+    <div class="card-body p-0"><table class="table table-sm mb-0">
+      <thead><tr><th>目的 IP</th><th class="text-end">字节</th><th class="text-end">流数</th></tr></thead>
+      <tbody id="dst-body"><tr><td colspan="3" class="text-muted">加载中...</td></tr></tbody>
+    </table></div>
+  </div></div>
+</div>
+
+<div class="card mb-3"><div class="card-header">采集器</div>
+  <div class="card-body p-0"><table class="table table-hover mb-0">
+    <thead><tr><th>名称</th><th>监听</th><th>版本</th><th>状态</th><th>包数</th><th>流数</th><th>最后收包</th><th>积压/丢弃</th><th>操作</th></tr></thead>
+    <tbody id="probe-body"><tr><td colspan="9" class="text-center text-muted">加载中...</td></tr></tbody>
+  </table></div>
+</div>
+
+<div class="card"><div class="card-header">最近流记录</div>
+  <div class="card-body p-0"><table class="table table-sm mb-0">
+    <thead><tr><th>时间</th><th>源</th><th>目的</th><th>协议</th><th class="text-end">包数</th><th class="text-end">字节</th></tr></thead>
+    <tbody id="rec-body"><tr><td colspan="6" class="text-center text-muted">加载中...</td></tr></tbody>
+  </table></div>
+</div>
+
+<!-- Add/Edit probe modal -->
+<div class="modal fade" id="probeModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="probeModalTitle">新增采集器</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="p-id">
+      <div class="mb-2"><label class="form-label">名称</label><input id="p-name" class="form-control"></div>
+      <div class="row g-2">
+        <div class="col-6"><label class="form-label">监听 IP</label><input id="p-ip" class="form-control" value="0.0.0.0"></div>
+        <div class="col-3"><label class="form-label">UDP 端口</label><input id="p-port" type="number" class="form-control" value="2055"></div>
+        <div class="col-3"><label class="form-label">版本</label>
+          <select id="p-version" class="form-select">
+            <option value="both">both (v5+v9, 含 NetStream)</option>
+            <option value="v5">v5</option>
+            <option value="v9">v9</option>
+            <option value="sflow">sflow</option>
+            <option value="netstream">netstream (v5/v9)</option>
+            <option value="all">all (v5/v9/sflow)</option>
+          </select>
+        </div>
+      </div>
+      <div class="mt-2"><label class="form-label">说明</label><input id="p-desc" class="form-control"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button type="button" class="btn btn-primary" id="btn-save-probe">保存</button>
+    </div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const CAN_EDIT = {{ 'true' if has_permission(current_user, 'netflow:edit') else 'false' }};
+  let trendChart = null;
+  const urlParams = new URLSearchParams(window.location.search);
+  const DRILL_PROBE = urlParams.get('probe') ? parseInt(urlParams.get('probe'), 10) : null;
+  const DRILL_WINDOW = urlParams.get('window') || 'h24';
+  function windowToMinutes(w) {
+    const now = new Date();
+    if (w === 'today') return Math.max(1, Math.round((now - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 60000));
+    if (w === 'h24') return 1440;
+    if (w === 'd7' || w === 'week') return 10080;
+    if (w === 'month') return 43200;
+    return 1440;
+  }
+  function statsQuery() {
+    let q = '/netflow/api/stats?minutes=' + windowToMinutes(DRILL_WINDOW);
+    if (DRILL_PROBE) q += '&probe=' + DRILL_PROBE;
+    return q;
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+      'X-CSRFToken': csrf, 'Content-Type': 'application/json'
+    });
+    return fetch(path, opts).then(r => r.json());
+  }
+  function fmtBytes(n) {
+    if (n == null) return '-';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return n.toFixed(1) + ' ' + u[i];
+  }
+  function fmtAge(sec) {
+    if (sec == null) return '-';
+    if (sec < 60) return Math.round(sec) + 's';
+    if (sec < 3600) return (sec / 60).toFixed(1) + 'm';
+    return (sec / 3600).toFixed(1) + 'h';
+  }
+  function fillTable(id, rows, cols) {
+    const el = document.getElementById(id);
+    if (!rows || !rows.length) { el.innerHTML = '<tr><td colspan="' + cols + '" class="text-muted">无数据</td></tr>'; return; }
+    el.innerHTML = rows.map(r => '<tr><td>' + (r.label ? r.label + ' <small class="text-muted">(' + (r.key ?? '') + ')</small>' : (r.key ?? '-')) + '</td><td class="text-end">' + fmtBytes(r.octets) + '</td><td class="text-end">' + (r.flows ?? 0) + '</td></tr>').join('');
+  }
+
+  function loadStats() {
+    api(statsQuery()).then(s => {
+      document.getElementById('stat-octets').textContent = fmtBytes(s.total.octets);
+      document.getElementById('stat-packets').textContent = (s.total.packets ?? 0).toLocaleString();
+      document.getElementById('stat-flows').textContent = (s.total.flows ?? 0).toLocaleString();
+      fillTable('src-body', s.top_sources, 3);
+      fillTable('dst-body', s.top_destinations, 3);
+      fillTable('proto-body', s.top_protocols, 3);
+      if (trendChart) { trendChart.data.labels = s.trend.map(t => t.t); trendChart.data.datasets[0].data = s.trend.map(t => t.octets); trendChart.update(); }
+      else {
+        trendChart = new Chart(document.getElementById('trend-chart'), {
+          type: 'line',
+          data: { labels: s.trend.map(t => t.t), datasets: [{ label: '字节', data: s.trend.map(t => t.octets), borderColor: '#0d6efd', tension: 0.2, fill: false }] },
+          options: { scales: { y: { ticks: { callback: v => fmtBytes(v) } } } }
+        });
+      }
+    });
+  }
+
+  function loadProbes() {
+    api('/netflow/api/probes').then(list => {
+      const el = document.getElementById('probe-body');
+      document.getElementById('stat-probes').textContent = list.filter(p => p.running).length + '/' + list.length;
+      if (!list.length) { el.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂未配置采集器</td></tr>'; return; }
+      el.innerHTML = list.map(p => '<tr>' +
+        '<td>' + (p.id === DRILL_PROBE ? '<span class="badge bg-primary" title="当前筛选采集器">' + (p.name || '') + '</span>' : (p.name || '')) + '</td>' +
+        '<td>' + p.listen_ip + ':' + p.port + '</td>' +
+        '<td>' + (p.version || '') + '</td>' +
+        '<td><span class="badge ' + (p.running ? 'bg-success' : 'bg-secondary') + '">' + (p.running ? '运行中' : '停止') + '</span></td>' +
+        '<td>' + (p.live_packets ?? p.packets_received ?? 0) + '</td>' +
+        '<td>' + (p.live_flows ?? p.flows_received ?? 0) + '</td>' +
+        '<td>' + (p.last_packet_age_sec == null ? '<span class="text-muted">无包</span>' : fmtAge(p.last_packet_age_sec)) + '</td>' +
+        '<td>' + (p.buffer ?? 0) + '/' + (p.dropped ?? 0) + '</td>' +
+        '<td>' + (CAN_EDIT
+          ? '<button class="btn btn-sm btn-outline-secondary" onclick="editProbe(' + p.id + ')">编辑</button> ' +
+            '<button class="btn btn-sm btn-outline-danger" onclick="delProbe(' + p.id + ')">删除</button>'
+          : '') + '</td></tr>').join('');
+    });
+  }
+
+  function loadApps() {
+    api('/netflow/api/top_apps?minutes=' + windowToMinutes(DRILL_WINDOW) + (DRILL_PROBE ? '&probe=' + DRILL_PROBE : '')).then(d => {
+      fillTable('app-body', d.items || [], 3);
+    });
+  }
+
+  function loadRecords() {
+    api('/netflow/api/records?per_page=20' + (DRILL_PROBE ? '&probe=' + DRILL_PROBE : '')).then(r => {
+      const el = document.getElementById('rec-body');
+      if (!r.items.length) { el.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无数据</td></tr>'; return; }
+      el.innerHTML = r.items.map(x => '<tr>' +
+        '<td>' + (x.received_at || '-') + '</td>' +
+        '<td>' + (x.src_ip || '-') + ':' + (x.src_port ?? '') + '</td>' +
+        '<td>' + (x.dst_ip || '-') + ':' + (x.dst_port ?? '') + '</td>' +
+        '<td>' + (x.protocol_name || x.protocol || '-') + '</td>' +
+        '<td class="text-end">' + (x.packets ?? 0) + '</td>' +
+        '<td class="text-end">' + fmtBytes(x.octets) + '</td></tr>').join('');
+    });
+  }
+
+  window.editProbe = function (id) {
+    api('/netflow/api/probes').then(list => {
+      const p = list.find(x => x.id === id); if (!p) return;
+      document.getElementById('p-id').value = p.id;
+      document.getElementById('p-name').value = p.name || '';
+      document.getElementById('p-ip').value = p.listen_ip || '0.0.0.0';
+      document.getElementById('p-port').value = p.port;
+      document.getElementById('p-version').value = p.version || 'both';
+      document.getElementById('p-desc').value = p.description || '';
+      document.getElementById('probeModalTitle').textContent = '编辑采集器';
+      new bootstrap.Modal(document.getElementById('probeModal')).show();
+    });
+  };
+  window.delProbe = function (id) {
+    if (!confirm('确认删除该采集器？')) return;
+    api('/netflow/api/probes/' + id, { method: 'DELETE' }).then(() => { loadProbes(); loadStats(); });
+  };
+  function resetModal() {
+    document.getElementById('p-id').value = '';
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-ip').value = '0.0.0.0';
+    document.getElementById('p-port').value = 2055;
+    document.getElementById('p-version').value = 'both';
+    document.getElementById('p-desc').value = '';
+    document.getElementById('probeModalTitle').textContent = '新增采集器';
+  }
+  document.getElementById('btn-save-probe').addEventListener('click', () => {
+    const id = document.getElementById('p-id').value;
+    const body = {
+      name: document.getElementById('p-name').value,
+      listen_ip: document.getElementById('p-ip').value,
+      port: parseInt(document.getElementById('p-port').value, 10),
+      version: document.getElementById('p-version').value,
+      description: document.getElementById('p-desc').value
+    };
+    const path = id ? '/netflow/api/probes/' + id : '/netflow/api/probes';
+    const method = id ? 'PUT' : 'POST';
+    api(path, { method: method, body: JSON.stringify(body) }).then(r => {
+      bootstrap.Modal.getInstance(document.getElementById('probeModal')).hide();
+      resetModal(); loadProbes();
+    });
+  });
+
+  document.getElementById('btn-refresh').addEventListener('click', () => { loadStats(); loadProbes(); loadRecords(); loadApps(); });
+  loadStats(); loadProbes(); loadRecords(); loadApps();
+  setInterval(loadStats, 30000);
+})();
+</script>
+{% endblock %}

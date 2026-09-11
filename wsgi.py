@@ -85,6 +85,14 @@ def bootstrap(app):
 
 bootstrap(application)
 
+# SocketIO（WebSSH 实时终端）已在 app.py 中通过 init_app 挂载到 app.wsgi_app，
+# waitress 等 WSGI 服务器直接服务 application 即可同时处理 /socket.io 请求。
+try:
+    from realtime import socketio  # noqa: F401  确保实例已初始化
+    logger.info('[wsgi] SocketIO 已挂载（WebSSH 可用）')
+except Exception as e:
+    logger.error(f'[wsgi] SocketIO 初始化失败: {e}')
+
 # 兼容 `gunicorn wsgi:app` 这种写法
 app = application
 

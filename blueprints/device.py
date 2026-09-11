@@ -862,6 +862,10 @@ def device_add(cabinet_id=None):
                 rack_side=request.form.get('rack_side'),
                 management_ip=management_ip,
                 mac_address=request.form.get('mac_address'),
+                bmc_ip=request.form.get('bmc_ip'),
+                bmc_mac=request.form.get('bmc_mac'),
+                virtualization_type=request.form.get('virtualization_type') or '',
+                is_virtual_host=request.form.get('is_virtual_host') == 'on',
                 snmp_community=request.form.get('snmp_community'),
                 snmp_version=request.form.get('snmp_version', 2, type=int),
                 ssh_username=request.form.get('ssh_username'),
@@ -984,6 +988,10 @@ def device_edit(id):
             'device_type': request.form.get('device_type', '').strip(),
             'management_ip': request.form.get('management_ip', '').strip(),
             'management_mac': request.form.get('management_mac', '').strip(),
+            'bmc_ip': request.form.get('bmc_ip', '').strip(),
+            'bmc_mac': request.form.get('bmc_mac', '').strip(),
+            'virtualization_type': request.form.get('virtualization_type', '').strip() or '',
+            'is_virtual_host': request.form.get('is_virtual_host') == 'on',
             'location_id': request.form.get('location_id'),
             'cabinet_id': request.form.get('cabinet_id'),
             'position_u': request.form.get('position_u'),
@@ -1107,7 +1115,11 @@ def device_edit(id):
             device.name = form_data['name']
             device.device_type = form_data['device_type'] or None
             device.management_ip = form_data['management_ip']
-            device.management_mac = form_data['management_mac'] or None
+            device.mac_address = form_data['management_mac'] or None
+            device.bmc_ip = form_data['bmc_ip'] or None
+            device.bmc_mac = form_data['bmc_mac'] or None
+            device.virtualization_type = form_data['virtualization_type']
+            device.is_virtual_host = form_data['is_virtual_host']
 
             # 机房位置
             if form_data['location_id']:
@@ -1231,30 +1243,11 @@ def get_cabinets_by_location():
 def delete_device(id):
     device = Device.query.get_or_404(id)
     try:
-        # 删除设备监控配置（新增）
-        DeviceMonitorConfig.query.filter_by(device_id=device.id).delete()
+        # 统一关联数据清理（46 个 FK 列 + 子-子级表，含 sla_uptimes / availability_records / ip_addresses 等，
+        # 根治 ORM 对 NOT NULL 外键子行误发 SET NULL → pymysql 1048）
+        _purge_device_children([device.id])
 
-        # 解除备件关联
-        SparePart.query.filter_by(installed_device_id=device.id).update({'installed_device_id': None})
-
-        # 删除告警事件
-        AlertEvent.query.filter_by(device_id=device.id).delete()
-
-        # 删除监控数据
-        MonitorData.query.filter_by(device_id=device.id).delete()
-        DeviceMonitorLog.query.filter_by(device_id=device.id).delete()
-        InterfaceMonitorData.query.filter_by(device_id=device.id).delete()
-
-        # 删除库存事务
-        InventoryTransaction.query.filter_by(device_id=device.id).delete()
-
-        # 删除拓扑连接
-        ConnectionPath.query.filter(
-            (ConnectionPath.source_device_id == device.id) |
-            (ConnectionPath.target_device_id == device.id)
-        ).delete(synchronize_session=False)
-
-        # 最后删除设备本身（接口会通过 cascade 自动删除）
+        # 最后删除设备本身（接口会通过 Device.interfaces delete-orphan 自动删除）
         db.session.delete(device)
         db.session.commit()
         log_audit('delete', 'device', id, f"删除设备: {device.name}")
@@ -1755,6 +1748,7 @@ def device_snmp_check(id):
             'message': f'SNMP检测异常: {str(e)}'
         }), 500
 
+
 """
 @device_bp.route('/<int:id>/snmp_check', methods=['POST'])
 @login_required
@@ -1876,6 +1870,84 @@ def device_snmp_check(id):
             'success': False,
             'message': f'SNMP检测异常: {str(e)}'
         }), 500
+
+
+@device_bp.route('/<int:id>/hardware_sync', methods=['POST'])
+@login_required
+@permission_required('device:edit')
+def device_hardware_sync(id):
+    """单设备硬件资产同步（ENTITY-MIB：机箱序列号/板卡/电源/风扇入库）。
+
+    内部走 3 阶段 DB 上下文分离：短读 → 零 DB 外联采集 → 短写。
+    """
+    from utils.entity_mib import sync_device_hardware
+    try:
+        result = sync_device_hardware(id)
+        if result.get('success'):
+            log_operation('hardware_sync', 'device', id, None, result.get('message', '硬件资产同步'))
+        return jsonify(result)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'硬件同步异常: {str(e)}'}), 500
+
+
+@device_bp.route('/<int:id>/components', methods=['GET'])
+@login_required
+def device_components(id):
+    """设备硬件部件清单（ENTITY-MIB 采集结果）"""
+    from models.models import DeviceComponent
+    Device.query.get_or_404(id)
+    comps = (DeviceComponent.query.filter_by(device_id=id)
+             .order_by(DeviceComponent.entity_class, DeviceComponent.physical_index)
+             .all())
+    return jsonify({'success': True, 'device_id': id,
+                    'components': [c.to_dict() for c in comps]})
+
+
+@device_bp.route('/hardware_sync_batch', methods=['POST'])
+@login_required
+@permission_required('device:edit')
+def device_hardware_sync_batch():
+    """批量硬件同步（ENTITY-MIB）。
+
+    参数: device_ids=[]；缺省时同步全部在线且有管理 IP 的设备（上限 50 台，
+    每台 11 列 walk，同步执行约需 1~2 分钟/50 台，前端请用超时较长的 AJAX）。
+    """
+    from utils.entity_mib import sync_device_hardware
+    try:
+        ids = []
+        if request.is_json:
+            ids = request.get_json(silent=True).get('device_ids') or []
+        else:
+            ids = request.form.getlist('device_ids')
+        if not ids:
+            online = (Device.query
+                      .filter(Device.status == 'online', Device.management_ip.isnot(None))
+                      .limit(50).all())
+            ids = [d.id for d in online]
+        db.session.remove()  # 铁律：批量外联前清空 DB 上下文
+
+        ok_count, fail_count, results = 0, 0, []
+        for did in [int(x) for x in ids][:50]:
+            try:
+                r = sync_device_hardware(did)
+            except Exception as e:  # noqa: BLE001
+                r = {'success': False, 'message': str(e)[:120]}
+            if r.get('success'):
+                ok_count += 1
+            else:
+                fail_count += 1
+            results.append({'device_id': did, **{k: r.get(k) for k in
+                                                 ('success', 'message', 'component_count')}})
+        log_operation('hardware_sync_batch', 'device', None, None,
+                      f'批量硬件同步: 成功{ok_count}台, 失败{fail_count}台')
+        return jsonify({'success': True, 'ok_count': ok_count,
+                        'fail_count': fail_count, 'total': len(results),
+                        'results': results,
+                        'message': f'批量硬件同步完成：成功 {ok_count} 台，失败 {fail_count} 台'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'批量硬件同步异常: {str(e)}'}), 500
 
 
 #====================================
@@ -2224,6 +2296,7 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
         
         # 扫描结果
         found_devices = []
+        wrong_community_devices = []
         non_snmp_devices = []
         added_count = 0
         skipped_count = 0
@@ -2240,6 +2313,8 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                 'ip': ip,
                 'online': False,
                 'snmp_success': False,
+                'snmp_status': SNMP_STATUS_UNSUPPORTED,
+                'snmp_detail': '',
                 'ping_time': 0,
                 'sysinfo': None,
                 'error': None,
@@ -2258,17 +2333,19 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                 result['error'] = f'Ping异常: {str(e)}'
                 return result
             
-            # 2. SNMP检测（获取设备信息）
+            # 2. SNMP检测（获取设备信息，并区分：团体号正确/团体号错误/不支持SNMP）
             try:
-                snmp_success, sysinfo = snmp_get_device_info(
+                snmp_status, sysinfo, snmp_detail = detect_snmp_status(
                     ip,
                     snmp_community,
                     snmp_version,
                     timeout=snmp_timeout,
                     retries=snmp_retries
                 )
-                
-                if snmp_success:
+                result['snmp_status'] = snmp_status
+                result['snmp_detail'] = snmp_detail
+
+                if snmp_status == SNMP_STATUS_OK:
                     result['snmp_success'] = True
                     result['sysinfo'] = sysinfo
                     
@@ -2288,8 +2365,12 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                     except Exception as mac_error:
                         # MAC获取失败不影响主流程
                         pass
+                elif snmp_status == SNMP_STATUS_WRONG_COMMUNITY:
+                    # 设备支持SNMP，但配置的团体号不正确
+                    result['sysinfo'] = sysinfo
+                    result['error'] = snmp_detail or 'SNMP团体号不正确'
                 else:
-                    result['error'] = 'SNMP无响应'
+                    result['error'] = snmp_detail or 'SNMP无响应'
             except Exception as e:
                 result['error'] = f'SNMP异常: {str(e)}'
             
@@ -2485,6 +2566,35 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                                 device_data['skipped'] = False
                                 device_data['error'] = str(e)
                                 print(f"  ❌ 添加设备失败: {ip} - {str(e)}")
+                    elif result.get('snmp_status') == SNMP_STATUS_WRONG_COMMUNITY:
+                        # 设备支持SNMP，但配置的团体号不正确（黄色）——只记录，不自动入库
+                        sysinfo = result.get('sysinfo', {})
+                        device_name = sysinfo.get('sys_name', '').strip()
+                        if not device_name:
+                            device_name = f"设备_{ip}"
+                        else:
+                            device_name = clean_snmp_device_name(device_name, ip)
+
+                        detected_type, detected_brand, detected_model = infer_device_type_from_snmp(
+                            sys_descr=sysinfo.get('sys_descr', ''),
+                            sys_object_id=sysinfo.get('sys_object_id', ''),
+                            sys_name=sysinfo.get('sys_name', '')
+                        )
+                        wrong_community_devices.append({
+                            'ip': ip,
+                            'ping_time': result.get('ping_time', 0),
+                            'online': True,
+                            'snmp_status': SNMP_STATUS_WRONG_COMMUNITY,
+                            'snmp_detail': result.get('snmp_detail', ''),
+                            'sysinfo': sysinfo,
+                            'device_name': device_name,
+                            'description': sysinfo.get('sys_descr', ''),
+                            'device_type': detected_type,
+                            'brand': detected_brand,
+                            'model': detected_model,
+                            'mac_address': result.get('mac_address'),
+                            'reason': result.get('error', 'SNMP团体号不正确')
+                        })
                     else:
                         non_snmp_devices.append({
                             'ip': ip,
@@ -2492,6 +2602,8 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                             'online': result.get('online', False),
                             'status': 'online_no_snmp' if result.get('online', False) else 'offline',
                             'reason': result.get('error', '未知错误'),
+                            'snmp_status': result.get('snmp_status', SNMP_STATUS_UNSUPPORTED),
+                            'snmp_detail': result.get('snmp_detail', ''),
                             'device_name': f'设备_{ip}'
                         })
                     
@@ -2523,7 +2635,11 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                 'ip': device['ip'],
                 'device_name': device.get('device_name', f'设备_{device["ip"]}'),
                 'status': 'online',
-                'snmp_status': '支持',
+                'online': True,
+                'snmp_success': True,
+                'snmp_status': SNMP_STATUS_OK,
+                'snmp_status_text': '团体号正确',
+                'snmp_detail': '',
                 'description': device.get('description', ''),
                 'added': device.get('added', False),
                 'updated': device.get('updated', False),
@@ -2536,13 +2652,39 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                 'model': device.get('model', ''),
                 'mac_address': device.get('mac_address', '')
             })
+
+        for device in wrong_community_devices:
+            all_results.append({
+                'ip': device['ip'],
+                'device_name': device.get('device_name', f'设备_{device["ip"]}'),
+                'status': 'online',
+                'online': True,
+                'snmp_success': False,
+                'snmp_status': SNMP_STATUS_WRONG_COMMUNITY,
+                'snmp_status_text': '团体号错误',
+                'snmp_detail': device.get('snmp_detail', ''),
+                'description': device.get('reason', ''),
+                'added': False,
+                'updated': False,
+                'skipped': False,
+                'ping_time': device.get('ping_time'),
+                'type': 'wrong_community',
+                'device_id': None,
+                'device_type': device.get('device_type', 'unknown'),
+                'brand': device.get('brand', ''),
+                'model': device.get('model', ''),
+                'mac_address': device.get('mac_address', '')
+            })
         
         for device in non_snmp_devices:
             all_results.append({
                 'ip': device['ip'],
                 'device_name': device.get('device_name', f'设备_{device["ip"]}'),
                 'status': device.get('status', 'unknown'),
-                'snmp_status': '不支持',
+                'online': device.get('online', False),
+                'snmp_status': device.get('snmp_status', SNMP_STATUS_UNSUPPORTED),
+                'snmp_status_text': '不支持SNMP',
+                'snmp_detail': device.get('snmp_detail', ''),
                 'description': device.get('reason', ''),
                 'added': False,
                 'updated': False,
@@ -2553,6 +2695,12 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
             })
         
         # 完成
+        result_summary = {
+            'total': len(all_results),
+            'ok': len(found_devices),
+            'wrong_community': len(wrong_community_devices),
+            'unsupported': len(non_snmp_devices),
+        }
         progress_manager.update_progress(
             task_id,
             status='completed',
@@ -2564,7 +2712,10 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
             failed=0,
             end_time=datetime.now().isoformat(),
             results=all_results[:500],
-            message=f'扫描 {total_ips} 个IP，发现 {len(found_devices)} 个SNMP设备，添加 {added_count} 个，更新 {updated_count} 个'
+            summary=result_summary,
+            message=(f'扫描 {total_ips} 个IP：团体号正确 {len(found_devices)} 个，'
+                     f'团体号错误 {len(wrong_community_devices)} 个，'
+                     f'不支持SNMP {len(non_snmp_devices)} 个')
         )
         
         print(f"\n{'='*60}")
@@ -2572,8 +2723,9 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
         print(f"  - 总IP数: {total_ips}")
         print(f"  - 在线设备: {online_count}")
         print(f"  - 离线设备: {offline_count}")
-        print(f"  - SNMP设备: {len(found_devices)}")
-        print(f"  - 非SNMP设备: {len(non_snmp_devices)}")
+        print(f"  - 团体号正确(绿): {len(found_devices)}")
+        print(f"  - 团体号错误(黄): {len(wrong_community_devices)}")
+        print(f"  - 不支持SNMP(红): {len(non_snmp_devices)}")
         print(f"  - 已添加: {added_count}")
         print(f"  - 已更新: {updated_count}")
         print(f"  - 已跳过: {skipped_count}")
@@ -2586,7 +2738,7 @@ def _run_snmp_scan_task_impl(task_id, scan_params):
                 'device',
                 None,
                 'SNMP扫描',
-                f'SNMP扫描完成: 总IP {total_ips}，发现 {len(found_devices)} 个SNMP设备，添加 {added_count} 个，更新 {updated_count} 个',
+                f'SNMP扫描完成: 总IP {total_ips}，团体号正确 {len(found_devices)} 个，团体号错误 {len(wrong_community_devices)} 个，不支持SNMP {len(non_snmp_devices)} 个，添加 {added_count} 个',
                 user_id
             )
         except:
@@ -3004,6 +3156,113 @@ def get_device_json(device_id):
 
 
 
+def _purge_device_children(device_ids):
+    """确定性清空设备全部关联子行（子-子级 → 直接子级 → 解绑列），供单删/批量删除共用。
+
+    背景：
+    - Device 存在多条 ORM backref 关系（sla_records / health_scores / performance_metrics...），
+      db.session.delete(device) 触发 flush 时，ORM 会先尝试将 NOT NULL 外键子行置 NULL，
+      直接报 pymysql 1048（见 logs/app.log: UPDATE sla_uptimes SET device_id=NULL）。
+    - DB 实测 46 个 FK 列大多为 NO ACTION（模型声明的 ondelete='CASCADE' 并未全部落库），
+      漏删一行即可导致 1451/1048；本函数按子表 FK 依赖顺序全部清掉，避免依赖 DB 规则。
+    业务例外：
+    - spare_parts（备件库存资产）仅解绑 installed_device_id，保留备件记录。
+    - interfaces.neighbor_device_id（自引用）置 NULL；interfaces.device_id 本身交由
+      Device.interfaces(cascade='all, delete-orphan') 在 session.delete(device) 时删除。
+    """
+    ids = list(dict.fromkeys(int(i) for i in device_ids))
+    if not ids:
+        return
+    n = len(ids)
+    ph = ','.join(':d%d' % i for i in range(n))
+    p = {'d%d' % i: v for i, v in enumerate(ids)}
+    inc = 'IN (' + ph + ')'
+
+    def _run(sql, extra=None):
+        d = dict(p)
+        if extra:
+            d.update(extra)
+        db.session.execute(text(sql), d)
+
+    # ---- 0) 引用"设备子表"的外层表：必须先于其父级删除 ----
+    # bmc_controllers 从属表（注意列名差异：bios_templates 为 source_controller_id）
+    for t, col in (
+        ('bios_templates', 'source_controller_id'),
+        ('bmc_config_backups', 'controller_id'),
+        ('bmc_event_logs', 'controller_id'),
+        ('bmc_firmware_jobs', 'controller_id'),
+        ('bmc_power_logs', 'controller_id'),
+        ('bmc_sensors', 'controller_id'),
+    ):
+        _run(f'DELETE FROM {t} WHERE {col} IN '
+             f'(SELECT id FROM bmc_controllers WHERE device_id {inc})')
+    # san_links → san_nodes（边表）
+    _run(f'DELETE FROM san_links WHERE source_id IN '
+         f'(SELECT id FROM san_nodes WHERE linked_device_id {inc}) '
+         f'OR target_id IN (SELECT id FROM san_nodes WHERE linked_device_id {inc})')
+    # alert_escalation_logs / alerts → alert_events（须先于 alert_events 删除）
+    _run(f'DELETE FROM alert_escalation_logs WHERE alert_id IN '
+         f'(SELECT id FROM alert_events WHERE device_id {inc})')
+    _run(f'DELETE FROM alerts WHERE device_id {inc}')
+    # alert_history / metric_data → device_config
+    _run(f'DELETE FROM alert_history WHERE device_config_id IN '
+         f'(SELECT id FROM device_config WHERE device_id {inc})')
+    _run(f'DELETE FROM metric_data WHERE device_config_id IN '
+         f'(SELECT id FROM device_config WHERE device_id {inc})')
+    # topology_logs → interface_relationship（或 device_id 直连）
+    _run(f'DELETE FROM topology_logs WHERE device_id {inc} OR interface_relationship_id IN '
+         f'(SELECT id FROM interface_relationship WHERE local_device_id {inc} OR remote_device_id {inc})')
+
+    # ---- 1) 直接子表：device_id IN ids → DELETE ----
+    # 顺序要求：alerts 早于 alert_events；performance_alerts 早于 performance_baselines（baseline_id NO ACTION）
+    for t in (
+        'alert_events',
+        'anomaly_detection_rules',
+        'assets',
+        'availability_records',
+        'bmc_controllers',
+        'change_affected_devices',
+        'compliance_check_results',
+        'config_baselines',
+        'config_drifts',
+        'config_versions',
+        'device_components',            # ENTITY-MIB 硬件部件（P0 新增）
+        'device_config',
+        'device_group_members',
+        'device_health_scores',
+        'device_monitor_configs',
+        'device_monitor_logs',
+        'device_monitors',
+        'device_performances',
+        'exec_task_devices',
+        'inspection_tasks',
+        'interface_monitor_data',
+        'inventory_transactions',
+        'ip_addresses',
+        'license_devices',
+        'maintenance_records',
+        'monitor_data',
+        'performance_alerts',
+        'performance_baselines',
+        'performance_data',
+        'performance_metrics',
+        'problem_records',
+        'service_catalog_devices',
+        'sla_uptimes',                  # ← 原 1048 报错元凶
+        'work_orders',
+    ):
+        _run(f'DELETE FROM {t} WHERE device_id {inc}')
+
+    # 双端点列：任一端为待删设备即整行删除
+    _run(f'DELETE FROM ci_dependencies WHERE source_id {inc} OR target_id {inc}')
+    _run(f'DELETE FROM connection_paths WHERE source_device_id {inc} OR target_device_id {inc}')
+    _run(f'DELETE FROM interface_relationship WHERE local_device_id {inc} OR remote_device_id {inc}')
+
+    # ---- 2) 解绑列：置 NULL 保留对方实体 ----
+    _run(f'UPDATE interfaces SET neighbor_device_id = NULL WHERE neighbor_device_id {inc}')
+    _run(f'UPDATE spare_parts SET installed_device_id = NULL WHERE installed_device_id {inc}')
+
+
 @device_bp.route('/batch_delete', methods=['POST'])
 @login_required
 @permission_required('device:edit')
@@ -3042,68 +3301,11 @@ def batch_delete_devices():
         # 提取所有待删设备的 ID 列表，用于 IN 查询
         valid_device_ids = list(devices_to_delete.keys())
 
-        # === 按照 delete_device 的顺序，批量清理关联数据 ===
+        # === 统一清理关联数据（46 个 FK 列 + 子-子级表，含 sla_uptimes / availability_records 等）===
         try:
-            # 1. 删除设备监控配置
-            DeviceMonitorConfig.query.filter(
-                DeviceMonitorConfig.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
+            _purge_device_children(valid_device_ids)
 
-            # 2. 解除备件关联（设置为 NULL）
-            SparePart.query.filter(
-                SparePart.installed_device_id.in_(valid_device_ids)
-            ).update({'installed_device_id': None}, synchronize_session=False)
-
-            # 3. 删除告警事件
-            AlertEvent.query.filter(
-                AlertEvent.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            # 4. 删除各类监控数据
-            MonitorData.query.filter(
-                MonitorData.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-            
-            DeviceMonitorLog.query.filter(
-                DeviceMonitorLog.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-            
-            InterfaceMonitorData.query.filter(
-                InterfaceMonitorData.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            # 5. 删除库存事务
-            InventoryTransaction.query.filter(
-                InventoryTransaction.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            # 6. 删除拓扑连接（关键！覆盖 source 和 target）
-            ConnectionPath.query.filter(
-                or_(
-                    ConnectionPath.source_device_id.in_(valid_device_ids),
-                    ConnectionPath.target_device_id.in_(valid_device_ids)
-                )
-            ).delete(synchronize_session=False)
-
-            # 7. 删除合规/配置相关数据（避免 autoflush 时误将 device_id 设为 NULL）
-            ConfigDrift.query.filter(
-                ConfigDrift.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            ConfigBaseline.query.filter(
-                ConfigBaseline.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            ConfigVersion.query.filter(
-                ConfigVersion.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            ComplianceCheckResult.query.filter(
-                ComplianceCheckResult.device_id.in_(valid_device_ids)
-            ).delete(synchronize_session=False)
-
-            # === 关键修复：替换为循环调用 session.delete() ===
-            # 8. 逐个删除设备对象，以触发 SQLAlchemy 的级联删除（特别是 interfaces）
+            # 逐个删除设备对象（接口经 Device.interfaces delete-orphan 级联删除）
             for device in devices_to_delete.values():
                 db.session.delete(device)
 
@@ -4429,7 +4631,10 @@ def cleanup_invalid_devices():
         
         deleted_count = 0
         deleted_names = []
-        
+
+        # 统一关联数据清理（防止无效设备带 sla/健康分等子行时 ORM 置 NULL 报 1048）
+        _purge_device_children([d.id for d in invalid_devices])
+
         for dev in invalid_devices:
             deleted_names.append(dev.name)
             db.session.delete(dev)
@@ -4456,6 +4661,55 @@ def cleanup_invalid_devices():
 _device_discovery_executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 _device_stop_events = {}
 
+# ========== SNMP 发现结果状态 ==========
+# 绿色：SNMP 可达且团体号正确
+SNMP_STATUS_OK = 'ok'
+# 黄色：设备支持 SNMP，但配置的团体号不正确
+SNMP_STATUS_WRONG_COMMUNITY = 'wrong_community'
+# 红色：不支持 SNMP / 不可达
+SNMP_STATUS_UNSUPPORTED = 'unsupported'
+
+# 当配置的团体号探测失败时，用于判断“设备是否支持SNMP”的常见团体号
+COMMON_SNMP_COMMUNITIES = ('public', 'private')
+
+
+def detect_snmp_status(ip, community, version='2c', timeout=2, retries=1):
+    """
+    探测单个 IP 的 SNMP 状态，返回 (status, sysinfo, detail)：
+    - SNMP_STATUS_OK               : 配置的团体号正确（绿色）
+    - SNMP_STATUS_WRONG_COMMUNITY  : 设备支持 SNMP，但配置的团体号不正确（黄色）
+    - SNMP_STATUS_UNSUPPORTED      : 设备不支持 SNMP（红色）
+    """
+    try:
+        success, sysinfo = snmp_get_device_info(
+            ip, community, version, timeout=timeout, retries=retries
+        )
+    except Exception:
+        success, sysinfo = False, {}
+
+    if success:
+        return SNMP_STATUS_OK, sysinfo, ''
+
+    # 配置的团体号失败时，用常见团体号再探测，区分“团体号错误”与“不支持SNMP”
+    tried = {community}
+    fallback_timeout = max(1, int(timeout) - 1)
+    for alt in COMMON_SNMP_COMMUNITIES:
+        if alt in tried:
+            continue
+        tried.add(alt)
+        try:
+            ok, info = snmp_get_device_info(
+                ip, alt, version, timeout=fallback_timeout, retries=1
+            )
+        except Exception:
+            ok, info = False, {}
+        if ok:
+            return SNMP_STATUS_WRONG_COMMUNITY, info, (
+                f'设备支持SNMP，但团体号"{community}"不正确，可尝试"{alt}"'
+            )
+
+    return SNMP_STATUS_UNSUPPORTED, {}, '设备不支持SNMP或无SNMP响应'
+
 
 def background_device_scan(task_id, app):
     """
@@ -4481,6 +4735,32 @@ def background_device_scan(task_id, app):
         task.discovered_count = 0
         db.session.commit()
 
+        def _commit_task_state(status, last_result_payload, error):
+            """将任务最终状态写入数据库；失败时回滚并重试一次，
+            避免一次写入失败（如结果 JSON 过大）导致任务永远卡在“运行中”。
+            """
+            for _ in range(2):
+                try:
+                    task.status = status
+                    if status == 'completed':
+                        task.progress = 100
+                        task.run_count = (task.run_count or 0) + 1
+                        task.success_count = (task.success_count or 0) + 1
+                    else:
+                        task.fail_count = (task.fail_count or 0) + 1
+                        if error:
+                            task.last_error = error
+                    if last_result_payload is not None:
+                        task.set_last_result(last_result_payload)
+                    db.session.commit()
+                    return True
+                except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+            return False
+
         try:
             target_val = task.get_target_value()
             device_scan_mode = task.discovery_type or target_val.get('mode', 'snmp_scan')
@@ -4492,6 +4772,9 @@ def background_device_scan(task_id, app):
                 task.last_error = 'IP段为空'
                 db.session.commit()
                 return
+
+            final_payload = None
+            final_error = None
 
             if device_scan_mode == 'ip_import':
                 # ===== IP段批量导入模式 =====
@@ -4550,9 +4833,14 @@ def background_device_scan(task_id, app):
                 scan_progress = progress_manager.get_progress(scan_task_id)
                 if scan_progress:
                     task.discovered_count = scan_progress.get('added_count', 0) or scan_progress.get('total_processed', 0)
+                    final_payload = {
+                        'progress_task_id': scan_task_id,
+                        'summary': scan_progress.get('summary', {}),
+                        'results': scan_progress.get('results', []),
+                        'completed_at': datetime.now(timezone.utc).isoformat(),
+                    }
                     if scan_progress.get('status') == 'failed':
-                        task.status = 'failed'
-                        task.last_error = scan_progress.get('message', '导入执行失败')
+                        final_error = scan_progress.get('message', '导入执行失败')
 
             else:
                 # ===== IP段SNMP扫描模式 =====
@@ -4606,24 +4894,24 @@ def background_device_scan(task_id, app):
                 scan_progress = progress_manager.get_progress(scan_task_id)
                 if scan_progress:
                     task.discovered_count = scan_progress.get('added_count', 0) or scan_progress.get('total_found', 0)
+                    final_payload = {
+                        'progress_task_id': scan_task_id,
+                        'summary': scan_progress.get('summary', {}),
+                        'results': scan_progress.get('results', []),
+                        'completed_at': datetime.now(timezone.utc).isoformat(),
+                    }
                     if scan_progress.get('status') == 'failed':
-                        task.status = 'failed'
-                        task.last_error = scan_progress.get('message', '扫描执行失败')
+                        final_error = scan_progress.get('message', '扫描执行失败')
 
             if not stop_event.is_set():
-                task.status = 'completed'
-                task.progress = 100
-                task.run_count = (task.run_count or 0) + 1
-                task.success_count = (task.success_count or 0) + 1
-                db.session.commit()
+                final_status = 'failed' if final_error else 'completed'
+                if not _commit_task_state(final_status, final_payload, final_error):
+                    print(f"[设备发现] 任务 {task_id} 最终状态写入数据库失败")
 
         except Exception as e:
             import traceback
             print(f"[设备发现] 任务 {task_id} 异常: {traceback.format_exc()}")
-            task.status = 'failed'
-            task.last_error = str(e)
-            task.fail_count = (task.fail_count or 0) + 1
-            db.session.commit()
+            _commit_task_state('failed', None, str(e))
         finally:
             if task_id in _device_stop_events:
                 del _device_stop_events[task_id]
@@ -4640,6 +4928,70 @@ def device_discovery():
     return render_template('device_discovery.html')
 
 
+@device_bp.route('/api/discovery/candidates', methods=['GET'])
+@login_required
+@permission_required('device:view')
+def api_discovery_candidates():
+    """List auto-discovered devices that still need approval."""
+    query = Device.query.filter(Device.approval_status.in_(['pending', 'review']))
+    candidates = query.order_by(Device.updated_at.desc()).limit(200).all()
+    return jsonify({
+        'success': True,
+        'candidates': [device.to_dict() for device in candidates],
+    })
+
+
+@device_bp.route('/api/discovery/candidates/<int:device_id>/approve', methods=['POST'])
+@login_required
+@permission_required('device:edit')
+def api_discovery_candidate_approve(device_id):
+    device = Device.query.get_or_404(device_id)
+    device.approval_status = 'approved'
+    device.managed_by = device.managed_by or 'self'
+    device.updated_at = datetime.utcnow()
+    db.session.commit()
+    log_operation('approve', 'device', device.id, device.name, '批准自动发现候选设备')
+    return jsonify({'success': True, 'message': '已批准设备', 'device': device.to_dict()})
+
+
+@device_bp.route('/api/discovery/topology-summary/latest', methods=['GET'])
+@login_required
+@permission_required('device:view')
+def api_discovery_topology_summary_latest():
+    """Return the latest topology_summary_job result persisted in TopologyLog."""
+    import json
+
+    log = TopologyLog.query.filter_by(log_type='topology_summary').order_by(TopologyLog.id.desc()).first()
+    if not log:
+        return jsonify({'success': True, 'latest': None})
+
+    try:
+        summary = json.loads(log.message or '{}')
+    except Exception:
+        summary = {'parse_error': True, 'raw': (log.message or '')[:500]}
+
+    return jsonify({
+        'success': True,
+        'latest': {
+            'id': log.id,
+            'check_time': log.check_time.isoformat() if log.check_time else None,
+            'summary': summary,
+        },
+    })
+
+
+@device_bp.route('/api/discovery/candidates/<int:device_id>/reject', methods=['POST'])
+@login_required
+@permission_required('device:edit')
+def api_discovery_candidate_reject(device_id):
+    device = Device.query.get_or_404(device_id)
+    device.approval_status = 'rejected'
+    device.updated_at = datetime.utcnow()
+    db.session.commit()
+    log_operation('reject', 'device', device.id, device.name, '拒绝自动发现候选设备')
+    return jsonify({'success': True, 'message': '已拒绝设备', 'device': device.to_dict()})
+
+
 @device_bp.route('/discovery/tasks', methods=['GET'])
 @login_required
 @permission_required('device:view')
@@ -4654,6 +5006,9 @@ def discovery_task_list():
     task_list = []
     for task in tasks:
         task_dict = task.to_dict()
+        last_result = task.get_last_result()
+        task_dict['has_result'] = bool(last_result)
+        task_dict['result_summary'] = last_result.get('summary', {}) if last_result else {}
         # 附加调度器信息
         job_info = get_discovery_job_info(task.id)
         if job_info:
@@ -4734,6 +5089,7 @@ def discovery_task_detail(task_id):
 
     if request.method == 'GET':
         task_dict = task.to_dict()
+        task_dict['has_result'] = bool(task.get_last_result())
         from scheduler import get_discovery_job_info
         job_info = get_discovery_job_info(task.id)
         if job_info:
@@ -4823,6 +5179,7 @@ def discovery_task_run(task_id):
 
     task.status = 'running'
     task.progress = 0
+    task.set_last_result({})
     db.session.commit()
 
     app = current_app._get_current_object()
@@ -4875,6 +5232,48 @@ def discovery_recent_devices():
     return jsonify({'success': True, 'devices': device_list})
 
 
+@device_bp.route('/discovery/tasks/<int:task_id>/results', methods=['GET'])
+@login_required
+@permission_required('device:view')
+def discovery_task_results(task_id):
+    """
+    获取设备发现任务的结果列表（含SNMP状态）：
+    - ok              绿色：团体号正确
+    - wrong_community 黄色：设备支持SNMP但团体号不正确
+    - unsupported     红色：不支持SNMP
+    """
+    task = DiscoveryTask.query.get_or_404(task_id)
+    data = task.get_last_result() or {}
+    results = data.get('results', []) or []
+    summary = data.get('summary', {}) or {}
+
+    # 兼容：如果未持久化，尝试从内存进度管理器读取
+    if not results:
+        progress_task_id = data.get('progress_task_id')
+        if progress_task_id:
+            sp = progress_manager.get_progress(progress_task_id)
+            if sp:
+                results = sp.get('results', []) or []
+                summary = sp.get('summary', {}) or {}
+
+    # 汇总兜底（防止旧数据没有 summary）
+    if not summary and results:
+        summary = {
+            'total': len(results),
+            'ok': sum(1 for r in results if r.get('snmp_status') == SNMP_STATUS_OK),
+            'wrong_community': sum(1 for r in results if r.get('snmp_status') == SNMP_STATUS_WRONG_COMMUNITY),
+            'unsupported': sum(1 for r in results if r.get('snmp_status') == SNMP_STATUS_UNSUPPORTED),
+        }
+
+    return jsonify({
+        'success': True,
+        'task': {'id': task.id, 'name': task.name, 'discovery_type': task.discovery_type},
+        'results': results,
+        'summary': summary,
+        'has_result': bool(results),
+    })
+
+
 # ========== 设备下架 / 重新上架 / 永久删除 ==========
 
 @device_bp.route('/<int:id>/decommission', methods=['POST'])
@@ -4914,31 +5313,9 @@ def device_delete_permanent(id):
     device = Device.query.get_or_404(id)
     device_name = device.name
 
-    # 删除关联的接口
-    Interface.query.filter_by(device_id=id).delete()
-    # 删除关联的接口关系
-    InterfaceRelationship.query.filter(
-        (InterfaceRelationship.device_id == id) |
-        (InterfaceRelationship.neighbor_device_id == id)
-    ).delete(synchronize_session=False)
-    # 删除关联的拓扑记录
-    TopologyLog.query.filter(
-        (TopologyLog.device_id == id) |
-        (TopologyLog.neighbor_device_id == id)
-    ).delete(synchronize_session=False)
-    # 删除关联的告警
-    AlertEvent.query.filter_by(device_id=id).delete()
-    # 删除关联的监控数据
-    MonitorData.query.filter_by(device_id=id).delete()
-    DeviceMonitorLog.query.filter_by(device_id=id).delete()
-    DeviceMonitorConfig.query.filter_by(device_id=id).delete()
-    # 删除关联的配置记录
-    ConfigBaseline.query.filter_by(device_id=id).delete()
-    ConfigDrift.query.filter_by(device_id=id).delete()
-    ConfigVersion.query.filter_by(device_id=id).delete()
-    ComplianceCheckResult.query.filter_by(device_id=id).delete()
-    # 删除关联的设备性能数据
-    DevicePerformance.query.filter_by(device_id=id).delete()
+    # 统一关联数据清理（46 个 FK 列 + 子-子级表，与单删/批量删除同一套逻辑，
+    # 覆盖接口/接口关系/拓扑/SLA/可用率/IP/BMC 等；根治 NOT NULL 外键被 ORM 置 NULL 的 1048）
+    _purge_device_children([id])
 
     db.session.delete(device)
     db.session.commit()

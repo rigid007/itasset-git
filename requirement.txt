@@ -38,7 +38,7 @@ itsdangerous==2.2.0
 jedi==0.19.2
 Jinja2==3.1.6
 jsonpickle==4.1.1
-jwt==1.4.0
+PyJWT==2.10.1
 kiwisolver==1.4.9
 librt==0.8.1
 lineage==4.5.0
@@ -120,3 +120,4 @@ x690==1.0.0.post1
 xlsxwriter==3.2.9
 python-dotenv==1.0.1
 bleach==6.1.0
+pyghmi==1.5.77

@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 网络管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('network.ip_list') }}">IP地址管理</a></li>
+                    <li class="breadcrumb-item active">{{ title }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2">{{ title }}</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {{ form.hidden_tag() }}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.subnet_id.label(class='form-label') }}
+                                {{ form.subnet_id(class='form-select' + (' is-invalid' if form.subnet_id.errors else '')) }}
+                                {% for e in form.subnet_id.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.ip_address.label(class='form-label') }}
+                                {{ form.ip_address(class='form-control' + (' is-invalid' if form.ip_address.errors else ''), placeholder='192.168.1.10') }}
+                                {% for e in form.ip_address.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.status.label(class='form-label') }}
+                                {{ form.status(class='form-select' + (' is-invalid' if form.status.errors else '')) }}
+                                {% for e in form.status.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.device_id.label(class='form-label') }}
+                                {{ form.device_id(class='form-select' + (' is-invalid' if form.device_id.errors else '')) }}
+                                {% for e in form.device_id.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.hostname.label(class='form-label') }}
+                                {{ form.hostname(class='form-control' + (' is-invalid' if form.hostname.errors else '')) }}
+                                {% for e in form.hostname.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.mac_address.label(class='form-label') }}
+                                {{ form.mac_address(class='form-control' + (' is-invalid' if form.mac_address.errors else ''), placeholder='AA:BB:CC:DD:EE:FF') }}
+                                {% for e in form.mac_address.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.owner.label(class='form-label') }}
+                                {{ form.owner(class='form-control' + (' is-invalid' if form.owner.errors else '')) }}
+                                {% for e in form.owner.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.department.label(class='form-label') }}
+                                {{ form.department(class='form-control' + (' is-invalid' if form.department.errors else '')) }}
+                                {% for e in form.department.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.description.label(class='form-label') }}
+                            {{ form.description(class='form-control', rows=3, placeholder='用途、申请人、备注等') }}
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                            <a href="{{ url_for('network.ip_list') }}" class="btn btn-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

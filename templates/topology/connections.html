@@ -559,19 +559,31 @@
                                 </div>
                             </td>
                             <td>
-                                {% if connection.source_interface %}
+                                {% set sp = connection.source_port or '' %}
+                                {% set sp_pending = sp == '' or sp|lower in ['unknown', 'n/a', '-'] or sp.count(':') == 5 %}
+                                {% if sp_pending %}
+                                <span class="badge bg-warning text-dark" title="{{ connection.description or '对端端口未识别' }}">
+                                    <i class="fas fa-question-circle me-1"></i>待确认</span>
+                                {% if sp and sp|lower != 'unknown' %}<div><small class="text-muted">{{ sp }}</small></div>{% endif %}
+                                {% elif connection.source_interface %}
                                 <div>{{ connection.source_interface.name }}</div>
-                                <small class="text-muted">{{ connection.source_port }}</small>
+                                <small class="text-muted">{{ sp }}</small>
                                 {% else %}
-                                {{ connection.source_port or 'N/A' }}
+                                {{ sp or 'N/A' }}
                                 {% endif %}
                             </td>
                             <td>
-                                {% if connection.target_interface %}
+                                {% set tp = connection.target_port or '' %}
+                                {% set tp_pending = tp == '' or tp|lower in ['unknown', 'n/a', '-'] or tp.count(':') == 5 %}
+                                {% if tp_pending %}
+                                <span class="badge bg-warning text-dark" title="{{ connection.description or '对端端口未识别' }}">
+                                    <i class="fas fa-question-circle me-1"></i>待确认</span>
+                                {% if tp and tp|lower != 'unknown' %}<div><small class="text-muted">{{ tp }}</small></div>{% endif %}
+                                {% elif connection.target_interface %}
                                 <div>{{ connection.target_interface.name }}</div>
-                                <small class="text-muted">{{ connection.target_port }}</small>
+                                <small class="text-muted">{{ tp }}</small>
                                 {% else %}
-                                {{ connection.target_port or 'N/A' }}
+                                {{ tp or 'N/A' }}
                                 {% endif %}
                             </td>
                             <td>
@@ -610,6 +622,14 @@
                                 </span>
                                 {% else %}
                                 <span class="badge bg-secondary">{{ connection.link_status }}</span>
+                                {% endif %}
+                                {% if connection.description and '端口冲突' in connection.description %}
+                                <div><span class="badge bg-dark mt-1" title="{{ connection.description }}">
+                                    <i class="fas fa-triangle-exclamation me-1"></i>陈旧</span></div>
+                                {% endif %}
+                                {% if (connection.confidence or 100) < 70 and connection.link_status == 'active' %}
+                                <div><span class="badge bg-info text-dark mt-1"
+                                           title="本次扫描未再见 LLDP 邻居，但接口状态为 up">低置信</span></div>
                                 {% endif %}
                             </td>
                             <td>

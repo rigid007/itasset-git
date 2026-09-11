@@ -7,9 +7,12 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, and_, select
 from extensions import db
 from models.models import Location, Cabinet, Device, OperationLog, AlertEvent
+from models.netflow_models import NetFlowRecord, NetFlowProbe
 from models.models import DeviceMonitorLog, DiscoveryTask, Interface
+from models.maintenance_models import WorkOrder
 from models.device_group_models import DeviceGroup, device_group_members
 from auth import log_operation
+from services.netflow_service import get_status
 from datetime import datetime, timezone, timedelta
 import pytz
 # 创建主蓝图
@@ -390,6 +393,21 @@ def index():
             Device.is_decommissioned == False
         ).count()
 
+        # ==================== 5.11 自动工单统计（升级引擎生成） ====================
+        auto_wo_total = WorkOrder.query.filter(WorkOrder.auto_created.is_(True)).count()
+        auto_wo_today = WorkOrder.query.filter(WorkOrder.auto_created.is_(True),
+                                                WorkOrder.created_at >= today_start_utc).count()
+        auto_wo_open = WorkOrder.query.filter(WorkOrder.auto_created.is_(True),
+                                              WorkOrder.status.in_(['open', 'assigned', 'in_progress', 'on_hold'])).count()
+        week_start_bj = (current_date - timedelta(days=current_date.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start_bj = current_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        week_start_utc = week_start_bj.astimezone(timezone.utc).replace(tzinfo=None)
+        month_start_utc = month_start_bj.astimezone(timezone.utc).replace(tzinfo=None)
+        auto_wo_week = WorkOrder.query.filter(WorkOrder.auto_created.is_(True),
+                                              WorkOrder.created_at >= week_start_utc).count()
+        auto_wo_month = WorkOrder.query.filter(WorkOrder.auto_created.is_(True),
+                                               WorkOrder.created_at >= month_start_utc).count()
+
         # ==================== 6. 构建统计数据字典 ====================
         stats = {
             'total_devices': total_devices,
@@ -411,7 +429,12 @@ def index():
             'warranty_expired_count': warranty_expired_count,
             'total_monitor_logs': monitor_summary['total_logs'],
             'recent_online': monitor_summary['recent_online'],
-            'recent_offline': monitor_summary['recent_offline']
+            'recent_offline': monitor_summary['recent_offline'],
+            'auto_wo_total': auto_wo_total,
+            'auto_wo_today': auto_wo_today,
+            'auto_wo_week': auto_wo_week,
+            'auto_wo_month': auto_wo_month,
+            'auto_wo_open': auto_wo_open
         }
 
         # ==================== 7. 系统状态 ====================
@@ -466,9 +489,12 @@ def index():
         
         # 记录日志
         current_app.logger.debug(f"Dashboard stats: {stats}")
+        netflow_summary = _netflow_summary()
+
         return render_template(
             'dashboard.html',
             current_date=current_date,
+            netflow_summary=netflow_summary,
             stats=stats,
             recent_activities=formatted_activities,
             device_type_distribution=device_type_distribution,
@@ -492,6 +518,10 @@ def index():
         return render_template(
             'dashboard.html',
             current_date=datetime.now(beijing_tz),
+            netflow_summary={
+                'enabled': False, 'probes_running': 0,
+                'windows': _empty_netflow_windows(),
+            },
             stats={
                 'total_devices': 0,
                 'online_devices': 0,
@@ -512,7 +542,12 @@ def index():
                 'warranty_expired_count': 0,
                 'total_monitor_logs': 0,
                 'recent_online': 0,
-                'recent_offline': 0
+                'recent_offline': 0,
+                'auto_wo_total': 0,
+                'auto_wo_today': 0,
+                'auto_wo_week': 0,
+                'auto_wo_month': 0,
+                'auto_wo_open': 0
             },
             device_type_distribution={},
             recent_activities=[],
@@ -606,3 +641,90 @@ def get_cabinet_status_alternative():
     cabinet_avg_usage = total_usage / cabinet_count_with_usage if cabinet_count_with_usage > 0 else 0
     
     return cabinet_status, cabinet_avg_usage
+
+
+def _empty_netflow_windows():
+    """Empty NetFlow homepage-card windows skeleton (today/week/month/h24/d7)."""
+    def _win():
+        return {'octets': 0, 'packets': 0, 'flows': 0,
+                'top_source': None, 'top_source_octets': 0,
+                'top_probes': []}
+    return {k: _win() for k in ('today', 'week', 'month', 'h24', 'd7')}
+
+
+def _netflow_summary():
+    """NetFlow summary for the homepage card.
+
+    Windows: today / this week / this month (calendar) plus rolling
+    h24 / d7 (last 24h / last 7 days). Each window also carries a
+    per-probe (采集器/设备) breakdown used for device-level drill-down.
+    """
+    from flask import current_app
+    try:
+        if not current_app.config.get('NETFLOW_ENABLED', True):
+            return {'enabled': False, 'probes_running': 0,
+                    'windows': _empty_netflow_windows()}
+    except RuntimeError:
+        pass
+    try:
+        now = datetime.now(timezone.utc)
+        # calendar windows
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_week = start_of_day - timedelta(days=start_of_day.weekday())
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # rolling windows
+        windows = {
+            'today': start_of_day,
+            'week': start_of_week,
+            'month': start_of_month,
+            'h24': now - timedelta(hours=24),
+            'd7': now - timedelta(days=7),
+        }
+
+        def _stats(since):
+            total = db.session.query(
+                func.coalesce(func.sum(NetFlowRecord.octets), 0).label('octets'),
+                func.coalesce(func.sum(NetFlowRecord.packets), 0).label('packets'),
+                func.count(NetFlowRecord.id).label('flows'),
+            ).filter(NetFlowRecord.received_at >= since).one()
+            top = (db.session.query(NetFlowRecord.src_ip,
+                                    func.coalesce(func.sum(NetFlowRecord.octets), 0).label('octets'))
+                   .filter(NetFlowRecord.received_at >= since)
+                   .group_by(NetFlowRecord.src_ip)
+                   .order_by(func.sum(NetFlowRecord.octets).desc()).first())
+            # per-probe (采集器/设备) breakdown for drill-down
+            probe_rows = (db.session.query(
+                              NetFlowRecord.probe_id,
+                              func.coalesce(func.sum(NetFlowRecord.octets), 0).label('octets'),
+                              func.count(NetFlowRecord.id).label('flows'))
+                          .filter(NetFlowRecord.received_at >= since)
+                          .group_by(NetFlowRecord.probe_id)
+                          .order_by(func.sum(NetFlowRecord.octets).desc())
+                          .limit(5).all())
+            top_probes = []
+            for pid, octets, flows in probe_rows:
+                name = None
+                if pid is not None:
+                    probe = NetFlowProbe.query.get(pid)
+                    name = probe.name if probe else None
+                top_probes.append({'id': pid, 'name': name or ('采集器#%s' % pid),
+                                   'octets': octets or 0, 'flows': flows or 0})
+            return {
+                'octets': total.octets or 0,
+                'packets': total.packets or 0,
+                'flows': total.flows or 0,
+                'top_source': top[0] if top else None,
+                'top_source_octets': top[1] if top else 0,
+                'top_probes': top_probes,
+            }
+
+        statuses = get_status()
+        running = sum(1 for s in statuses if s.get('running'))
+        return {
+            'enabled': True,
+            'probes_running': running,
+            'windows': {k: _stats(since) for k, since in windows.items()},
+        }
+    except Exception:
+        return {'enabled': True, 'probes_running': 0,
+                'windows': _empty_netflow_windows()}

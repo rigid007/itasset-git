@@ -13,6 +13,19 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
+# 让 BMC Web 备份脚本（scripts/ops/backup_bmc_web.py）可被导入
+# 该脚本与项目其他 task 签名一致 (app,)，失败不影响现有调度。
+import sys as _sys
+import os as _os
+_OPS_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'scripts', 'ops')
+if _OPS_DIR not in _sys.path:
+    _sys.path.insert(0, _OPS_DIR)
+try:
+    from backup_bmc_web import backup_all_bmc_web as _backup_all_bmc_web  # noqa: E402
+except Exception as _e:  # 脚本缺失/依赖未装时静默跳过，不阻断调度启动
+    logger.warning('BMC Web 备份脚本不可用，跳过注册: %s', _e)
+    _backup_all_bmc_web = None
+
 # 全局调度器单例
 _scheduler = None
 _app = None  # Flask 应用引用，用于动态任务调度
@@ -62,33 +75,37 @@ def configure_scheduler(app):
         return scheduler
     
     # 导入任务函数（延迟导入避免循环依赖）
-    from utils.tasks import (
-        poll_all_devices_interfaces,
-        check_all_devices_status,
-    )
-    from tasks.monitor import collect_device_metrics, evaluate_alerts
-    from tasks.link_monitor import run_link_monitor, discover_topology, prune_stale_links_task
+    from utils.tasks import poll_all_devices_interfaces
+    from tasks.monitor import unified_device_poll, evaluate_alerts
+    from tasks.link_monitor import run_link_monitor, discover_topology, prune_stale_links_task, run_topology_summary_job
     from utils.ac_discovery import discover_all_controllers_task
     from tasks.sla_calculator import calculate_sla
     from tasks.sla_monitor import monitor_work_order_sla
+    from tasks.inspection_monitor import monitor_inspection_tasks
     from tasks.retention import cleanup_monitoring_data
     from utils.logging_config import cleanup_old_log_files
+    from tasks.oob_poll import poll_all_bmc, poll_firmware_jobs
+    from services.escalation_service import run_escalations
+    from tasks.netflow_collect import (
+        start_netflow_collectors, netflow_cleanup,
+        netflow_aggregate, netflow_alert_check,
+    )
     
-    # =========== 轮询检测设备状态 ===============
-    job_id = 'check_devices_status_job'
+    # =========== Unified device status + metrics poll ===============
+    job_id = 'unified_device_poll_job'
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     
     scheduler.add_job(
-        func=check_all_devices_status,
+        func=unified_device_poll,
         args=[app],
-        trigger=IntervalTrigger(minutes=5),  # 1分钟轮询1次
+        trigger=IntervalTrigger(seconds=60),
         id=job_id,
         replace_existing=True,
         max_instances=1
     )
     
-    # =========== 轮询检测设备接口状态 ===============
+    # =========== Interface status/traffic poll ===============
     job_id = 'poll_interfaces_job'
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
@@ -96,27 +113,12 @@ def configure_scheduler(app):
     scheduler.add_job(
         func=poll_all_devices_interfaces,
         args=[app],
-        trigger=IntervalTrigger(minutes=5),  # 5分钟轮询1次
+        trigger=IntervalTrigger(minutes=5),
         id=job_id,
         replace_existing=True,
         max_instances=1
     )
     
-    # =========== 监控指标采集任务 ===============
-    job_id = 'collect_metrics_job'
-    if scheduler.get_job(job_id):
-        scheduler.remove_job(job_id)
-    
-    scheduler.add_job(
-        func=collect_device_metrics,
-        args=[app],
-        trigger=IntervalTrigger(seconds=60),  # 原 30s，改为 60s 配合并发采集，降低 DB 写入频率
-        id=job_id,
-        replace_existing=True,
-        max_instances=1
-    )
-    
-    # =========== 链路状态监控任务（新增） ===============
     job_id = 'link_monitor_job'
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
@@ -154,6 +156,22 @@ def configure_scheduler(app):
         func=prune_stale_links_task,
         args=[app],
         trigger=CronTrigger(hour=3, minute=10),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # =========== SNMP 拓扑发现摘要任务（新增） ===============
+    # 每小时执行一次：调用 SnmpClient 纯 Python SNMP 实现采集 LLDP/CDP/ARP/FDB，
+    # 生成并写入 TopologyLog(log_type='topology_summary')，供拓扑页面/审计追溯。
+    job_id = 'topology_summary_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=run_topology_summary_job,
+        args=[app],
+        trigger=CronTrigger(minute=10),  # 每小时第 10 分钟执行
         id=job_id,
         replace_existing=True,
         max_instances=1
@@ -231,6 +249,20 @@ def configure_scheduler(app):
         max_instances=1
     )
 
+    # =========== 巡检任务逾期/提醒监控任务 ===============
+    job_id = 'inspection_task_monitor_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=monitor_inspection_tasks,
+        args=[app],
+        trigger=IntervalTrigger(minutes=30),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
     # =========== 工单 SLA 违约监控任务（新增） ===============
     job_id = 'work_order_sla_monitor_job'
     if scheduler.get_job(job_id):
@@ -275,6 +307,152 @@ def configure_scheduler(app):
     )
 
     # 启动调度器
+    # =========== BMC 带外轮询任务（新增） ===============
+    job_id = 'oob_poll_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    # 间隔读取 OOB_POLL_INTERVAL_SEC（config.py 解析环境变量，默认 300s）
+    oob_interval = int(app.config.get('OOB_POLL_INTERVAL_SEC', 300))
+    scheduler.add_job(
+        func=poll_all_bmc,
+        args=[app],
+        trigger=IntervalTrigger(seconds=oob_interval),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # =========== BMC 固件升级任务状态回写（新增） ===============
+    # 每 30 秒查询一次 Redfish Task，把 submitted/running 任务回写为 success/failed
+    job_id = 'oob_firmware_poll_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=poll_firmware_jobs,
+        args=[app],
+        trigger=IntervalTrigger(seconds=30),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # =========== 告警升级联动任务（未确认超时自动升级 + 加频推送） ===============
+    job_id = 'escalation_check_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=run_escalations,
+        args=[app],
+        trigger=IntervalTrigger(minutes=1),  # 每分钟扫描一次升级（SEL 等）
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # =========== NetFlow 采集器启动（新增，参考 DCOS 平台 netflow 模块） ===============
+    job_id = 'netflow_collectors_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=start_netflow_collectors,
+        args=[app],
+        trigger=CronTrigger(hour=0, minute=5),  # 启动后首个 0:05 同步一次；实际监听由服务常驻
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+    # 应用启动时立即拉起监听（不依赖首个 cron 触发）
+    try:
+        start_netflow_collectors(app)
+    except Exception as e:
+        logger.exception('NetFlow collector bootstrap failed: %s', e)
+
+    # =========== NetFlow 历史数据保留清理（每日 03:40） ===============
+    job_id = 'netflow_cleanup_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    scheduler.add_job(
+        func=netflow_cleanup,
+        args=[app],
+        trigger=CronTrigger(hour=3, minute=40),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # =========== NetFlow 5 分钟预聚合（Top 应用 / 告警 / 报表加速） ===============
+    job_id = 'netflow_aggregate_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    scheduler.add_job(
+        func=netflow_aggregate,
+        args=[app],
+        trigger=IntervalTrigger(minutes=5),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # =========== NetFlow 流量异常告警（每 5 分钟） ===============
+    job_id = 'netflow_alert_check_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    scheduler.add_job(
+        func=netflow_alert_check,
+        args=[app],
+        trigger=IntervalTrigger(minutes=5),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # =========== BMC Web 控制台配置备份（每日 03:50） ===============
+    # 对未开放 Redfish API 的老 BMC（早期 iLO/国产 BMC 等）走浏览器自动化兜底备份。
+    # 与 Redfish 快照写入同表 bmc_config_backups，CMDB 视角统一。
+    if _backup_all_bmc_web is not None:
+        job_id = 'bmc_web_backup_job'
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+        scheduler.add_job(
+            func=_backup_all_bmc_web,
+            args=[app],
+            trigger=CronTrigger(hour=3, minute=50),  # 每日 03:50，紧跟其他清理任务之后
+            id=job_id,
+            replace_existing=True,
+            max_instances=1,
+        )
+
+    # =========== 链路状态重算（每 5 分钟） ===========
+    # 连接状态以两端接口 admin/oper 实际状态为准，而不是"本次扫描是否再见到 LLDP"，
+    # 避免端口 up/up 却在连接关系页显示"断开"。接口采集后本任务负责把状态刷回连接表。
+    job_id = 'link_status_refresh_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    def _refresh_link_status_job(app_ref):
+        with app_ref.app_context():
+            try:
+                from utils.link_integrity import refresh_link_status
+                changes = refresh_link_status(execute=True)
+                if changes:
+                    logger.info(f"[链路状态] 重算 {len(changes)} 条连接状态")
+            except Exception as e:  # 不因状态重算失败影响其他任务
+                logger.exception(f"[链路状态] 重算失败: {e}")
+
+    scheduler.add_job(
+        func=_refresh_link_status_job,
+        args=[app],
+        trigger=IntervalTrigger(minutes=5),
+        id=job_id,
+        replace_existing=True,
+        max_instances=1,
+    )
+
     scheduler.start()
     logger.info("APScheduler 已启动，所有定时任务已添加")
 
@@ -283,6 +461,13 @@ def configure_scheduler(app):
 
     # =========== 加载数据库中已启用的监控计划（MonitorSchedule） ===========
     bootstrap_monitor_schedules(app)
+
+    # =========== 加载执行中心定时任务 ===========
+    try:
+        from services.execution_service import register_scheduled_exec_tasks
+        register_scheduled_exec_tasks(scheduler, app)
+    except Exception as e:
+        logger.error(f"加载执行中心定时任务失败: {e}")
 
     # =========== 启动事件驱动监控（SNMP Trap / Syslog / 心跳） ===========
     try:
@@ -346,28 +531,22 @@ def remove_job_from_scheduler(job_id):
 # key = configure_scheduler() 中注册的 job_id
 # 供"系统任务"页面展示中文名/说明/分类，以及判定哪些任务允许手动触发
 SYSTEM_JOB_META = {
-    'check_devices_status_job': {
-        'name': '设备状态检测',
+    'unified_device_poll_job': {
+        'name': '统一设备状态/指标采集',
         'category': '监控采集',
-        'desc': '对全部在网设备做 SNMP+Ping 探测，状态跃迁时写监控日志并产生设备离线告警（走事件关联引擎）',
+        'desc': '按设备级 Ping/SNMP interval 同时完成可达性检测、MonitorData 写入与状态跃迁告警',
         'manual': True,
     },
     'poll_interfaces_job': {
         'name': '接口状态轮询',
         'category': '监控采集',
-        'desc': '轮询设备接口 up/down 与流量计数',
-        'manual': True,
-    },
-    'collect_metrics_job': {
-        'name': '性能指标采集',
-        'category': '监控采集',
-        'desc': '采集 CPU/内存/温度等性能指标',
+        'desc': '轮询设备接口 up/down 与流量计数，直接写入 InterfaceMonitorData（已移除 Redis 生产者）',
         'manual': True,
     },
     'link_monitor_job': {
         'name': '链路监控',
         'category': '监控采集',
-        'desc': '检测链路连通性，链路 down 时产生告警并走事件关联引擎',
+        'desc': '检测链路连通性，链路 down 时产生告警并走事件关联引擎；检测结果汇总后按批次提交数据库',
         'manual': True,
     },
     'lldp_discovery_job': {
@@ -380,6 +559,12 @@ SYSTEM_JOB_META = {
         'name': '过期链路清理',
         'category': '拓扑发现',
         'desc': '清理长期未被发现确认的失效链路',
+        'manual': True,
+    },
+    'topology_summary_job': {
+        'name': 'SNMP 拓扑发现摘要',
+        'category': '拓扑发现',
+        'desc': '通过纯 Python SNMP 采集 LLDP/CDP/ARP/FDB，生成每次拓扑发现摘要并写入 TopologyLog',
         'manual': True,
     },
     'ac_ap_discovery_job': {
@@ -410,6 +595,66 @@ SYSTEM_JOB_META = {
         'name': '工单 SLA 违约检测',
         'category': 'ITSM',
         'desc': '扫描进行中工单的响应/解决时限，标记临期与违约',
+        'manual': True,
+    },
+    'inspection_task_monitor_job': {
+        'name': '巡检任务逾期监控',
+        'category': 'ITSM',
+        'desc': '扫描逾期巡检任务并记录即将到期的巡检提醒',
+        'manual': True,
+    },
+    'oob_poll_job': {
+        'name': 'BMC 带外轮询',
+        'category': '监控采集',
+        'desc': '周期读取 BMC/Redfish 传感器与资产状态并写入带外管理模块',
+        'manual': True,
+    },
+    'oob_firmware_poll_job': {
+        'name': 'BMC 固件任务状态回写',
+        'category': '监控采集',
+        'desc': '查询 Redfish 固件升级任务状态，将 submitted/running 回写为 success/failed',
+        'manual': True,
+    },
+    'escalation_check_job': {
+        'name': '告警升级联动检测',
+        'category': '告警',
+        'desc': '扫描未确认超时告警，执行自动升级、加频推送与自动建工单',
+        'manual': True,
+    },
+    'netflow_collectors_job': {
+        'name': 'NetFlow 采集器同步',
+        'category': '监控采集',
+        'desc': '每日同步并启动 NetFlow 采集器配置',
+        'manual': True,
+    },
+    'netflow_cleanup_job': {
+        'name': 'NetFlow 历史数据清理',
+        'category': '维护',
+        'desc': '按保留策略清理过期 NetFlow 明细数据',
+        'manual': True,
+    },
+    'netflow_aggregate_job': {
+        'name': 'NetFlow 预聚合',
+        'category': '监控采集',
+        'desc': '每 5 分钟聚合 Top 应用/流量指标，支撑报表与告警加速',
+        'manual': True,
+    },
+    'netflow_alert_check_job': {
+        'name': 'NetFlow 流量异常告警',
+        'category': '告警',
+        'desc': '按流量阈值和基线检测异常流量并产生告警',
+        'manual': True,
+    },
+    'bmc_web_backup_job': {
+        'name': 'BMC Web 兜底备份',
+        'category': '维护',
+        'desc': '对不支持 Redfish 的老 BMC 通过浏览器自动化兜底备份配置',
+        'manual': True,
+    },
+    'link_status_refresh_job': {
+        'name': '链路状态重算',
+        'category': '拓扑发现',
+        'desc': '按接口 admin/oper 实际状态刷新连接关系状态',
         'manual': True,
     },
     'cleanup_monitoring_data_job': {
@@ -515,34 +760,33 @@ def is_scheduler_running():
 # ==================== MonitorSchedule 动态调度 ====================
 # monitor_type（含历史兼容别名）-> 实际任务函数
 def _get_monitor_task_map():
-    from utils.tasks import check_all_devices_status, poll_all_devices_interfaces
-    from tasks.monitor import collect_device_metrics, evaluate_alerts
+    from utils.tasks import poll_all_devices_interfaces
+    from tasks.monitor import unified_device_poll, evaluate_alerts
     from tasks.link_monitor import run_link_monitor, discover_topology
     return {
-        # 规范键（新表单值）
-        'device_status': check_all_devices_status,
+        'device_status': unified_device_poll,
         'interface_poll': poll_all_devices_interfaces,
-        'metrics': collect_device_metrics,
+        'metrics': unified_device_poll,
         'link_monitor': run_link_monitor,
         'lldp_discovery': discover_topology,
         'alert_evaluate': evaluate_alerts,
-        # 历史兼容别名（旧表单值 ping/snmp 均指设备状态检测）
-        'ping': check_all_devices_status,
-        'snmp': check_all_devices_status,
+        'ping': unified_device_poll,
+        'snmp': unified_device_poll,
     }
 
 
-# 规范 monitor_type -> 硬编码基线任务 job_id（被 MonitorSchedule 覆盖时移除，避免双跑）
 _BASELINE_JOB_MAP = {
-    'device_status': 'check_devices_status_job',
+    'device_status': 'unified_device_poll_job',
     'interface_poll': 'poll_interfaces_job',
-    'metrics': 'collect_metrics_job',
+    'metrics': 'unified_device_poll_job',
     'link_monitor': 'link_monitor_job',
     'lldp_discovery': 'lldp_discovery_job',
     'alert_evaluate': 'evaluate_alerts_job',
+    'ping': 'unified_device_poll_job',
+    'snmp': 'unified_device_poll_job',
 }
 
-# monitor_type -> 规范键（用于判断覆盖哪个基线任务）
+
 _ALIAS_TO_CANON = {
     'device_status': 'device_status', 'interface_poll': 'interface_poll',
     'metrics': 'metrics', 'link_monitor': 'link_monitor',

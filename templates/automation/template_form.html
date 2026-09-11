@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 自动化{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb"><ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('automation.template_list') }}">作业模板</a></li>
+                <li class="breadcrumb-item active">{{ title }}</li>
+            </ol></nav>
+            <h1 class="h2">{{ title }}</h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card"><div class="card-body">
+                <form method="post">
+                    {{ form.hidden_tag() }}
+                    <div class="row mb-3">
+                        <div class="col-md-6">{{ form.name.label(class='form-label') }}{{ form.name(class='form-control' + (' is-invalid' if form.name.errors else '')) }}
+                            {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}</div>
+                        <div class="col-md-3">{{ form.task_type.label(class='form-label') }}{{ form.task_type(class='form-select') }}</div>
+                        <div class="col-md-3">{{ form.protocol.label(class='form-label') }}{{ form.protocol(class='form-select') }}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">{{ form.timeout.label(class='form-label') }}{{ form.timeout(class='form-control', type='number') }}</div>
+                        <div class="col-md-6 d-flex align-items-end pb-2">
+                            <div class="form-check form-switch">{{ form.approval_required(class='form-check-input') }}{{ form.approval_required.label(class='form-check-label') }}</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">{{ form.content.label(class='form-label') }}{{ form.content(class='form-control font-monospace' + (' is-invalid' if form.content.errors else ''), style='font-size:0.85rem;') }}
+                        {% for e in form.content.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}</div>
+                    <div class="mb-3">{{ form.description.label(class='form-label') }}{{ form.description(class='form-control', rows=2) }}</div>
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                        <a href="{{ url_for('automation.template_list') }}" class="btn btn-secondary">取消</a>
+                    </div>
+                </form>
+            </div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

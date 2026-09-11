@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}导入 IP - 网络管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('network.ip_list') }}">IP地址管理</a></li>
+                    <li class="breadcrumb-item active">导入 IP</li>
+                </ol>
+            </nav>
+            <h1 class="h2"><i class="fas fa-file-import me-2"></i>批量导入 IP</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label">目标子网 <span class="text-danger">*</span></label>
+                            <select name="subnet_id" class="form-select" required>
+                                <option value="">请选择子网</option>
+                                {% for s in subnets %}
+                                <option value="{{ s.id }}" {% if preset_subnet == s.id %}selected{% endif %}>{{ s.name }} ({{ s.cidr }})</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">只允许导入落在该子网范围内的 IP。</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Excel / CSV 文件</label>
+                            <input type="file" name="file" class="form-control" accept=".xlsx,.xls,.csv">
+                            <div class="form-text">
+                                支持列名：IP地址(必填)、状态、设备名称、主机名、MAC地址、使用人、部门、用途/备注。<br>
+                                状态取值：空闲/预留/已分配/禁用（留空时若匹配到设备则为“已分配”，否则“空闲”）。
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">或直接粘贴 IP 列表（每行一个，可带空格分隔的备注）</label>
+                            <textarea name="ip_text" class="form-control" rows="8"
+                                      placeholder="192.168.1.10 财务部打印机&#10;192.168.1.11&#10;192.168.1.12 张三人电脑"></textarea>
+                        </div>
+
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" name="update_existing" id="updateExisting">
+                            <label class="form-check-label" for="updateExisting">更新已存在的记录（默认跳过）</label>
+                        </div>
+                        <div class="form-check form-switch mb-4">
+                            <input class="form-check-input" type="checkbox" name="auto_link" id="autoLink" checked>
+                            <label class="form-check-label" for="autoLink">按设备名称/IP 自动关联设备</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> 开始导入</button>
+                        <a href="{{ url_for('network.ip_list') }}" class="btn btn-secondary">取消</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

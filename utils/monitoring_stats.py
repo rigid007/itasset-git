@@ -116,7 +116,7 @@ def get_monitoring_status():
         # 检查最近24小时是否有监控数据
         time_24h_ago = datetime.now() - timedelta(hours=24)
         recent_monitor_count = MonitorData.query.filter(
-            MonitorData.timestamp >= time_24h_ago
+            MonitorData.collected_at >= time_24h_ago
         ).count()
         
         # 检查是否有未处理的告警

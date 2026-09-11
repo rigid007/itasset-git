@@ -1,19 +1,228 @@
 # snmp_utils.py
 """SNMP utility functions: get, walk, device info, interface discovery."""
-import subprocess
-import shutil
 import re
 import time
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
+from pysnmp.hlapi import (
+    SnmpEngine,
+    CommunityData,
+    UsmUserData,
+    UdpTransportTarget,
+    ContextData,
+    ObjectType,
+    ObjectIdentity,
+    getCmd,
+    nextCmd,
+    bulkCmd,
+    usmHMACMD5AuthProtocol,
+    usmHMACSHAAuthProtocol,
+    usmDESPrivProtocol,
+    usmAesCfb128Protocol,
+)
 from datetime import datetime
 
 from extensions import db
 from models import Device, Interface
+from utils.vendor_oid_map import identify_by_sys_object_id, is_infra_agent
+from utils.model_type_map import infer_from_model
 
 logger = logging.getLogger(__name__)
 
 SNMP_TIMEOUT = 3
+
+
+class SnmpClient:
+    """Pure Python SNMP client used as a replacement for net-snmp command line tools.
+
+    Supports SNMP v1, v2c and v3. Returned OID values are normalized to strings.
+    """
+
+    def __init__(self, ip, community="public", version="2c", port=161,
+                 timeout=SNMP_TIMEOUT, retries=1, v3_params=None):
+        self.ip = str(ip or "").strip()
+        self.community = community or "public"
+        self.port = int(port or 161)
+        self.timeout = float(timeout or SNMP_TIMEOUT)
+        self.retries = int(retries or 1)
+        self.v3_params = v3_params or {}
+        self.version = self._normalize_version(version)
+
+    @staticmethod
+    def _normalize_version(version):
+        """Return SNMP protocol integer used internally: 0=v1, 1=v2c, 3=v3."""
+        if isinstance(version, int):
+            return 0 if version == 1 else (3 if version == 3 else 1)
+        v = str(version or "2c").strip().lower().lstrip("v")
+        if v in ("1", "v1"):
+            return 0
+        if v in ("2c", "2", "v2c", "v2"):
+            return 1
+        if v in ("3", "v3"):
+            return 3
+        return 1
+
+    @staticmethod
+    def _auth_protocol(name):
+        n = str(name or "").upper()
+        if "SHA" in n:
+            return usmHMACSHAAuthProtocol
+        return usmHMACMD5AuthProtocol
+
+    @staticmethod
+    def _priv_protocol(name):
+        n = str(name or "").upper()
+        if "AES" in n or "CFB128" in n:
+            return usmAesCfb128Protocol
+        if "DES" in n:
+            return usmDESPrivProtocol
+        return None
+
+    def _security(self):
+        if self.version == 3:
+            p = self.v3_params
+            return UsmUserData(
+                p.get("username") or "",
+                p.get("auth_password") or None,
+                p.get("priv_password") or None,
+                authProtocol=self._auth_protocol(p.get("auth_protocol", "MD5")),
+                privProtocol=self._priv_protocol(p.get("priv_protocol", "DES")),
+            )
+        mp_model = 0 if self.version == 0 else 1
+        return CommunityData(self.community, mpModel=mp_model)
+
+    def _transport(self):
+        return UdpTransportTarget((self.ip, self.port), timeout=self.timeout, retries=self.retries)
+
+    @staticmethod
+    def _value_to_str(value):
+        if value is None:
+            return ""
+        if isinstance(value, bytes):
+            try:
+                return value.decode("utf-8", errors="ignore")
+            except Exception:
+                return str(value)
+        try:
+            pp = value.prettyPrint()
+        except Exception:
+            pp = str(value)
+        if isinstance(pp, bytes):
+            try:
+                return pp.decode("utf-8", errors="ignore")
+            except Exception:
+                return str(pp)
+        return str(pp)
+
+    @staticmethod
+    def _oid_to_str(oid):
+        if hasattr(oid, "prettyPrint"):
+            try:
+                return str(oid.prettyPrint())
+            except Exception:
+                pass
+        return str(oid)
+
+    def get(self, oid):
+        """Run a single SNMP GET and return a normalized primitive value."""
+        if not self.ip:
+            return None
+        try:
+            iterator = getCmd(
+                SnmpEngine(),
+                self._security(),
+                self._transport(),
+                ContextData(),
+                ObjectType(ObjectIdentity(str(oid))),
+            )
+            error_indication, error_status, error_index, var_binds = next(iterator)
+        except Exception as exc:
+            logger.debug("SNMP get failed %s %s: %s", self.ip, oid, exc)
+            return None
+        if error_indication or error_status:
+            logger.debug("SNMP get error %s %s: %s %s", self.ip, oid, error_indication, error_status)
+            return None
+        if not var_binds:
+            return None
+        return self._value_to_str(var_binds[0][1])
+
+    def walk(self, oid, on_line=None, total_timeout=None):
+        """Run SNMP WALK using nextCmd and return [(oid, value), ...]."""
+        results = []
+        if not self.ip:
+            return results
+        base_oid = str(oid).lstrip(".")
+        started = time.time()
+        deadline = float(total_timeout) if total_timeout else max(60, self.timeout * (self.retries + 1) * 5)
+        try:
+            iterator = nextCmd(
+                SnmpEngine(),
+                self._security(),
+                self._transport(),
+                ContextData(),
+                ObjectType(ObjectIdentity(str(oid))),
+                lexicographicMode=True,
+            )
+            for error_indication, error_status, error_index, var_binds in iterator:
+                if time.time() - started > deadline:
+                    break
+                if error_indication or error_status:
+                    break
+                if not var_binds:
+                    break
+                outside = False
+                for var_oid, value in var_binds:
+                    oid_str = self._oid_to_str(var_oid).lstrip(".")
+                    if not oid_str.startswith(base_oid):
+                        outside = True
+                        break
+                    value_str = self._value_to_str(value)
+                    results.append((oid_str, value_str))
+                    if on_line is not None:
+                        on_line(oid_str, value_str)
+                if outside:
+                    break
+        except Exception as exc:
+            logger.debug("SNMP walk failed %s %s: %s", self.ip, oid, exc)
+        return results
+
+    def bulkwalk(self, oid, non_repeaters=0, max_repetitions=25, total_timeout=None):
+        """Run SNMP BULKWALK and return [(oid, value), ...]."""
+        results = []
+        if not self.ip:
+            return results
+        base_oid = str(oid).lstrip(".")
+        started = time.time()
+        deadline = float(total_timeout) if total_timeout else max(60, self.timeout * (self.retries + 1) * 5)
+        try:
+            iterator = bulkCmd(
+                SnmpEngine(),
+                self._security(),
+                self._transport(),
+                ContextData(),
+                int(non_repeaters),
+                int(max_repetitions),
+                ObjectType(ObjectIdentity(str(oid))),
+            )
+            for error_indication, error_status, error_index, var_binds in iterator:
+                if time.time() - started > deadline:
+                    break
+                if error_indication or error_status:
+                    break
+                if not var_binds:
+                    break
+                outside = False
+                for var_oid, value in var_binds:
+                    oid_str = self._oid_to_str(var_oid).lstrip(".")
+                    if not oid_str.startswith(base_oid):
+                        outside = True
+                        break
+                    results.append((oid_str, self._value_to_str(value)))
+                if outside:
+                    break
+        except Exception as exc:
+            logger.debug("SNMP bulkwalk failed %s %s: %s", self.ip, oid, exc)
+        return results
 
 
 class SNMPWalkError(Exception):
@@ -82,200 +291,71 @@ def _decode_hex_value(value: str) -> str:
 
 def snmp_get(ip: str, community: str, version: str, oid: str,
              timeout: int = SNMP_TIMEOUT):
-    """通过系统 snmpget 命令执行 SNMP GET 返回: 值 (int/float/str) 或 None"""
-    if community is None:
-        community = 'public'
-
-    snmpget_cmd = shutil.which('snmpget')
-    if not snmpget_cmd:
-        logger.error("snmpget 命令不存在，请安装 net-snmp 工具")
+    """Run SNMP GET through the pure Python SnmpClient."""
+    client = SnmpClient(ip, community=community, version=version, timeout=timeout)
+    value = client.get(oid)
+    if value is None:
         return None
-
-    ver = '2c' if version == '2c' else '1'
-    cmd = [snmpget_cmd, '-v', ver, '-c', str(community), '-t', str(timeout),
-           '-r', '1', '-O', 'qv', str(ip), str(oid)]
-
+    if isinstance(value, str):
+        value = _decode_hex_value(value)
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1].strip()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
-        if result.returncode != 0:
-            logger.warning(f"snmpget {ip} {oid} 失败 (code {result.returncode}): {result.stderr.strip()}")
-            return None
-        output = result.stdout.strip()
-        if not output:
-            return None
-        # hex格式解码（含中文的OCTET STRING输出为hex）
-        output = _decode_hex_value(output)
-        # 去除两端的引号（某些SNMP代理返回带引号的值）
-        if output.startswith('"') and output.endswith('"'):
-            output = output[1:-1].strip()
+        return int(value)
+    except (TypeError, ValueError):
         try:
-            return int(output)
-        except ValueError:
-            try:
-                return float(output)
-            except ValueError:
-                return output
-    except subprocess.TimeoutExpired:
-        logger.warning(f"snmpget {ip} {oid} 超时")
-        return None
-    except Exception as e:
-        logger.error(f"snmpget {ip} {oid} 异常: {e}")
-        return None
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+def parse_if_status(value) -> str:
+    """把 snmp_walk 返回的接口状态值规范化为 up/down/unknown。
+
+    snmp_walk 依赖外部 snmpwalk 命令，INTEGER 枚举会带文本，如 'up(1)'/'down(2)'；
+    直接与 '1'/'2' 比较永远不匹配，必须取文本前缀。
+    """
+    s = str(value or '').strip().lower()
+    if s.startswith('up'):
+        return 'up'
+    if s.startswith('down'):
+        return 'down'
+    if s in ('1', '1.0'):
+        return 'up'
+    if s in ('2', '2.0'):
+        return 'down'
+    return 'unknown'
 
 
 def snmp_walk(ip: str, oid: str, community: str = 'public',
               version: str = '2c', timeout: int = 5,
               retries: int = 2, total_timeout: Optional[int] = None,
               on_line=None, raise_on_error: bool = False) -> List[Tuple[str, str]]:
-    """通过系统 snmpwalk 执行 SNMP WALK，返回 [(oid, value), ...]。
-
-    新增参数：
-      total_timeout   : 整体超时（秒）。默认 max(60, timeout*(retries+1)*5)。
-                        某些厂商（如 H3C WLAN 表）单条处理极慢、整表 walk 可能需数分钟，
-                        调用方（如 AC 异步发现）应传入较大的值以免被提前掐断。
-      on_line        : 可选回调 on_line(oid_str, value_str)，每解析出一行即调用，
-                        用于长 walk 的实时进度上报（逐行流式读取）。
-      raise_on_error : True 时，命令不存在/超时/进程非零退出会抛 SNMPWalkError，
-                        而非静默返回 []，便于上层把真实原因显示给用户。
-                        （“OID 不存在返回空列表”仍属正常结果，不会抛异常。）
-    """
-    snmpwalk_cmd = shutil.which('snmpwalk')
-    if not snmpwalk_cmd:
-        logger.error("snmpwalk 命令不存在，请安装 net-snmp 工具")
-        return []
-
-    oid = oid.lstrip('.')
-    ver = '2c' if version == '2c' else '1'
-    cmd = [snmpwalk_cmd, '-v', ver, '-c', str(community), '-t', str(timeout),
-           '-r', str(retries), '-Cc', '-On', str(ip), oid]
-
-    oid = oid.lstrip('.')
-    ver = '2c' if version == '2c' else '1'
-    cmd = [snmpwalk_cmd, '-v', ver, '-c', str(community), '-t', str(timeout),
-           '-r', str(retries), '-Cc', '-On', str(ip), oid]
-    base_oid = '.' + oid if not oid.startswith('.') else oid
-    tt = total_timeout if total_timeout else max(60, timeout * (retries + 1) * 5)
-    results: List[Tuple[str, str]] = []
-
-    # 流式模式：逐行读取，支持 on_line 实时回调与超长 total_timeout
-    if on_line is not None:
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, bufsize=1)
-        except Exception as e:
-            logger.error(f"snmpwalk 启动失败 {ip} {oid}: {e}")
-            if raise_on_error:
-                raise SNMPWalkError(str(e))
-            return []
-        start = time.time()
-        timed_out = False
-        try:
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                if time.time() - start > tt:
-                    timed_out = True
-                    break
-                parsed = _parse_walk_line(line, base_oid)
-                if parsed:
-                    results.append(parsed)
-                    on_line(*parsed)
-            proc.stdout.close()
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                pass
-            raise
-        if timed_out:
-            proc.kill()
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                pass
-            err = f"SNMP WALK 超时（>{tt}秒，已读取 {len(results)} 行）"
-            logger.warning(f"snmpwalk {ip} {oid} (community={community!r}) {err}")
-            if raise_on_error:
-                raise SNMPWalkError(err)
-            return results
-        if proc.returncode != 0 and not results:
-            stderr = proc.stderr.read() if proc.stderr else ''
-            err = f"snmpwalk 失败 (code {proc.returncode}): {stderr.strip()}"
-            logger.warning(f"snmpwalk {ip} {oid} (community={community!r}) {err}")
-            if raise_on_error:
-                raise SNMPWalkError(err)
-        return results
-
-    # 缓冲模式（默认）：一次性收集输出后解析
+    """Run SNMP WALK through the pure Python SnmpClient."""
+    client = SnmpClient(ip, community=community, version=version, timeout=timeout, retries=retries)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=tt)
-        if result.returncode != 0 and not result.stdout.strip():
-            err = f"snmpwalk 失败 (code {result.returncode}): {result.stderr.strip()}"
-            logger.warning(f"snmpwalk {ip} {oid} (community={community!r}) {err}")
-            if raise_on_error:
-                raise SNMPWalkError(err)
-            return []
-        for line in result.stdout.splitlines():
-            parsed = _parse_walk_line(line, base_oid)
-            if parsed:
-                results.append(parsed)
-        return results
-    except subprocess.TimeoutExpired:
-        err = f"SNMP WALK 超时（>{tt}秒）"
-        logger.warning(f"snmpwalk {ip} {oid} {err}")
+        return client.walk(oid, on_line=on_line, total_timeout=total_timeout)
+    except Exception as exc:
+        logger.warning("snmp_walk failed %s %s: %s", ip, oid, exc)
         if raise_on_error:
-            raise SNMPWalkError(err)
+            raise SNMPWalkError(str(exc))
         return []
-    except SNMPWalkError:
-        raise
-    except Exception as e:
-        logger.error(f"snmpwalk {ip} {oid} 异常: {e}")
-        if raise_on_error:
-            raise SNMPWalkError(str(e))
-        return []
-
-
 def walk_interfaces(ip, community='public', timeout=5):
-    """通过 snmpwalk 获取接口名称列表，返回 {ifIndex: ifName}"""
+    """Return {ifIndex: ifName} using IF-MIB ifName and ifDescr fallback."""
     result = {}
-    oid = '1.3.6.1.2.1.31.1.1.1.1'
-    snmpwalk_cmd = shutil.which('snmpwalk')
-    if not snmpwalk_cmd:
-        logger.error("snmpwalk 命令不存在，请安装 net-snmp 工具")
-        return result
-    cmd = [snmpwalk_cmd, '-v', '2c', '-c', community, '-t', str(timeout),
-           '-r', '1', '-O', 'v', ip, oid]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout+2, check=False)
-        if proc.returncode != 0:
-            logger.warning(f"snmpwalk {ip} {oid} 失败: {proc.stderr.strip()}")
-            return result
-        for line in proc.stdout.splitlines():
-            line = line.strip()
-            if not line or '=' not in line:
-                continue
-            left, right = line.split('=', 1)
-            oid_part = left.strip()
-            match = re.search(r'\.(\d+)$', oid_part)
-            if not match:
-                continue
-            ifindex = int(match.group(1))
-            value = right.strip()
-            if value.startswith('STRING: '):
-                value = value[8:]
-            if value.startswith('"') and value.endswith('"'):
-                value = value[1:-1]
-            result[ifindex] = value
-        return result
-    except subprocess.TimeoutExpired:
-        logger.warning(f"snmpwalk {ip} {oid} 超时")
-        return result
-    except Exception as e:
-        logger.error(f"snmpwalk {ip} {oid} 异常: {e}")
-        return result
-
-
+    client = SnmpClient(ip, community=community, version='2c', timeout=timeout)
+    ifname_items = client.walk('1.3.6.1.2.1.31.1.1.1.1')
+    ifdescr_items = client.walk('1.3.6.1.2.1.2.2.1.2') if not ifname_items else []
+    items = ifname_items or ifdescr_items
+    for oid_str, value in items:
+        parts = oid_str.split('.')
+        try:
+            ifindex = int(parts[-1])
+        except (ValueError, IndexError):
+            continue
+        value = _decode_hex_value(value)
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        result[ifindex] = value.strip()
+    return result
 def clean_snmp_device_name(name: str, ip: str = '') -> str:
     """清理SNMP设备名称：hex→中文解码、去引号、检测无效名称"""
     name = (name or '').strip()
@@ -341,7 +421,13 @@ def scan_ip_with_snmp(
     sys_descr = scan_result.get('sys_descr', '')
     sys_object_id = scan_result.get('sys_object_id', '')
 
-    existing_by_name = Device.query.filter_by(name=sys_name).first()
+    candidate = build_discovery_candidate(scan_result)
+    match = match_device_candidate(candidate)
+    matched_device = match.get('device')
+    if matched_device and matched_device.management_ip != ip and matched_device.name != sys_name:
+        existing_by_name = matched_device
+    else:
+        existing_by_name = Device.query.filter_by(name=sys_name).first()
     existing_by_ip = Device.query.filter_by(management_ip=ip).first()
 
     conflict = None
@@ -391,7 +477,12 @@ def scan_ip_with_snmp(
                 name=sys_name, management_ip=ip, device_type=device_type,
                 manufacturer=manufacturer, model=model, snmp_community=community,
                 snmp_version=version, description=sys_descr[:500] if sys_descr else None,
-                status='unknown')
+                status='unknown',
+                discovery_source='snmp',
+                discovery_confidence=match.get('score', 100),
+                approval_status='review' if match.get('decision') == 'create' else 'approved',
+                last_seen=datetime.utcnow(),
+                managed_by='self')
             db.session.add(device)
             db.session.commit()
             msg = f"成功创建设备: {sys_name} ({ip})"
@@ -406,6 +497,10 @@ def scan_ip_with_snmp(
                 device.snmp_community = community
                 device.snmp_version = version
                 device.description = sys_descr[:500] if sys_descr else None
+                device.discovery_source = 'snmp'
+                device.discovery_confidence = match.get('score', 100)
+                device.last_seen = datetime.utcnow()
+                device.managed_by = device.managed_by or 'self'
             else:
                 if 'name' in update_fields: device.name = sys_name
                 if 'management_ip' in update_fields: device.management_ip = ip
@@ -417,7 +512,8 @@ def scan_ip_with_snmp(
                 if 'description' in update_fields: device.description = sys_descr[:500] if sys_descr else None
             db.session.commit()
             msg = f"成功更新设备: {sys_name} ({ip})"
-        return {'success': True, 'device_id': device.id, 'action': action, 'message': msg, 'device': device}
+        return {'success': True, 'device_id': device.id, 'action': action, 'message': msg, 'device': device,
+                'candidate': candidate, 'match': {k: v for k, v in match.items() if k != 'device'}}
     except Exception as e:
         db.session.rollback()
         return {'success': False, 'device_id': None, 'action': 'failed', 'message': f"数据库操作失败: {str(e)}", 'device': None}
@@ -451,6 +547,9 @@ def infer_device_type_from_snmp(sys_descr: str, sys_object_id: str = '', sys_nam
     sys_oid = (sys_object_id or '').strip()
     lower_desc = sys_descr.lower()
     lower_name = sys_name.lower()
+    # P0-2: sysObjectID 企业前缀识别（IANA PEN，最长前缀优先），先于 sysDescr 关键词
+    oid_ident = identify_by_sys_object_id(sys_oid, sys_descr)
+    oid_brand = oid_ident['brand']
 
     if sys_oid.startswith('1.3.6.1.4.1.25506') or 'h3c' in lower_desc:
         brand = 'H3C'
@@ -505,9 +604,29 @@ def infer_device_type_from_snmp(sys_descr: str, sys_object_id: str = '', sys_nam
             device_type = 'switch'
         elif 'router' in lower_desc or 'isr' in lower_desc:
             device_type = 'router'
+    # P0-2: sysObjectID 企业前缀识别兜底 —— 原逻辑只覆盖 H3C/Huawei/Cisco，
+    # 这里为 Ruijie/ZTE/Juniper/Aruba/Fortinet/F5/Dell/Arista/D-Link 等补齐 brand，
+    # 并对仍为 unknown 的 device_type 做常见关键词判别。
+    if oid_brand and not is_infra_agent(oid_brand):
+        if not brand:
+            brand = oid_brand
+        if device_type == 'unknown':
+            if re.search(r'switch|交换机|\bs\d{4}|ex\d{4}|ex\d{3}|jetstream|switchos', lower_desc):
+                device_type = 'switch'
+            elif re.search(r'firewall|防火墙|fortigate|\busg\b|pan-os', lower_desc):
+                device_type = 'firewall'
+            elif re.search(r'router|路由\b|\bmx\d|\bisr\b|routeros', lower_desc):
+                device_type = 'router'
+
     if device_type == 'unknown' and any(kw in lower_desc for kw in ['linux', 'windows', 'server', 'ubuntu', 'centos']):
         device_type = 'server'
-        brand = 'Generic'
+        # P0-2: 代理类 sysObjectID（VMware ESXi / Windows）可给出更准确的 brand
+        brand = oid_brand if oid_brand in ('VMware', 'Microsoft') else 'Generic'
+        model = 'Server'
+    elif device_type == 'unknown' and oid_brand in ('net-snmp', 'VMware', 'Microsoft'):
+        # sysObjectID 指向 SNMP agent（net-snmp/ESXi）但 sysDescr 无主机关键词：按服务器处理
+        device_type = 'server'
+        brand = oid_brand if oid_brand in ('VMware', 'Microsoft') else 'Generic'
         model = 'Server'
 
     # 末轮兜底：识别无线 AP（关键词/型号命中且尚未明确归类则归为 ap）
@@ -528,6 +647,14 @@ def infer_device_type_from_snmp(sys_descr: str, sys_object_id: str = '', sys_nam
             brand = 'Cisco'
         elif sys_oid.startswith('1.3.6.1.4.1.14823'):
             brand = 'Aruba'
+    # P0-4: 型号反推设备类型 —— sysDescr 常不含类型关键词（如 H3C S7506E 仅回
+    # "H3C Comware Platform Software..."），但型号本身强类型化，据此兜底判型。
+    if device_type in ('unknown', 'other', '', None) and model:
+        mt = infer_from_model(model, brand or oid_brand)
+        if mt:
+            device_type = mt['device_type']
+            if mt['is_wireless_controller'] and not brand:
+                brand = brand or ''
     if model:
         version_match = re.search(r'(.+?)\s+(?:Ver|Version|Release|Software|V|R)\s*\d+', model, re.IGNORECASE)
         if version_match:
@@ -549,9 +676,16 @@ def update_device_snmp_info(device: Device, snmp_community='public', snmp_versio
         sys_object_id=info.get('sys_object_id', ''),
         sys_name=info.get('sys_name', '')
     )
+    # 本轮推断不出类型时保留库内已有类型，避免把人工修正值冲成 unknown
+    if device_type in (None, '', 'unknown') and (device.device_type or '') not in ('', 'unknown'):
+        device_type = device.device_type
     device.device_type = device_type or 'unknown'
     device.brand = brand or ''
     device.model = model or ''
+    # 型号命中无线控制器（H3C WX / Huawei AC / Cisco WLC）→ 置无线控制器标记
+    mt = infer_from_model(model, brand)
+    if mt and mt['is_wireless_controller']:
+        device.is_wireless_controller = True
     device.os_version = (info.get('sys_descr', '') or '')[:128]
     device.last_scanned = datetime.utcnow()
     device.updated_at = datetime.utcnow()
@@ -564,74 +698,324 @@ def update_device_snmp_info(device: Device, snmp_community='public', snmp_versio
 
 
 def snmp_discover_interfaces_real(ip, community, version='2c', port=161):
-    """通过 SNMP 获取设备的所有接口信息 (pysnmp bulkCmd)"""
-    from pysnmp.entity.rfc3413.oneliner import cmdgen
-    cmd_gen = cmdgen.CommandGenerator()
-    mp_model = 0 if version == '1' else 1
-    oids = [
-        '1.3.6.1.2.1.2.2.1.1', '1.3.6.1.2.1.2.2.1.2', '1.3.6.1.2.1.2.2.1.3',
-        '1.3.6.1.2.1.2.2.1.5', '1.3.6.1.2.1.2.2.1.7', '1.3.6.1.2.1.2.2.1.8',
-    ]
-    errorIndication, errorStatus, errorIndex, varBindTable = cmd_gen.bulkCmd(
-        cmdgen.CommunityData(community, mpModel=mp_model),
-        cmdgen.UdpTransportTarget((ip, port), timeout=2, retries=2),
-        0, 25, *[cmdgen.MibVariable(oid) for oid in oids], lookupMib=False
-    )
-    if errorIndication or errorStatus:
-        logger.error(f"SNMP bulk 错误: {errorIndication or errorStatus}")
-        return []
+    """Discover interface metadata through SnmpClient without net-snmp binaries."""
+    client = SnmpClient(ip, community=community, version=version, port=port)
     interfaces = {}
-    for varBinds in varBindTable:
-        for oid, val in varBinds:
-            if_index = oid[-1]
-            if if_index not in interfaces:
-                interfaces[if_index] = {'ifIndex': if_index}
-            oid_str = '.'.join(str(x) for x in oid[:-1])
-            pp = val.prettyPrint() if hasattr(val, 'prettyPrint') else str(val)
-            if oid_str == '1.3.6.1.2.1.2.2.1.2':
-                interfaces[if_index]['ifDescr'] = pp
-            elif oid_str == '1.3.6.1.2.1.2.2.1.3':
-                interfaces[if_index]['ifType'] = int(val)
-            elif oid_str == '1.3.6.1.2.1.2.2.1.5':
-                interfaces[if_index]['ifSpeed'] = int(val)
-            elif oid_str == '1.3.6.1.2.1.2.2.1.7':
-                admin_val = int(val)
-                interfaces[if_index]['ifAdminStatus'] = admin_val
-                interfaces[if_index]['ifAdminStatusText'] = 'up' if admin_val == 1 else ('down' if admin_val == 2 else 'unknown')
-            elif oid_str == '1.3.6.1.2.1.2.2.1.8':
-                oper_val = int(val)
-                interfaces[if_index]['ifOperStatus'] = oper_val
-                interfaces[if_index]['ifOperStatusText'] = 'up' if oper_val == 1 else ('down' if oper_val == 2 else 'unknown')
-    return list(interfaces.values())
 
+    def ensure(if_index):
+        if if_index not in interfaces:
+            interfaces[if_index] = {'ifIndex': if_index}
+        return interfaces[if_index]
 
+    # ifName is preferred on modern network devices; ifDescr is the fallback.
+    ifname_items = client.walk('1.3.6.1.2.1.31.1.1.1.1')
+    ifdescr_items = client.walk('1.3.6.1.2.1.2.2.1.2') if not ifname_items else []
+    for oid_str, value in (ifname_items or ifdescr_items):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+        except (ValueError, IndexError):
+            continue
+        name = _decode_hex_value(value)
+        if name.startswith('"') and name.endswith('"'):
+            name = name[1:-1]
+        ensure(if_index)['ifDescr'] = name.strip()
+
+    for oid_str, value in client.walk('1.3.6.1.2.1.2.2.1.3'):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+            ensure(if_index)['ifType'] = int(value)
+        except (ValueError, TypeError, IndexError):
+            continue
+
+    for oid_str, value in client.walk('1.3.6.1.2.1.2.2.1.5'):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+            ensure(if_index)['ifSpeed'] = int(value)
+        except (ValueError, TypeError, IndexError):
+            continue
+
+    for oid_str, value in client.walk('1.3.6.1.2.1.2.2.1.6'):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+            ensure(if_index)['mac_address'] = normalize_mac(value)
+        except (ValueError, IndexError):
+            continue
+
+    for oid_str, value in client.walk('1.3.6.1.2.1.2.2.1.7'):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+            admin_val = int(value)
+            ensure(if_index).update({
+                'ifAdminStatus': admin_val,
+                'ifAdminStatusText': 'up' if admin_val == 1 else ('down' if admin_val == 2 else 'unknown')
+            })
+        except (ValueError, TypeError, IndexError):
+            continue
+
+    for oid_str, value in client.walk('1.3.6.1.2.1.2.2.1.8'):
+        try:
+            if_index = int(oid_str.split('.')[-1])
+            oper_val = int(value)
+            ensure(if_index).update({
+                'ifOperStatus': oper_val,
+                'ifOperStatusText': 'up' if oper_val == 1 else ('down' if oper_val == 2 else 'unknown')
+            })
+        except (ValueError, TypeError, IndexError):
+            continue
+
+    return [interfaces[k] for k in sorted(interfaces)]
 def save_discovered_interfaces(device_id, discovered):
-    """将发现的接口列表保存到数据库，如已存在则更新"""
+    """Save discovered interfaces, matching by ifindex first and name second."""
     saved = []
     for intf in discovered:
-        name = intf.get('ifDescr')
-        if not name:
+        name = (intf.get('ifDescr') or intf.get('ifName') or '').strip()
+        ifindex = intf.get('ifIndex')
+        if not name and not ifindex:
             continue
-        existing = Interface.query.filter_by(device_id=device_id, name=name).first()
-        if not existing:
-            new_intf = Interface(
-                device_id=device_id, name=name, ifindex=intf.get('ifIndex'),
-                speed=intf.get('ifSpeed'), admin_status=intf.get('ifAdminStatusText'),
-                oper_status=intf.get('ifOperStatusText'), description="Auto-discovered via SNMP",
-                created_at=datetime.utcnow(), updated_at=datetime.utcnow()
-            )
-            db.session.add(new_intf)
-            saved.append({'name': name, 'ifindex': intf.get('ifIndex')})
+        existing = None
+        if ifindex:
+            existing = Interface.query.filter_by(device_id=device_id, ifindex=ifindex).first()
+        if existing is None and name:
+            existing = Interface.query.filter_by(device_id=device_id, name=name).first()
+        if existing is None:
+            existing = Interface(device_id=device_id, name=name, ifindex=ifindex)
+            db.session.add(existing)
         else:
-            existing.ifindex = intf.get('ifIndex') or existing.ifindex
-            existing.speed = intf.get('ifSpeed') or existing.speed
-            existing.admin_status = intf.get('ifAdminStatusText') or existing.admin_status
-            existing.oper_status = intf.get('ifOperStatusText') or existing.oper_status
-            existing.updated_at = datetime.utcnow()
-            saved.append({'name': name, 'ifindex': existing.ifindex})
-    db.session.commit()
+            if name and not existing.name:
+                existing.name = name
+            if ifindex:
+                existing.ifindex = ifindex
+        existing.speed = intf.get('ifSpeed') or existing.speed
+        existing.admin_status = intf.get('ifAdminStatusText') or existing.admin_status
+        existing.oper_status = intf.get('ifOperStatusText') or existing.oper_status
+        existing.type = intf.get('ifType') or existing.type
+        existing.mac_address = normalize_mac(intf.get('mac_address')) or existing.mac_address
+        existing.description = intf.get('description') or existing.description or "Auto-discovered via SNMP"
+        existing.updated_at = datetime.utcnow()
+        saved.append({'name': name, 'ifindex': ifindex, 'id': existing.id})
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return saved
 
+def normalize_mac(value):
+    """Normalize MAC/hex strings to lowercase colon format or return empty string."""
+    if value is None:
+        return ''
+    if isinstance(value, bytes):
+        try:
+            value = value.decode('utf-8', errors='ignore')
+        except Exception:
+            value = str(value)
+    text = str(value).strip()
+    text = text.replace('-', ':').replace(' ', ':')
+    if ':' in text:
+        parts = text.split(':')
+        if len(parts) == 6 and all(re.fullmatch(r'[0-9a-fA-F]{1,2}', p or '') for p in parts):
+            return ':'.join(p.zfill(2).lower() for p in parts)
+    clean = re.sub(r'[^0-9a-fA-F]', '', text)
+    if len(clean) == 12:
+        return ':'.join(clean[i:i+2] for i in range(0, 12, 2)).lower()
+    return ''
+
+
+def normalize_device_name(name):
+    """Return a comparison-friendly device name."""
+    value = _decode_hex_value(str(name or '').strip())
+    while len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        value = value[1:-1].strip()
+    return re.sub(r'\s+', ' ', value).strip().lower()
+
+
+def build_discovery_candidate(info):
+    """Convert raw SNMP system info into a candidate dict used for asset matching."""
+    sys_name = clean_snmp_device_name(info.get('sys_name', ''), info.get('ip', ''))
+    candidate = {
+        'ip': (info.get('ip') or info.get('management_ip') or '').strip(),
+        'name': sys_name,
+        'sys_name': sys_name,
+        'sys_descr': str(info.get('sys_descr') or '').strip(),
+        'sys_object_id': str(info.get('sys_object_id') or '').strip(),
+        'sys_location': str(info.get('sys_location') or '').strip(),
+        'serial_number': str(info.get('serial_number') or '').strip() or None,
+        'mac_address': normalize_mac(info.get('mac_address') or info.get('sys_mac')),
+        'device_type': info.get('device_type') or 'unknown',
+        'manufacturer': info.get('manufacturer') or info.get('brand') or '',
+        'model': info.get('model') or '',
+    }
+    return candidate
+
+
+def match_device_candidate(candidate):
+    """Score a discovery candidate against existing devices and return a decision."""
+    score = 0
+    reasons = []
+    match_device = None
+    serial = (candidate.get('serial_number') or '').strip()
+    mgmt_ip = (candidate.get('ip') or '').strip()
+    mac = normalize_mac(candidate.get('mac_address'))
+    name = normalize_device_name(candidate.get('name') or candidate.get('sys_name') or '')
+
+    if serial:
+        device = Device.query.filter_by(serial_number=serial).first()
+        if device:
+            match_device = device
+            score += 50
+            reasons.append('serial_number')
+    if mgmt_ip and not match_device:
+        device = Device.query.filter_by(management_ip=mgmt_ip).first()
+        if device:
+            match_device = device
+            score += 40
+            reasons.append('management_ip')
+    if mac and not match_device:
+        devices = Device.query.filter(Device.mac_address.isnot(None)).all()
+        for device in devices:
+            if normalize_mac(device.mac_address) == mac:
+                match_device = device
+                score += 25
+                reasons.append('mac_address')
+                break
+    if name and not match_device:
+        devices = Device.query.filter(Device.name.isnot(None)).all()
+        for device in devices:
+            if normalize_device_name(device.name) == name:
+                match_device = device
+                score += 15
+                reasons.append('name')
+                break
+
+    if score >= 35:
+        decision = 'update'
+    elif score >= 20:
+        decision = 'review'
+    else:
+        decision = 'create'
+
+    return {
+        'score': score,
+        'decision': decision,
+        'device_id': match_device.id if match_device else None,
+        'device': match_device,
+        'reasons': reasons,
+    }
+
+
+def discover_lldp_neighbors(ip, community='public', version='2c'):
+    """Return normalized LLDP neighbor records using the pure Python SnmpClient."""
+    client = SnmpClient(ip, community=community, version=version)
+    ifname_map = walk_interfaces(ip, community)
+    records = []
+    by_index = {}
+    for oid_str, chassis_id in client.walk('1.0.8802.1.1.2.1.4.1.1.5'):
+        suffix = oid_str.split('1.0.8802.1.1.2.1.4.1.1.5.', 1)[-1].split('.')
+        try:
+            ifindex = int(suffix[-2])
+            remote_index = int(suffix[-1])
+        except (ValueError, IndexError):
+            continue
+        key = (ifindex, remote_index)
+        by_index[key] = {'ifindex': ifindex, 'remote_index': remote_index, 'chassis_id': chassis_id}
+    for oid_str, value in client.walk('1.0.8802.1.1.2.1.4.1.1.7'):
+        suffix = oid_str.split('1.0.8802.1.1.2.1.4.1.1.7.', 1)[-1].split('.')
+        try:
+            key = (int(suffix[-2]), int(suffix[-1]))
+        except (ValueError, IndexError):
+            continue
+        if key in by_index:
+            by_index[key]['remote_port_id'] = value
+    for oid_str, value in client.walk('1.0.8802.1.1.2.1.4.1.1.9'):
+        suffix = oid_str.split('1.0.8802.1.1.2.1.4.1.1.9.', 1)[-1].split('.')
+        try:
+            key = (int(suffix[-2]), int(suffix[-1]))
+        except (ValueError, IndexError):
+            continue
+        if key in by_index:
+            by_index[key]['remote_system_name'] = value
+    for oid_str, value in client.walk('1.0.8802.1.1.2.1.4.1.1.10'):
+        suffix = oid_str.split('1.0.8802.1.1.2.1.4.1.1.10.', 1)[-1].split('.')
+        try:
+            key = (int(suffix[-2]), int(suffix[-1]))
+        except (ValueError, IndexError):
+            continue
+        if key in by_index:
+            by_index[key]['remote_sys_desc'] = value
+    for key, item in by_index.items():
+        item['local_port'] = ifname_map.get(item['ifindex'], '')
+        item['protocol'] = 'LLDP'
+        item['confidence'] = 100
+        records.append(item)
+    return records
+
+
+def discover_cdp_neighbors(ip, community='public', version='2c'):
+    """Return normalized Cisco CDP neighbor records."""
+    client = SnmpClient(ip, community=community, version=version)
+    ifname_map = walk_interfaces(ip, community)
+    records = []
+    device_id_map = {}
+    port_id_map = {}
+    for oid_str, value in client.walk('1.3.6.1.4.1.9.9.23.1.2.1.1.6'):
+        try:
+            ifindex = int(oid_str.split('.')[-1])
+            device_id_map[ifindex] = value
+        except (ValueError, IndexError):
+            continue
+    for oid_str, value in client.walk('1.3.6.1.4.1.9.9.23.1.2.1.1.7'):
+        try:
+            ifindex = int(oid_str.split('.')[-1])
+            port_id_map[ifindex] = value
+        except (ValueError, IndexError):
+            continue
+    for ifindex, remote_device in device_id_map.items():
+        records.append({
+            'ifindex': ifindex,
+            'local_port': ifname_map.get(ifindex, ''),
+            'remote_device_id': remote_device,
+            'chassis_id': remote_device,
+            'remote_system_name': remote_device,
+            'remote_port_id': port_id_map.get(ifindex, ''),
+            'protocol': 'CDP',
+            'confidence': 100,
+        })
+    return records
+
+
+def discover_arp_table(ip, community='public', version='2c'):
+    """Return raw ARP/IP-MAC records from a network device."""
+    client = SnmpClient(ip, community=community, version=version)
+    records = []
+    phys = client.walk('1.3.6.1.2.1.4.22.1.2')
+    for oid_str, mac in phys:
+        parts = oid_str.split('.')
+        try:
+            ifindex = int(parts[-5])
+            ip = '.'.join(parts[-4:])
+            records.append({'ifindex': ifindex, 'ip': ip, 'mac': normalize_mac(mac), 'protocol': 'ARP'})
+        except (ValueError, IndexError):
+            continue
+    return records
+
+
+def discover_topology_summary(ip, community='public', version='2c'):
+    """Run LLDP/CDP/ARP/FDB discovery for one device and return a normalized summary."""
+    return {
+        'ip': ip,
+        'lldp': discover_lldp_neighbors(ip, community, version),
+        'cdp': discover_cdp_neighbors(ip, community, version),
+        'arp': discover_arp_table(ip, community, version),
+        'fdb': discover_fdb_table(ip, community, version),
+    }
+
+def discover_fdb_table(ip, community='public', version='2c'):
+    """Return raw FDB MAC/port records from dot1qTpFdbTable."""
+    client = SnmpClient(ip, community=community, version=version)
+    records = []
+    for oid_str, port in client.walk('1.3.6.1.2.1.17.7.1.2.2.1.2'):
+        records.append({'oid': oid_str, 'port': port, 'protocol': 'FDB'})
+    return records
 
 # ---------- 厂商 OID 映射 ----------
 OID_MAPPINGS = {
@@ -679,7 +1063,7 @@ FALLBACK_OIDS = {
 }
 
 
-def get_device_snmp_data(device):
+def get_device_snmp_data(device, timeout=None):
     """采集设备的 CPU、内存、磁盘、温度、电源等数据"""
     ip = device.management_ip
     community = getattr(device, 'snmp_community', 'public')
@@ -698,10 +1082,10 @@ def get_device_snmp_data(device):
 
     def try_oids(metric):
         for oid in vendor_oids.get(metric, []):
-            val = snmp_get(ip, community, version, oid, timeout=3)
+            val = snmp_get(ip, community, version, oid, timeout=timeout)
             if val is not None: return val
         for oid in FALLBACK_OIDS.get(metric, []):
-            val = snmp_get(ip, community, version, oid, timeout=3)
+            val = snmp_get(ip, community, version, oid, timeout=timeout)
             if val is not None: return val
         return None
 
@@ -717,13 +1101,13 @@ def get_device_snmp_data(device):
     mem = try_oids('memory_usage')
     if mem is not None:
         if vendor == 'linux':
-            total = snmp_get(ip, community, version, '1.3.6.1.4.1.2021.4.5.0', 3)
+            total = snmp_get(ip, community, version, '1.3.6.1.4.1.2021.4.5.0', timeout)
             if total:
                 tf, mf = to_float(total), to_float(mem)
                 if tf and mf is not None:
                     result['memory_usage'] = ((tf - mf) / tf) * 100
         elif vendor == 'cisco':
-            total = snmp_get(ip, community, version, '1.3.6.1.4.1.9.9.48.1.1.1.4.1', 3)
+            total = snmp_get(ip, community, version, '1.3.6.1.4.1.9.9.48.1.1.1.4.1', timeout)
             if total:
                 tf, mf = to_float(total), to_float(mem)
                 if tf and mf is not None:
@@ -734,13 +1118,13 @@ def get_device_snmp_data(device):
     disk = try_oids('disk_usage')
     if disk is not None:
         if vendor == 'linux':
-            total = snmp_get(ip, community, version, '1.3.6.1.4.1.2021.9.1.8.1', 3)
+            total = snmp_get(ip, community, version, '1.3.6.1.4.1.2021.9.1.8.1', timeout)
             if total:
                 tf, df = to_float(total), to_float(disk)
                 if tf and df is not None:
                     result['disk_usage'] = (df / tf) * 100
         elif vendor == 'cisco':
-            total = snmp_get(ip, community, version, '1.3.6.1.4.1.9.9.10.1.1.4.1.4.1', 3)
+            total = snmp_get(ip, community, version, '1.3.6.1.4.1.9.9.10.1.1.4.1.4.1', timeout)
             if total:
                 tf, df = to_float(total), to_float(disk)
                 if tf and df is not None:

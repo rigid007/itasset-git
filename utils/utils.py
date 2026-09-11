@@ -29,12 +29,20 @@ from utils.network_utils import (
 
 # ========== Re-exports from snmp_utils ==========
 from utils.snmp_utils import (
-    SNMP_TIMEOUT, snmp_get, snmp_walk, walk_interfaces,
+    SNMP_TIMEOUT, SnmpClient, snmp_get, snmp_walk, walk_interfaces,
     snmp_get_device_info, scan_ip_with_snmp,
     OID_MAPPINGS, FALLBACK_OIDS,
     infer_device_type_from_snmp, update_device_snmp_info,
     snmp_discover_interfaces_real, save_discovered_interfaces,
-    get_device_snmp_data, snmp_get_with_timeout,
+    get_device_snmp_data, snmp_get_with_timeout, parse_if_status,
+    normalize_mac, normalize_device_name,
+    build_discovery_candidate, match_device_candidate,
+    discover_lldp_neighbors, discover_cdp_neighbors,
+    discover_arp_table, discover_fdb_table, discover_topology_summary,
+)
+from utils.vendor_oid_map import (
+    identify_by_sys_object_id, known_brands, is_infra_agent,
+    VENDOR_OID_PREFIXES,
 )
 
 # ========== Re-exports from excel_utils ==========

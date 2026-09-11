@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db  # 关键：从extensions.py导入唯一的db实例
 import json
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import relationship
 from models._base import utcnow as _utcnow
 
@@ -171,6 +172,11 @@ class Device(db.Model):
     management_ip = db.Column(db.String(45), nullable=True, unique=True)
     ip_address = db.Column(db.String(45))
     mac_address = db.Column(db.String(17))
+    # 服务器/宿主机链路核对：BMC 带外管理与虚拟化标识
+    bmc_ip = db.Column(db.String(45))            # BMC/带外管理 IP（iLO/iDRAC/XCC 等）
+    bmc_mac = db.Column(db.String(17))           # BMC 管理网口 MAC
+    virtualization_type = db.Column(db.String(32), default='')  # ''/vmware/kvm/proxmox/hyperv/xen/virtualbox/parallels/other
+    is_virtual_host = db.Column(db.Boolean, default=False, index=True)  # 是否虚拟化宿主机
 
     snmp_community = db.Column(db.String(64))
     snmp_version = db.Column(db.Integer, default=2)
@@ -211,6 +217,13 @@ class Device(db.Model):
     created_at = db.Column(db.DateTime, default=_utcnow)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
     last_scanned = db.Column(db.DateTime)
+    # 自动发现增强字段
+    discovery_source = db.Column(db.String(32))       # snmp/lldp/cdp/arp/fdb/import/manual
+    external_ref = db.Column(db.String(255))          # 外部系统引用，如 LibreNMS/NetBox ID
+    discovery_confidence = db.Column(db.Integer, default=100)
+    approval_status = db.Column(db.String(20), default='approved', index=True)  # pending/review/approved/rejected
+    last_seen = db.Column(db.DateTime)                # 最近一次自动发现确认时间
+    managed_by = db.Column(db.String(32))             # self/librenms/opennms/netbox/manual
 
     def to_dict(self):
         return {
@@ -228,7 +241,17 @@ class Device(db.Model):
             'is_wireless_controller': self.is_wireless_controller or False,
             'controller_vendor': self.controller_vendor or 'auto',
             'mac_address': self.mac_address or '',
+            'bmc_ip': self.bmc_ip or '',
+            'bmc_mac': self.bmc_mac or '',
+            'virtualization_type': self.virtualization_type or '',
+            'is_virtual_host': self.is_virtual_host or False,
             'description': self.description or '',
+            'discovery_source': self.discovery_source or '',
+            'external_ref': self.external_ref or '',
+            'discovery_confidence': self.discovery_confidence or 100,
+            'approval_status': self.approval_status or 'approved',
+            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
+            'managed_by': self.managed_by or '',
             'cabinet_id': self.cabinet_id
         }
 
@@ -302,6 +325,69 @@ class Interface(db.Model):
             'vlan': self.vlan,
             'type': self.type
         }
+
+class DeviceComponent(db.Model):
+    """设备硬件部件清单（ENTITY-MIB entPhysicalTable 采集）。
+
+    对标 iMC/U-Center 的"板卡/模块资产"，实现设备自动添加的资产闭环：
+    机箱序列号回填 Device.serial_number，板卡/电源/风扇明细入本表。
+    同一设备的物理实体以 (device_id, physical_index) 唯一。
+    """
+    __tablename__ = 'device_components'
+    __table_args__ = (
+        db.UniqueConstraint('device_id', 'physical_index', name='uq_device_component_phys_idx'),
+        db.Index('ix_device_components_device_id', 'device_id'),
+        db.Index('ix_device_components_serial', 'serial_number'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey('devices.id'), nullable=False)
+    physical_index = db.Column(db.Integer, nullable=False)       # entPhysicalIndex
+    parent_index = db.Column(db.Integer, nullable=True)          # entPhysicalContainedIn
+    entity_class = db.Column(db.String(32), index=True)          # chassis/module/powerSupply/fan/sensor/port/cpu...
+    name = db.Column(db.String(128))                             # entPhysicalName
+    description = db.Column(db.String(256))                      # entPhysicalDescr
+    model_name = db.Column(db.String(128))                       # entPhysicalModelName
+    serial_number = db.Column(db.String(64), index=True)         # entPhysicalSerialNum
+    hardware_rev = db.Column(db.String(64))                      # entPhysicalHardwareRev
+    firmware_rev = db.Column(db.String(64))                      # entPhysicalFirmwareRev
+    software_rev = db.Column(db.String(64))                      # entPhysicalSoftwareRev
+    mfg_name = db.Column(db.String(64))                          # entPhysicalMfgName
+    is_fru = db.Column(db.Boolean, default=False)                # entPhysicalIsFRU（可现场更换）
+    last_seen = db.Column(db.DateTime, default=_utcnow)          # 最近一次采集到
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
+
+    # cascade 必须显式声明：device_id 为 NOT NULL，若按默认行为（解除关联）ORM 会在
+    # 删除设备时发 UPDATE device_components SET device_id=NULL → pymysql 1048。
+    device = db.relationship(
+        'Device',
+        backref=db.backref('components', cascade='all, delete-orphan'),
+        lazy='select',
+    )
+
+    def __repr__(self):
+        return f'<DeviceComponent {self.entity_class} {self.name or self.description} device={self.device_id}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'device_id': self.device_id,
+            'physical_index': self.physical_index,
+            'parent_index': self.parent_index,
+            'entity_class': self.entity_class or '',
+            'name': self.name or '',
+            'description': self.description or '',
+            'model_name': self.model_name or '',
+            'serial_number': self.serial_number or '',
+            'hardware_rev': self.hardware_rev or '',
+            'firmware_rev': self.firmware_rev or '',
+            'software_rev': self.software_rev or '',
+            'mfg_name': self.mfg_name or '',
+            'is_fru': bool(self.is_fru),
+            'last_seen': self.last_seen.strftime('%Y-%m-%d %H:%M:%S') if self.last_seen else '',
+        }
+
 
 class InventoryTransaction(db.Model):
     __tablename__ = 'inventory_transactions'
@@ -1112,7 +1198,9 @@ class DiscoveryTask(db.Model):
     last_run = db.Column(db.DateTime)
     next_run = db.Column(db.DateTime)
     last_duration = db.Column(db.Float)
-    last_result = db.Column(db.Text)
+    # /24 及以上网段的扫描结果可能超过 MySQL TEXT 上限(65535字节)，
+    # 使用 MEDIUMTEXT(16MB) 存储，避免写入失败导致任务卡在 running
+    last_result = db.Column(db.Text().with_variant(MEDIUMTEXT(), 'mysql'))
     run_count = db.Column(db.Integer, default=0)
     success_count = db.Column(db.Integer, default=0)
     fail_count = db.Column(db.Integer, default=0)
@@ -1240,6 +1328,11 @@ class DiscoveryResult(db.Model):
     verified = db.Column(db.Boolean, default=False)
     discovered_at = db.Column(db.DateTime, default=_utcnow, index=True)
     processed_at = db.Column(db.DateTime)
+    match_device_id = db.Column(db.Integer, nullable=True)
+    match_score = db.Column(db.Integer, default=0)
+    decision = db.Column(db.String(20), nullable=True)  # create/update/ignore/merge
+    error_code = db.Column(db.String(50), nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
     
     __table_args__ = (
         db.Index('idx_task_discovered', 'task_id', 'discovered_at'),
@@ -1275,6 +1368,11 @@ class DiscoveryResult(db.Model):
             'is_new_connection': self.is_new_connection,
             'confidence': self.confidence,
             'verified': self.verified,
+            'match_device_id': self.match_device_id,
+            'match_score': self.match_score,
+            'decision': self.decision,
+            'error_code': self.error_code,
+            'error_message': self.error_message,
             'discovered_at': self.discovered_at.isoformat() if self.discovered_at else None,
         }
 
@@ -1306,12 +1404,22 @@ class LogicalTopology(db.Model):
     
     def get_topology_data(self):
         try:
-            return json.loads(self.topology_data) if self.topology_data else {'nodes': [], 'links': []}
+            data = json.loads(self.topology_data) if self.topology_data else None
         except json.JSONDecodeError:
-            return {'nodes': [], 'links': []}
-    
+            data = None
+        if not isinstance(data, dict):
+            return {'nodes': [], 'edges': []}
+        # 兼容旧数据：保存过用 "links" 键的历史记录统一为 "edges"
+        if 'links' in data and 'edges' not in data:
+            data['edges'] = data.pop('links')
+        if 'nodes' not in data:
+            data['nodes'] = []
+        if 'edges' not in data:
+            data['edges'] = []
+        return data
+
     def set_topology_data(self, data_dict):
-        self.topology_data = json.dumps(data_dict, ensure_ascii=False) if data_dict else '{"nodes": [], "links": []}'
+        self.topology_data = json.dumps(data_dict, ensure_ascii=False) if data_dict else None
     
     def to_dict(self):
         return {
@@ -1472,6 +1580,11 @@ class AlertEscalation(db.Model):
     escalation_message = db.Column(db.Text)
     enabled = db.Column(db.Boolean, default=True)
     escalation_count = db.Column(db.Integer, default=0)
+    # ---- SEL/告警升级联动增强（新增列，可空；patch_schema 幂等补齐）----
+    metric_type = db.Column(db.String(50), comment='适用范围: 空/all=全部, bmc_sel=仅iDRAC SEL')
+    max_escalations = db.Column(db.Integer, default=3, comment='同一告警最大升级次数')
+    repeat_interval = db.Column(db.Integer, default=0, comment='重复升级间隔(秒), 0=仅升级一次')
+    auto_create_work_order = db.Column(db.Boolean, default=False, comment='升级后自动创建工单并回链告警')
     created_at = db.Column(db.DateTime, default=_utcnow)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
     created_by = db.Column(db.String(64))
@@ -1513,11 +1626,40 @@ class AlertEscalation(db.Model):
             'description': self.description,
             'original_severity': self.original_severity,
             'escalate_after': self.escalate_after,
+            'escalate_if_unacknowledged': self.escalate_if_unacknowledged,
             'target_severity': self.target_severity,
+            'metric_type': self.metric_type,
+            'max_escalations': self.max_escalations,
+            'repeat_interval': self.repeat_interval,
+            'auto_create_work_order': self.auto_create_work_order,
+            'target_users': self.get_target_users(),
+            'target_groups': self.get_target_groups(),
+            'target_actions': self.get_target_actions(),
+            'escalation_message': self.escalation_message,
             'enabled': self.enabled,
             'escalation_count': self.escalation_count,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+class AlertEscalationLog(db.Model):
+    """每次告警升级的历史记录（按 告警 x 策略 记录级别/时间，用于去重与加频）。"""
+    __tablename__ = 'alert_escalation_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    alert_id = db.Column(db.Integer, db.ForeignKey('alert_events.id'), index=True)
+    policy_id = db.Column(db.Integer, db.ForeignKey('alert_escalations.id'), index=True)
+    level = db.Column(db.Integer, default=1)
+    from_severity = db.Column(db.String(20))
+    to_severity = db.Column(db.String(20))
+    channel = db.Column(db.String(50))
+    target = db.Column(db.Text)
+    message = db.Column(db.Text)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), index=True, nullable=True)
+    escalated_at = db.Column(db.DateTime, default=_utcnow)
+
+    def __repr__(self):
+        return f'<AlertEscalationLog alert={self.alert_id} policy={self.policy_id} lv={self.level}>'
+
 
 class AlertSuppression(db.Model):
     __tablename__ = 'alert_suppressions'
@@ -1985,7 +2127,10 @@ Device.cabinet = db.relationship('Cabinet', back_populates='devices')
 Device.location = db.relationship('Location', back_populates='location_devices')
 Device.interfaces = db.relationship('Interface', foreign_keys='Interface.device_id', backref='device_ref', cascade='all, delete-orphan')
 Device.monitor_configs = db.relationship('DeviceMonitorConfig', back_populates='device', cascade='all, delete-orphan')
-Device.performance_metrics = db.relationship('PerformanceMetric', backref='device')
+Device.performance_metrics = db.relationship(
+    'PerformanceMetric', backref='device',
+    # performance_metrics.device_id 为 NOT NULL：默认"解除关联"会置 NULL → 1048
+    cascade='all, delete-orphan')
 # Device.spare_parts 已注释，略
 
 # Interface 关系

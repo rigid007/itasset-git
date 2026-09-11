@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 自动化{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('automation.task_list') }}">执行记录</a></li>
+                    <li class="breadcrumb-item active">{{ title }}</li>
+                </ol>
+            </nav>
+            <h1 class="h2">{{ title }}</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-10">
+            <div class="card mb-3">
+                <div class="card-header bg-light"><h5 class="mb-0"><i class="fas fa-file-alt me-1"></i>从作业模板导入</h5></div>
+                <div class="card-body py-2">
+                    <div class="d-flex gap-2">
+                        <select class="form-select form-select-sm" id="templateSelect">
+                            <option value="">选择模板自动填充下方表单</option>
+                            {% for t in templates %}
+                            <option value="{{ url_for('automation.task_create', template_id=t.id) }}">{{ t.name }}（{{ t.task_type }}）</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="templateApplyBtn">应用模板</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {{ form.hidden_tag() }}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.name.label(class='form-label') }}{{ form.name(class='form-control' + (' is-invalid' if form.name.errors else '')) }}
+                                {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.task_type.label(class='form-label') }}{{ form.task_type(class='form-select') }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.protocol.label(class='form-label') }}{{ form.protocol(class='form-select') }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.timeout.label(class='form-label') }}{{ form.timeout(class='form-control', type='number') }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.target_mode.label(class='form-label') }}{{ form.target_mode(class='form-select', id='targetMode') }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="devicePicker">
+                            {{ form.device_ids.label(class='form-label') }}
+                            {{ form.device_ids(class='form-select' + (' is-invalid' if form.device_ids.errors else ''), size=8) }}
+                            {% for e in form.device_ids.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            <div class="form-text">按住 Ctrl 可多选；目标选择“手动选择设备”时生效。</div>
+                        </div>
+                        <div class="row mb-3" id="groupPicker">
+                            <div class="col-md-6">
+                                {{ form.group_id.label(class='form-label') }}{{ form.group_id(class='form-select') }}
+                                <div class="form-text">包含该分组及其子分组的全部设备。</div>
+                            </div>
+                        </div>
+                        <div class="row mb-3" id="subnetPicker">
+                            <div class="col-md-6">
+                                {{ form.subnet_id.label(class='form-label') }}{{ form.subnet_id(class='form-select') }}
+                                <div class="form-text">该子网下已关联设备的设备（含按 IP 落在网段内的设备）。</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.content.label(class='form-label') }}
+                            {{ form.content(class='form-control font-monospace' + (' is-invalid' if form.content.errors else ''), style='font-size:0.85rem;') }}
+                            {% for e in form.content.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            <div class="form-text">命令执行：每行一条命令；脚本执行：多行脚本；配置下发：按行进入配置模式执行（华为系自动 save）。</div>
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.description.label(class='form-label') }}{{ form.description(class='form-control', rows=2) }}
+                        </div>
+
+                        <hr>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">{{ form.approval_required(class='form-check-input') }}{{ form.approval_required.label(class='form-check-label') }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">{{ form.auto_run(class='form-check-input') }}{{ form.auto_run.label(class='form-check-label') }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">{{ form.notify_enabled(class='form-check-input') }}{{ form.notify_enabled.label(class='form-check-label') }}</div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">{{ form.schedule_enabled(class='form-check-input', id='scheduleEnabled') }}{{ form.schedule_enabled.label(class='form-check-label') }}</div>
+                            </div>
+                            <div class="col-md-4" id="scheduleTypeWrap">
+                                {{ form.schedule_type.label(class='form-label') }}{{ form.schedule_type(class='form-select') }}
+                            </div>
+                            <div class="col-md-4" id="scheduleValueWrap">
+                                {{ form.schedule_value.label(class='form-label') }}{{ form.schedule_value(class='form-control' + (' is-invalid' if form.schedule_value.errors else '')) }}
+                                {% for e in form.schedule_value.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存{% if form.auto_run.data %}并执行{% endif %}</button>
+                            <a href="{{ url_for('automation.task_list') }}" class="btn btn-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const mode = document.getElementById('targetMode');
+    const devicePicker = document.getElementById('devicePicker');
+    const groupPicker = document.getElementById('groupPicker');
+    const subnetPicker = document.getElementById('subnetPicker');
+    const scheduleEnabled = document.getElementById('scheduleEnabled');
+    const scheduleTypeWrap = document.getElementById('scheduleTypeWrap');
+    const scheduleValueWrap = document.getElementById('scheduleValueWrap');
+
+    function syncMode() {
+        const v = mode.value;
+        devicePicker.style.display = v === 'devices' ? '' : 'none';
+        groupPicker.style.display = v === 'group' ? '' : 'none';
+        subnetPicker.style.display = v === 'subnet' ? '' : 'none';
+    }
+    function syncSchedule() {
+        const on = scheduleEnabled.checked;
+        scheduleTypeWrap.style.display = on ? '' : 'none';
+        scheduleValueWrap.style.display = on ? '' : 'none';
+    }
+    mode.addEventListener('change', syncMode);
+    scheduleEnabled.addEventListener('change', syncSchedule);
+    syncMode(); syncSchedule();
+
+    const sel = document.getElementById('templateSelect');
+    document.getElementById('templateApplyBtn').addEventListener('click', function () {
+        if (sel.value) window.location.href = sel.value;
+    });
+});
+</script>
+{% endblock %}

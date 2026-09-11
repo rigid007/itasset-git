@@ -29,6 +29,11 @@ ALERT_SETTINGS_KEYS = {
     'wechat_proxy': {'category': 'alert', 'default': '', 'description': '企业微信代理(可选)'},
     # Slack
     'slack_webhook_url': {'category': 'alert', 'default': '', 'description': 'Slack Webhook URL'},
+    # 钉钉
+    'dingtalk_webhook_url': {'category': 'alert', 'default': '', 'description': '钉钉机器人 Webhook URL'},
+    'dingtalk_secret': {'category': 'alert', 'default': '', 'description': '钉钉加签密钥（可选）'},
+    # 飞书
+    'feishu_webhook_url': {'category': 'alert', 'default': '', 'description': '飞书机器人 Webhook URL'},
     # 通用
     'webhook_default_url': {'category': 'alert', 'default': '', 'description': '默认Webhook URL'},
     'webhook_default_headers': {'category': 'alert', 'default': '{}', 'description': '默认Webhook请求头(JSON)'},
@@ -331,6 +336,72 @@ def send_webhook(recipients, data, headers=None, config=None):
         return False, f'Webhook发送失败: {str(e)}'
 
 
+# ==================== 钉钉 ====================
+
+def send_dingtalk(recipients, title, content, config=None):
+    """通过钉钉机器人 Webhook 发送消息（支持加签）。"""
+    import time as _time
+    import hmac
+    import hashlib
+    import base64
+    from urllib.parse import quote_plus
+
+    if config is None:
+        config = get_alert_settings()
+    webhook_url = config.get('dingtalk_webhook_url', '')
+    secret = config.get('dingtalk_secret', '')
+    if not webhook_url:
+        return False, '钉钉 Webhook URL 未配置'
+    try:
+        headers = {'Content-Type': 'application/json'}
+        url = webhook_url
+        if secret:
+            timestamp = str(round(_time.time() * 1000))
+            string_to_sign = f'{timestamp}\n{secret}'
+            hmac_code = hmac.new(secret.encode(), string_to_sign.encode(), digestmod=hashlib.sha256).digest()
+            sign = quote_plus(base64.b64encode(hmac_code))
+            url = f'{webhook_url}&timestamp={timestamp}&sign={sign}'
+        payload = {
+            'msgtype': 'markdown',
+            'markdown': {'title': title[:20], 'text': f'### {title}\n\n{content}'},
+        }
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        result = resp.json()
+        if result.get('errcode') == 0:
+            return True, '钉钉消息已发送'
+        return False, f'钉钉 API 错误: {result.get("errmsg", "未知")}'
+    except Exception as e:
+        logger.exception(f'钉钉发送失败: {e}')
+        return False, f'钉钉发送失败: {str(e)}'
+
+
+# ==================== 飞书 ====================
+
+def send_feishu(recipients, title, content, config=None):
+    """通过飞书机器人 Webhook 发送消息。"""
+    if config is None:
+        config = get_alert_settings()
+    webhook_url = config.get('feishu_webhook_url', '')
+    if not webhook_url:
+        return False, '飞书 Webhook URL 未配置'
+    try:
+        payload = {
+            'msg_type': 'interactive',
+            'card': {
+                'header': {'title': {'tag': 'plain_text', 'content': title[:50]}, 'template': 'blue'},
+                'elements': [{'tag': 'markdown', 'content': content}],
+            },
+        }
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        result = resp.json()
+        if result.get('StatusCode') in (0, None) and result.get('code') in (0, None):
+            return True, '飞书消息已发送'
+        return False, f'飞书 API 错误: {result.get("msg") or result.get("StatusMessage") or "未知"}'
+    except Exception as e:
+        logger.exception(f'飞书发送失败: {e}')
+        return False, f'飞书发送失败: {str(e)}'
+
+
 # ==================== 统一发送入口 ====================
 
 def send_notification(notification_config, title=None, content=None):
@@ -363,6 +434,10 @@ def send_notification(notification_config, title=None, content=None):
     elif ntype == 'slack':
         channel = extra_config.get('channel', '')
         return send_slack(receivers, channel, message_content, extra_config)
+    elif ntype == 'dingtalk':
+        return send_dingtalk(receivers, message_title, message_content, extra_config)
+    elif ntype == 'feishu':
+        return send_feishu(receivers, message_title, message_content, extra_config)
     elif ntype == 'webhook':
         headers = extra_config.get('headers', {})
         return send_webhook(receivers, message_content, headers, extra_config)

@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}带外管理 - 概览看板{% endblock %}
+{% block page_title %}带外管理总览（BMC 机群）{% endblock %}
+{% block page_subtitle %}对标 DCOS 带外「总览」：机群电源 / 厂商 / 功耗 / 温度 / 严重事件{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-2">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="text-muted small">控制器总数</div>
+        <div class="display-6" id="k-total">—</div>
+        <div class="small text-muted" id="k-enabled"></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="text-muted small">开机数</div>
+        <div class="display-6 text-success" id="k-on">—</div>
+        <div class="small text-muted">已绑定凭据 <span id="k-cred"></span></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="text-muted small">总功耗 (W)</div>
+        <div class="display-6 text-info" id="k-power">—</div>
+        <div class="small text-muted" id="k-polled"></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="text-muted small">最高温度 (℃)</div>
+        <div class="display-6 text-warning" id="k-maxtemp">—</div>
+        <div class="small text-muted">均值 <span id="k-avgtemp"></span>℃</div>
+      </div></div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card text-center h-100"><div class="card-body">
+        <div class="text-muted small">待处理 SEL 严重事件</div>
+        <div class="display-6 text-danger" id="k-sel">—</div>
+        <div class="small text-muted">传感器活跃 <span id="k-sensor-active">—</span> · 去抖观察 <span id="k-sensor-debounce">—</span></div>
+        <a class="small" href="/alert/list?metric_type=bmc_sel">查看告警 →</a>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-4">
+      <div class="card h-100"><div class="card-header">电源状态分布</div>
+        <div class="card-body"><div id="chart-power" style="height:260px"></div></div></div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100"><div class="card-header">厂商分布</div>
+        <div class="card-body"><div id="chart-vendor" style="height:260px"></div></div></div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100"><div class="card-header">最新传感器状态</div>
+        <div class="card-body"><div id="chart-sensor" style="height:260px"></div></div></div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">批量电源操作 <span class="text-muted small">（对标 DCOS 批量任务）</span></div>
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+          <label class="form-label">选择控制器（可多选）</label>
+          <select class="form-select" id="batch-ids" multiple size="4"></select>
+        </div>
+        <div class="col-md-4 d-grid gap-2">
+          <button class="btn btn-outline-danger" onclick="batchPower('power_on')">批量开机</button>
+          <button class="btn btn-outline-danger" onclick="batchPower('power_off')">批量关机</button>
+          <button class="btn btn-outline-warning" onclick="batchPower('reset')">批量重启</button>
+        </div>
+      </div>
+      <div class="alert alert-secondary d-none mt-3" id="batch-result"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/echarts.min.js') }}"></script>
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const $ = (s) => document.querySelector(s);
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+      'X-CSRFToken': csrf, 'Content-Type': 'application/json' });
+    return fetch(path, opts).then(r => r.json());
+  }
+  const PALETTE = {ok:'#2ecc71', warning:'#f39c12', critical:'#e74c3c',
+                   On:'#2ecc71', Off:'#95a5a6', Unknown:'#bdc3c7', other:'#3498db'};
+
+  function fmtMap(m){ return Object.entries(m||{}).map(([k,v])=>({name:k,value:v})); }
+
+  function renderCharts(d){
+    const power = echarts.init($('#chart-power'));
+    power.setOption({
+      tooltip:{}, legend:{bottom:0},
+      series:[{type:'pie', radius:['40%','70%'],
+        data: fmtMap(d.by_power),
+        itemStyle:{color:(p)=>PALETTE[p.name]||'#3498db'},
+        label:{formatter:'{b}: {c}'}}]
+    });
+    const vendor = echarts.init($('#chart-vendor'));
+    vendor.setOption({
+      tooltip:{}, grid:{left:60,right:20,top:10,bottom:30},
+      xAxis:{type:'category', data:Object.keys(d.by_vendor)},
+      yAxis:{type:'value'},
+      series:[{type:'bar', data:Object.values(d.by_vendor),
+        itemStyle:{color:'#3498db'}}]
+    });
+    const sensor = echarts.init($('#chart-sensor'));
+    sensor.setOption({
+      tooltip:{}, legend:{bottom:0},
+      series:[{type:'pie', radius:['40%','70%'],
+        data: fmtMap(d.sensor_status),
+        itemStyle:{color:(p)=>PALETTE[p.name]||'#3498db'},
+        label:{formatter:'{b}: {c}'}}]
+    });
+    window.addEventListener('resize', ()=>{power.resize();vendor.resize();sensor.resize();});
+  }
+
+  function loadOverview(){
+    api('/oob/api/overview').then(d=>{
+      $('#k-total').textContent = d.total;
+      $('#k-enabled').textContent = '启用 ' + d.enabled + ' / 轮询成功 ' + d.polled;
+      $('#k-on').textContent = d.by_power.On || 0;
+      $('#k-cred').textContent = d.with_credential;
+      $('#k-power').textContent = d.total_power_watts;
+      $('#k-polled').textContent = '已轮询 ' + d.polled;
+      $('#k-maxtemp').textContent = d.max_temp ?? '—';
+      $('#k-avgtemp').textContent = d.avg_temp ?? '—';
+      $('#k-sel').textContent = d.pending_sel_critical;
+      $('#k-sensor-active').textContent = d.sensor_active_alerts ?? '?';
+      $('#k-sensor-debounce').textContent = d.sensor_debounce_pending ?? '?';
+      renderCharts(d);
+    });
+  }
+
+  function loadControllersForBatch(){
+    api('/oob/api/controllers').then(list=>{
+      $('#batch-ids').innerHTML = list.map(c=>
+        `<option value="${c.id}">${c.name||c.bmc_ip}（${c.power_state||'?'}/${c.vendor||''}）</option>`).join('');
+    });
+  }
+
+  window.batchPower = function(action){
+    const sel = Array.from($('#batch-ids').selectedOptions).map(o=>+o.value);
+    if(!sel.length){ alert('请至少选择一个控制器'); return; }
+    api('/oob/api/controllers/batch-power',{method:'POST',
+      body:JSON.stringify({ids:sel, action})}).then(r=>{
+      const ok = r.results.filter(x=>x.ok).length;
+      const fail = r.results.length - ok;
+      const el = $('#batch-result');
+      el.classList.remove('d-none');
+      el.innerHTML = `已提交 <b>${r.results.length}</b> 台：${ok} 成功 / ${fail} 失败`
+        + (fail? '<br>'+r.results.filter(x=>!x.ok).map(x=>'#'+x.id+': '+x.error).join('; ') : '');
+      loadOverview();
+    });
+  };
+
+  loadOverview();
+  loadControllersForBatch();
+})();
+</script>
+{% endblock %}

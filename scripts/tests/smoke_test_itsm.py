@@ -131,7 +131,7 @@ def t_scheduler_jobs(ctx):
     from scheduler import SYSTEM_JOB_META, get_scheduler
 
     critical = ['sla_calculation_job', 'availability_collect_job',
-                'work_order_sla_monitor_job', 'check_devices_status_job']
+                'work_order_sla_monitor_job', 'unified_device_poll_job']
 
     scheduler = get_scheduler()
     registered = {j.id for j in scheduler.get_jobs()}

@@ -513,7 +513,7 @@
                                     </td>
                                     <td>
                                         <div class="font-weight-bold">{{ alert.title }}</div>
-                                        <small class="text-muted">{{ alert.description[:50] }}{% if alert.description|length > 50 %}...{% endif %}</small>
+                                        <small class="text-muted">{{ alert.message[:50] }}{% if alert.message|length > 50 %}...{% endif %}</small>
                                     </td>
                                     <td>
                                         <span class="severity-badge severity-{{ alert.severity }}">

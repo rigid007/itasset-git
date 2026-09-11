@@ -227,6 +227,45 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="bmc_ip" class="form-label">BMC IP（带外管理）</label>
+                        <input type="text" class="form-control" id="bmc_ip" name="bmc_ip"
+                               placeholder="例如：192.168.0.10" maxlength="45"
+                               value="{{ device.bmc_ip or '' }}">
+                        <div class="help-text">服务器 iLO/iDRAC/XCC 等带外管理 IP，用于物理服务器身份核对</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="bmc_mac" class="form-label">BMC MAC</label>
+                        <input type="text" class="form-control" id="bmc_mac" name="bmc_mac"
+                               placeholder="XX:XX:XX:XX:XX:XX" maxlength="17"
+                               value="{{ device.bmc_mac or '' }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="virtualization_type" class="form-label">虚拟化类型</label>
+                        <select class="form-select" id="virtualization_type" name="virtualization_type">
+                            <option value="" {% if not device.virtualization_type %}selected{% endif %}>无/非虚拟化</option>
+                            <option value="vmware" {% if device.virtualization_type == 'vmware' %}selected{% endif %}>VMware</option>
+                            <option value="hyperv" {% if device.virtualization_type == 'hyperv' %}selected{% endif %}>Hyper-V</option>
+                            <option value="kvm" {% if device.virtualization_type == 'kvm' %}selected{% endif %}>KVM/QEMU</option>
+                            <option value="proxmox" {% if device.virtualization_type == 'proxmox' %}selected{% endif %}>Proxmox</option>
+                            <option value="xen" {% if device.virtualization_type == 'xen' %}selected{% endif %}>Xen/Citrix</option>
+                            <option value="virtualbox" {% if device.virtualization_type == 'virtualbox' %}selected{% endif %}>VirtualBox</option>
+                            <option value="other" {% if device.virtualization_type == 'other' %}selected{% endif %}>其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_virtual_host" name="is_virtual_host"
+                                   {% if device.is_virtual_host %}checked{% endif %}>
+                            <label class="form-check-label" for="is_virtual_host">虚拟化宿主机（其上运行虚拟机）</label>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="row">
                     <div class="col-md-6 mb-3">

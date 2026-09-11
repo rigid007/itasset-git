@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}SAN / 光纤拓扑 (G6){% endblock %}
+{% block styles %}
+{{ super() }}
+<style>
+  .topo-wrap { position: relative; height: calc(100vh - 220px); min-height: 520px; background:#0f1620; border-radius:10px; overflow:hidden; }
+  #san-graph { width:100%; height:100%; }
+  .topo-toolbar { position:absolute; top:12px; left:12px; z-index:20; display:flex; gap:6px; flex-wrap:wrap; }
+  .topo-toolbar .btn { background:rgba(24,32,44,.92); border:1px solid #2b3a4d; color:#cfe3ff; }
+  .topo-toolbar .btn:hover { background:#1d2b3d; color:#fff; }
+  .topo-legend { position:absolute; top:12px; right:12px; z-index:20; background:rgba(16,22,32,.92); border:1px solid #2b3a4d; border-radius:8px; padding:10px 12px; color:#cfe3ff; font-size:12px; max-width:230px; }
+  .topo-legend .row { display:flex; align-items:center; gap:7px; margin:3px 0; }
+  .topo-legend .dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .topo-legend .sq { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .topo-stat { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px; }
+  .topo-stat .card { background:#121a26; border:1px solid #23344a; border-radius:8px; padding:10px 12px; color:#cfe3ff; }
+  .topo-stat .num { font-size:22px; font-weight:700; color:#7fd1ff; }
+  .topo-stat .lbl { font-size:12px; color:#8aa0bd; }
+  .g6-tooltip { position:absolute; z-index:30; background:rgba(12,18,28,.96); border:1px solid #2b3a4d; color:#e6f1ff; padding:8px 10px; border-radius:6px; font-size:12px; pointer-events:none; max-width:280px; }
+  .empty-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#5b7a99; flex-direction:column; gap:10px; }
+  #san-detail dl { margin-bottom:0; }
+  #san-detail dt { color:#8aa0bd; width:90px; float:left; }
+  @media (max-width:768px){ .topo-stat{ grid-template-columns:repeat(2,1fr);} .topo-legend{ display:none; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
+    <h4 class="mb-0"><i class="fas fa-project-diagram text-info"></i> SAN / 光纤拓扑</h4>
+    <div>
+      <button class="btn btn-sm btn-outline-light" onclick="seedDemo()"><i class="fas fa-magic"></i> 载入示例</button>
+      <button class="btn btn-sm btn-outline-light" onclick="openEdit(null)"><i class="fas fa-plus"></i> 新增节点</button>
+      <button class="btn btn-sm btn-outline-light" onclick="openLink()"><i class="fas fa-link"></i> 新增链路</button>
+      <a class="btn btn-sm btn-outline-light" href="{{ url_for('topology.graph') }}"><i class="fas fa-arrow-left"></i> 网络拓扑</a>
+    </div>
+  </div>
+
+  <div class="topo-stat">
+    <div class="card"><div class="num" id="st-nodes">0</div><div class="lbl">节点数</div></div>
+    <div class="card"><div class="num" id="st-links">0</div><div class="lbl">链路数</div></div>
+    <div class="card"><div class="num" id="st-zones">0</div><div class="lbl">分区数</div></div>
+    <div class="card"><div class="num" id="st-down">0</div><div class="lbl">故障链路</div></div>
+  </div>
+
+  <div class="topo-wrap">
+    <div id="san-graph"></div>
+    <div class="topo-toolbar">
+      <button class="btn btn-sm" data-layout="force" onclick="setLayout('force')" title="力导布局"><i class="fas fa-atom"></i> 力导</button>
+      <button class="btn btn-sm" data-layout="circular" onclick="setLayout('circular')" title="环形布局"><i class="fas fa-circle-notch"></i> 环形</button>
+      <button class="btn btn-sm" data-layout="grid" onclick="setLayout('grid')" title="网格布局"><i class="fas fa-th"></i> 网格</button>
+      <button class="btn btn-sm" data-layout="radial" onclick="setLayout('radial')" title="径向布局"><i class="fas fa-bullseye"></i> 径向</button>
+      <button class="btn btn-sm" onclick="fitView()" title="适应画布"><i class="fas fa-expand"></i> 适应</button>
+      <button class="btn btn-sm" onclick="zoomGraph(1.2)" title="放大"><i class="fas fa-search-plus"></i></button>
+      <button class="btn btn-sm" onclick="zoomGraph(0.83)" title="缩小"><i class="fas fa-search-minus"></i></button>
+      <button class="btn btn-sm" onclick="exportPng()" title="导出 PNG"><i class="fas fa-camera"></i></button>
+    </div>
+    <div class="topo-legend">
+      <div class="fw-bold mb-1"><i class="fas fa-layer-group"></i> 节点类型</div>
+      <div class="row"><span class="sq" style="background:#13c2c2"></span> FC 交换机</div>
+      <div class="row"><span class="sq" style="background:#2f54eb"></span> 存储阵列</div>
+      <div class="row"><span class="sq" style="background:#722ed1"></span> 服务器</div>
+      <div class="row"><span class="sq" style="background:#fa8c16"></span> HBA 卡</div>
+      <div class="row"><span class="sq" style="background:#8c8c8c"></span> 其他</div>
+      <div class="fw-bold mt-2 mb-1"><i class="fas fa-link"></i> 链路状态</div>
+      <div class="row"><span class="dot" style="background:#2ecc71"></span> 正常 (up)</div>
+      <div class="row"><span class="dot" style="background:#e74c3c"></span> 故障 (down)</div>
+      <div class="row"><span class="dot" style="background:#f39c12"></span> 降级 (degraded)</div>
+    </div>
+    <div class="empty-hint" id="san-empty" style="display:none;">
+      <i class="fas fa-inbox fa-2x text-secondary"></i>
+      <div class="text-secondary">暂无 SAN 节点，点击「载入示例」或「新增节点」开始。</div>
+    </div>
+  </div>
+</div>
+
+<!-- 节点编辑 -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header"><h6 class="modal-title">SAN 节点</h6><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="e-id">
+        <div class="mb-2"><label>名称 *</label><input id="e-name" class="form-control bg-secondary text-light"></div>
+        <div class="mb-2"><label>类型</label>
+          <select id="e-type" class="form-select bg-secondary text-light">
+            <option value="switch">FC 交换机</option><option value="array">存储阵列</option>
+            <option value="server">服务器</option><option value="hba">HBA 卡</option><option value="other">其他</option>
+          </select></div>
+        <div class="mb-2"><label>WWPN</label><input id="e-wwpn" class="form-control bg-secondary text-light" placeholder="21:00:00:0e:1a:2b:3c:4d"></div>
+        <div class="mb-2"><label>厂商</label><input id="e-vendor" class="form-control bg-secondary text-light"></div>
+        <div class="mb-2"><label>型号</label><input id="e-model" class="form-control bg-secondary text-light"></div>
+        <div class="mb-2"><label>管理 IP</label><input id="e-ip" class="form-control bg-secondary text-light"></div>
+        <div class="mb-2"><label>分区 (Zone)</label><input id="e-zone" class="form-control bg-secondary text-light"></div>
+        <div class="mb-2"><label>状态</label>
+          <select id="e-status" class="form-select bg-secondary text-light">
+            <option value="online">正常</option><option value="offline">离线</option><option value="unknown">未知</option>
+          </select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger me-auto" id="e-del" style="display:none" onclick="delNode()">删除</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="saveNode()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 链路编辑 -->
+<div class="modal fade" id="linkModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header"><h6 class="modal-title">SAN 链路</h6><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label>源节点 *</label><select id="l-src" class="form-select bg-secondary text-light"></select></div>
+        <div class="mb-2"><label>目的节点 *</label><select id="l-tgt" class="form-select bg-secondary text-light"></select></div>
+        <div class="mb-2"><label>源端口</label><input id="l-sport" class="form-control bg-secondary text-light" placeholder="0/1"></div>
+        <div class="mb-2"><label>目的端口</label><input id="l-tport" class="form-control bg-secondary text-light" placeholder="0/1"></div>
+        <div class="mb-2"><label>速率</label><input id="l-speed" class="form-control bg-secondary text-light" placeholder="16 Gbps"></div>
+        <div class="mb-2"><label>类型</label>
+          <select id="l-type" class="form-select bg-secondary text-light"><option value="fc">FC</option><option value="iscsi">iSCSI</option><option value="fcoe">FCoE</option></select></div>
+        <div class="mb-2"><label>状态</label>
+          <select id="l-status" class="form-select bg-secondary text-light"><option value="up">正常</option><option value="down">故障</option><option value="degraded">降级</option></select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="saveLink()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 详情 -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content bg-dark text-light">
+    <div class="modal-header"><h6 class="modal-title">节点详情</h6><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="san-detail"></div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/g6.min.js') }}"></script>
+<script>
+// CSRF 令牌：base.html 暴露在 AppConfig 中，全局裸变量 csrfToken 不存在会导致所有写操作 400
+const csrfToken = (window.AppConfig && AppConfig.csrfToken) ||
+  (document.querySelector('meta[name="csrf-token"]') && document.querySelector('meta[name="csrf-token"]').getAttribute('content')) || '';
+const API_GRAPH = "{{ url_for('topology.api_san_graph') }}";
+const API_SAN_NODES = "{{ url_for('topology.san_nodes_list') }}";
+const API_SAN_LINKS = "{{ url_for('topology.san_links_list') }}";
+const API_SAN_SEED = "{{ url_for('topology.san_seed') }}";
+const SAN_STATUS_LABEL = {online:'正常', offline:'离线', unknown:'未知', up:'正常', down:'故障', degraded:'降级'};
+// 与后端 san_models / api_san_graph 的 node_type 取值保持一致：switch/array/server/hba/other
+const SAN_NODE_COLOR = {switch:'#13c2c2', array:'#2f54eb', server:'#722ed1', hba:'#fa8c16', other:'#8c8c8c'};
+const SAN_NODE_LABEL = {switch:'FC交换机', array:'存储阵列', server:'服务器', hba:'HBA卡', other:'其他'};
+let graph=null, rawData={nodes:[],edges:[],combos:[]};
+const tooltip=document.createElement('div'); tooltip.className='g6-tooltip'; document.body.appendChild(tooltip);
+const loading=document.createElement('div'); loading.className='g6-tooltip'; loading.style.cssText+=';left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(16,22,32,.9)'; loading.textContent='加载中...';
+
+function showLoading(t){ loading.textContent=t||'加载中...'; document.querySelector('.topo-wrap').appendChild(loading); }
+function hideLoading(){ if(loading.parentNode) loading.parentNode.removeChild(loading); }
+
+function initGraph(){
+  graph = new G6.Graph({
+    container:'san-graph',
+    fitView:true, fitViewPadding:30,
+    layout:{ type:'force', preventOverlap:true, linkDistance:140, nodeStrength:-120, collideStrength:0.9 },
+    modes:{ default:['drag-canvas','zoom-canvas','drag-node'] },
+    defaultNode:{ type:'circle', size:34, style:{ lineWidth:2, fill:'#1b2a3d', stroke:'#4aa3ff' },
+      labelCfg:{ style:{ fill:'#e6f1ff', fontSize:11 } } },
+    defaultEdge:{ type:'quadratic', style:{ lineWidth:2, endArrow:true, stroke:'#2ecc71' },
+      labelCfg:{ style:{ fill:'#9fb6d4', fontSize:10, background:{ fill:'#0f1620', padding:[2,3,2,3], radius:3 } } } },
+    defaultCombo:{ type:'rect', style:{ fill:'rgba(30,42,61,.35)', stroke:'#34506f', lineWidth:1 },
+      labelCfg:{ style:{ fill:'#9fc4ff', fontSize:12 } } },
+    nodeStateStyles:{ highlight:{ lineWidth:4, shadowColor:'#7fd1ff', shadowBlur:18 },
+      dim:{ opacity:0.18 }, danger:{ stroke:'#e74c3c', lineWidth:3, shadowColor:'#e74c3c', shadowBlur:14 } },
+    edgeStateStyles:{ highlight:{ lineWidth:4, shadowColor:'#7fd1ff', shadowBlur:12 }, dim:{ opacity:0.18 } },
+  });
+  graph.data({nodes:[],edges:[],combos:[]}); graph.render();
+
+  graph.on('node:mouseenter', e=>{ const m=e.item.getModel();
+    tooltip.innerHTML=`<b>${m.label}</b><br>类型:${SAN_NODE_LABEL[m.nodeType]||m.nodeType}<br>WWPN:${m.wwpn||'-'}<br>分区:${m.zone||'-'}<br>IP:${m.mgmt_ip||'-'}`;
+    tooltip.style.display='block'; });
+  graph.on('node:mousemove', e=>{ tooltip.style.left=(e.clientX+12)+'px'; tooltip.style.top=(e.clientY+12)+'px'; });
+  graph.on('node:mouseleave', ()=>{ tooltip.style.display='none'; });
+  graph.on('node:click', e=>{ activate(e.item); showDetail(e.item.getModel()); });
+  graph.on('canvas:click', ()=>{ graph.getNodes().forEach(n=>graph.setItemState(n,'highlight',false)); graph.getNodes().forEach(n=>graph.setItemState(n,'dim',false)); graph.getEdges().forEach(ed=>{graph.setItemState(ed,'highlight',false);graph.setItemState(ed,'dim',false);}); });
+  graph.on('node:contextmenu', e=>{ e.preventDefault&&e.preventDefault(); openEdit(e.item.getModel()); });
+  graph.on('edge:contextmenu', e=>{ e.preventDefault&&e.preventDefault(); const m=e.item.getModel();
+    if(confirm('删除链路「'+ (m.label||('#'+m.id)) +'」？')) deleteLinkById(m.id); });
+}
+
+function activate(node){
+  const related=new Set([node.getID()]);
+  graph.getEdges().forEach(ed=>{ const s=ed.getSource().getID(), t=ed.getTarget().getID();
+    if(s===node.getID()) related.add(t); if(t===node.getID()) related.add(s); });
+  graph.getNodes().forEach(n=>{ const on=related.has(n.getID());
+    graph.setItemState(n,'dim',!on); graph.setItemState(n,'highlight',on); });
+  graph.getEdges().forEach(ed=>{ const on=related.has(ed.getSource().getID())&&related.has(ed.getTarget().getID());
+    graph.setItemState(ed,'dim',!on); graph.setItemState(ed,'highlight',on); });
+}
+
+function showDetail(m){
+  const html=`<dl>
+    <dt>名称</dt><dd>${m.label||'-'}</dd>
+    <dt>类型</dt><dd>${SAN_NODE_LABEL[m.nodeType]||m.nodeType}</dd>
+    <dt>WWPN</dt><dd>${m.wwpn||'-'}</dd>
+    <dt>厂商</dt><dd>${m.vendor||'-'}</dd>
+    <dt>型号</dt><dd>${m.model||'-'}</dd>
+    <dt>管理IP</dt><dd>${m.mgmt_ip||'-'}</dd>
+    <dt>分区</dt><dd>${m.zone||'-'}</dd>
+    <dt>状态</dt><dd>${SAN_STATUS_LABEL[m.status]||m.status||'unknown'}</dd>
+  </dl><div class="mt-2 d-flex gap-2">
+    <button class="btn btn-sm btn-outline-light" data-act="edit">编辑</button>
+    <button class="btn btn-sm btn-outline-danger" data-act="del">删除</button>
+  </div>`;
+  const box=document.getElementById('san-detail');
+  box.innerHTML=html;
+  const dm=document.getElementById('detailModal');
+  let inst=bootstrap.Modal.getInstance(dm);
+  if(!inst) inst=new bootstrap.Modal(dm);
+  box.querySelector('[data-act="edit"]').onclick=()=>{ inst.hide(); openEdit(m); };
+  box.querySelector('[data-act="del"]').onclick=()=>{ inst.hide(); delNodeById(m.id); };
+  inst.show();
+}
+
+function setLayout(type){
+  if(!graph) return;
+  if(rawData.combos.length && type!=='force'){ alert('存在分区 (combo) 时仅支持力导布局'); return; }
+  const cfg={ force:{type:'force',preventOverlap:true,linkDistance:140,nodeStrength:-120,collideStrength:0.9},
+    circular:{type:'circular'}, grid:{type:'grid',cols:Math.ceil(Math.sqrt(rawData.nodes.length||1)),preventOverlap:true},
+    radial:{type:'radial',unitRadius:120,preventOverlap:true} }[type];
+  graph.updateLayout(cfg);
+}
+function fitView(){ graph&&graph.fitView(30); }
+function zoomGraph(r){ if(graph){ const z=graph.getZoom(); graph.zoomTo(z*r, graph.getCanvasByPoint(graph.getWidth()/2, graph.getHeight()/2)); } }
+function exportPng(){ if(graph) graph.downloadFullImage('san-topology','image/png',{backgroundColor:'#0f1620'}); }
+
+function paint(){
+  // 直接使用后端返回的 type(形状) 与 color(配色)，保证与 api_san_graph 一致
+  const nodes=rawData.nodes.map(n=>({...n,
+    size:n.nodeType==='array'?42:34,
+    style:{ fill:'#16263a', stroke:n.color||SAN_NODE_COLOR[n.nodeType]||SAN_NODE_COLOR.other, lineWidth:2,
+      ...(n.status==='offline'?{stroke:'#e74c3c',lineWidth:3}:{}) } }));
+  const edges=rawData.edges.map(e=>({...e, style:{ lineWidth:e.speed&&/8/.test(e.speed)?2.5:2,
+    stroke:e.status==='down'?'#e74c3c':e.status==='degraded'?'#f39c12':'#2ecc71', endArrow:true } }));
+  const combos=rawData.combos.map(c=>({...c}));
+  graph.changeData({nodes,edges,combos});
+  // 统计
+  document.getElementById('st-nodes').textContent=nodes.length;
+  document.getElementById('st-links').textContent=edges.length;
+  document.getElementById('st-zones').textContent=combos.length;
+  document.getElementById('st-down').textContent=edges.filter(e=>e.status!=='up').length;
+  document.getElementById('san-empty').style.display=nodes.length?'none':'flex';
+  // 存在分区 combo 时仅允许力导布局（其余布局对 combo 支持差）
+  const hasCombos = rawData.combos.length > 0;
+  document.querySelectorAll('.topo-toolbar button[data-layout]').forEach(b=>{
+    b.disabled = hasCombos && b.dataset.layout !== 'force';
+  });
+}
+
+function loadData(){
+  showLoading('正在加载 SAN 拓扑...');
+  fetch(API_GRAPH).then(r=>r.ok?r.json():{nodes:[],edges:[],combos:[]})
+    .then(d=>{ rawData=d; paint(); hideLoading(); }).catch(()=>{ hideLoading(); });
+}
+
+// ---- 编辑/新增 ----
+function openEdit(m){
+  document.getElementById('e-id').value = m?m.id:'';
+  document.getElementById('e-name').value = m?m.label:'';
+  document.getElementById('e-type').value = m?m.nodeType:'switch';
+  document.getElementById('e-wwpn').value = m?m.wwpn:'';
+  document.getElementById('e-vendor').value = m?m.vendor:'';
+  document.getElementById('e-model').value = m?m.model:'';
+  document.getElementById('e-ip').value = m?m.mgmt_ip:'';
+  document.getElementById('e-zone').value = m?m.zone:'';
+  document.getElementById('e-status').value = m?m.status:'online';
+  document.getElementById('e-del').style.display = m?'inline-block':'none';
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+function saveNode(){
+  const id=document.getElementById('e-id').value;
+  const payload={ name:document.getElementById('e-name').value,
+    node_type:document.getElementById('e-type').value, wwpn:document.getElementById('e-wwpn').value,
+    vendor:document.getElementById('e-vendor').value, model:document.getElementById('e-model').value,
+    mgmt_ip:document.getElementById('e-ip').value, zone:document.getElementById('e-zone').value,
+    status:document.getElementById('e-status').value };
+  if(!payload.name){ alert('请填写名称'); return; }
+  const url=id?`${API_SAN_NODES}/${id}`:API_SAN_NODES;
+  const method=id?'PUT':'POST';
+  fetch(url,{method,headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},body:JSON.stringify(payload)})
+    .then(r=>r.ok?r.json():Promise.reject(r.status)).then(()=>{ const inst=bootstrap.Modal.getInstance(document.getElementById('editModal')); if(inst) inst.hide(); loadData(); })
+    .catch(e=>alert('保存失败: '+e));
+}
+function delNode(){ const id=document.getElementById('e-id').value; if(!id) return;
+  if(!confirm('确认删除该节点及其链路？')) return;
+  fetch(`${API_SAN_NODES}/${id}`,{method:'DELETE',headers:{'X-CSRFToken':csrfToken}})
+    .then(r=>r.ok?r.json():Promise.reject(r.status))
+    .then(()=>{ const inst=bootstrap.Modal.getInstance(document.getElementById('editModal')); if(inst) inst.hide(); loadData(); })
+    .catch(e=>alert('删除失败: '+e));
+}
+function delNodeById(id){ if(!id) return;
+  if(!confirm('确认删除该节点及其链路？')) return;
+  fetch(`${API_SAN_NODES}/${id}`,{method:'DELETE',headers:{'X-CSRFToken':csrfToken}})
+    .then(r=>r.ok?r.json():Promise.reject(r.status))
+    .then(()=>{ const d=bootstrap.Modal.getInstance(document.getElementById('detailModal')); if(d) d.hide(); loadData(); })
+    .catch(e=>alert('删除失败: '+e));
+}
+function deleteLinkById(lid){ if(!lid) return;
+  fetch(`${API_SAN_LINKS}/${lid}`,{method:'DELETE',headers:{'X-CSRFToken':csrfToken}})
+    .then(r=>r.ok?r.json():Promise.reject(r.status))
+    .then(()=>loadData()).catch(e=>alert('删除失败: '+e));
+}
+
+function fillNodeSelects(){
+  fetch(API_SAN_NODES).then(r=>r.json()).then(rows=>{
+    const opts=rows.map(r=>`<option value="${r.id}">${r.name} (${r.node_type})</option>`).join('');
+    document.getElementById('l-src').innerHTML=opts; document.getElementById('l-tgt').innerHTML=opts;
+  });
+}
+function openLink(){ fillNodeSelects(); new bootstrap.Modal(document.getElementById('linkModal')).show(); }
+function saveLink(){
+  const payload={ source_id:+document.getElementById('l-src').value, target_id:+document.getElementById('l-tgt').value,
+    port_source:document.getElementById('l-sport').value, port_target:document.getElementById('l-tport').value,
+    speed:document.getElementById('l-speed').value, link_type:document.getElementById('l-type').value,
+    status:document.getElementById('l-status').value };
+  if(payload.source_id===payload.target_id){ alert('源和目的不能相同'); return; }
+  fetch(API_SAN_LINKS,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},body:JSON.stringify(payload)})
+    .then(r=>r.ok?r.json():Promise.reject(r.status)).then(()=>{ bootstrap.Modal.getInstance(document.getElementById('linkModal')).hide(); loadData(); })
+    .catch(e=>alert('保存失败: '+e));
+}
+
+function seedDemo(){
+  if(!confirm('载入一组示例 SAN 拓扑（含 2 个分区、交换/存储/主机）？')) return;
+  fetch(API_SAN_SEED,{method:'POST',headers:{'X-CSRFToken':csrfToken}})
+    .then(r=>r.json()).then(()=>loadData()).catch(()=>alert('示例载入失败'));
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  try{ initGraph(); }catch(e){ console.error('SAN initGraph 失败:', e); alert('SAN 拓扑引擎 (G6) 加载失败：'+e.message); }
+  loadData();
+  // 兜底：G6 缺失或加载异常时也解除“加载中”，避免无限转圈
+  setTimeout(function(){ hideLoading(); }, 15000);
+});
+</script>
+{% endblock %}

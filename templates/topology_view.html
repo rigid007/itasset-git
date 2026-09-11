@@ -170,6 +170,8 @@
                             <span class="me-3"><i class="fas fa-square text-info me-1"></i> 交换机</span>
                             <span class="me-3"><i class="fas fa-shield-alt text-warning me-1"></i> 防火墙</span>
                             <span class="me-3"><i class="fas fa-server text-secondary me-1"></i> 服务器</span>
+                            <span class="me-3"><span class="badge bg-warning me-1" style="width: 12px; height: 12px; display: inline-block;"></span> 老化中连接</span>
+                            <span class="me-3"><span class="badge bg-secondary me-1" style="width: 12px; height: 12px; display: inline-block;"></span> 已老化连接</span>
                         </div>
                     </div>
                 </div>
@@ -430,10 +432,14 @@ function getTopologyOption() {
                     `;
                 } else {
                     const link = params.data;
+                    const agingLabel = link.aging_label || (link.aging_state === 'stale' ? '已老化' : link.aging_state === 'aging' ? '老化中' : link.aging_state === 'fresh' ? '正常' : '未知');
                     return `
                         <div style="font-weight: bold;">接口连接</div>
                         <div>${link.source_name}:${link.source_if} ↔ ${link.target_name}:${link.target_if}</div>
                         <div>协议: ${link.protocol || '未知'}</div>
+                        <div>置信度: ${Number(link.confidence || 0)}%</div>
+                        <div>老化状态: ${agingLabel}</div>
+                        ${link.last_seen ? `<div>最近确认: ${link.last_seen}</div>` : ''}
                         ${link.bandwidth ? `<div>带宽: ${link.bandwidth}</div>` : ''}
                     `;
                 }
@@ -569,6 +575,8 @@ function updateStatistics(data) {
     const onlineDevices = data.nodes.filter(node => node.status === 'online').length;
     const offlineDevices = totalDevices - onlineDevices;
     const totalLinks = data.links.length;
+    const staleLinks = data.links.filter(link => link.aging_state === 'stale').length;
+    const agingLinks = data.links.filter(link => link.aging_state === 'aging').length;
     
     document.getElementById('deviceCount').textContent = totalDevices;
     document.getElementById('onlineCount').textContent = onlineDevices;
@@ -576,7 +584,7 @@ function updateStatistics(data) {
     document.getElementById('linkCount').textContent = totalLinks;
     document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
     document.getElementById('topologyInfo').textContent = 
-        `共 ${totalDevices} 台设备，${onlineDevices} 台在线，${totalLinks} 条连接`;
+        `共 ${totalDevices} 台设备，${onlineDevices} 台在线，${totalLinks} 条连接；老化 ${staleLinks} 条，老化中 ${agingLinks} 条`;
 }
 
 // 应用筛选
@@ -635,21 +643,26 @@ function updateTopologyChart() {
     }));
     
     // 准备连接数据
-    const links = filteredLinks.map(link => ({
-        source: link.source,
-        target: link.target,
-        label: {
-            show: link.source_if && link.target_if,
-            formatter: `${link.source_if || ''} ↔ ${link.target_if || ''}`,
-            fontSize: 9
-        },
-        lineStyle: {
-            color: link.status === 'up' ? '#52c41a' : '#f5222d',
-            type: link.type === 'trunk' ? 'dashed' : 'solid',
-            width: link.bandwidth ? Math.min(5, parseInt(link.bandwidth) / 100) : 2
-        },
-        data: link
-    }));
+    const links = filteredLinks.map(link => {
+        const statusColor = link.status === 'up' ? '#52c41a' : (link.status === 'down' ? '#f5222d' : '#d9d9d9');
+        const agingColor = link.aging_state === 'stale' ? '#8c8c8c' : (link.aging_state === 'aging' ? '#faad14' : statusColor);
+        const lineType = link.aging_state === 'stale' ? 'dotted' : (link.type === 'trunk' ? 'dashed' : 'solid');
+        return {
+            source: link.source,
+            target: link.target,
+            label: {
+                show: link.source_if && link.target_if,
+                formatter: `${link.source_if || ''} ↔ ${link.target_if || ''}`,
+                fontSize: 9
+            },
+            lineStyle: {
+                color: agingColor,
+                type: lineType,
+                width: link.bandwidth ? Math.min(5, parseInt(link.bandwidth) / 100) : 2
+            },
+            data: link
+        };
+    });
     
     option.series[0].data = nodes;
     option.series[0].links = links;

@@ -68,13 +68,11 @@ def cleanup_monitoring_data(app, retention_days=None):
         retention_days = _get_retention_days()
     with app.app_context():
         from models.monitoring import MetricData
-        from models.models import InterfaceMonitorData
+        from models.models import InterfaceMonitorData, MonitorData
 
         logger.info(f"开始清理监控数据，保留 {retention_days} 天")
         n_metric = _delete_expired(MetricData, retention_days)
+        n_monitor = _delete_expired(MonitorData, retention_days)
         n_iface = _delete_expired(InterfaceMonitorData, retention_days)
-        logger.info(
-            f"监控数据清理完成: MetricData 删除 {n_metric} 条, "
-            f"InterfaceMonitorData 删除 {n_iface} 条"
-        )
-        return {'metric_data': n_metric, 'interface_monitor_data': n_iface}
+        logger.info('Monitoring data cleanup complete: MetricData %s rows, MonitorData %s rows, InterfaceMonitorData %s rows', n_metric, n_monitor, n_iface)
+        return {'metric_data': n_metric, 'monitor_data': n_monitor, 'interface_monitor_data': n_iface}

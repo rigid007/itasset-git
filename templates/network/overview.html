@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block title %}网络管理 - IT资产与运维管理平台{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h1 class="h2"><i class="fas fa-network-wired me-2"></i>网络管理</h1>
+            <p class="text-muted mb-0">子网 / IP 地址 / VLAN 统一规划与分配管理（IPAM）</p>
+        </div>
+        <div class="col-md-6 text-end">
+            <a href="{{ url_for('network.ip_import') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-import"></i> 导入IP
+            </a>
+            <a href="{{ url_for('network.ip_list') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-list"></i> IP地址管理
+            </a>
+            <a href="{{ url_for('network.subnet_add') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus"></i> 新增子网
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">子网</h6>
+                            <h2 class="mb-0">{{ subnet_count }}</h2>
+                        </div>
+                        <i class="fas fa-sitemap fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">VLAN</h6>
+                            <h2 class="mb-0">{{ vlan_count }}</h2>
+                        </div>
+                        <i class="fas fa-tags fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">已分配 IP</h6>
+                            <h2 class="mb-0">{{ ip_allocated }} <small class="fs-6">/ {{ ip_total }}</small></h2>
+                        </div>
+                        <i class="fas fa-server fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">分配率</h6>
+                            <h2 class="mb-0">{{ usage_percent }}%</h2>
+                        </div>
+                        <i class="fas fa-chart-pie fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-5 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-tachometer-alt me-1"></i>地址池状态</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>空闲</span><span class="badge bg-success">{{ ip_available }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>预留</span><span class="badge bg-info">{{ ip_reserved }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>已分配</span><span class="badge bg-primary">{{ ip_allocated }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3">
+                        <span>禁用</span><span class="badge bg-secondary">{{ ip_disabled }}</span>
+                    </div>
+                    <div class="progress" style="height: 22px;">
+                        <div class="progress-bar bg-success" style="width: {{ (ip_available / ip_total * 100) if ip_total else 0 }}%"
+                             title="空闲"></div>
+                        <div class="progress-bar bg-info" style="width: {{ (ip_reserved / ip_total * 100) if ip_total else 0 }}%"
+                             title="预留"></div>
+                        <div class="progress-bar bg-primary" style="width: {{ (ip_allocated / ip_total * 100) if ip_total else 0 }}%"
+                             title="已分配"></div>
+                    </div>
+                    {% if not ip_total %}
+                    <p class="text-muted small mt-2 mb-0">暂无 IP 记录，请在子网详情中“生成IP”或通过“导入IP”添加。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-fire me-1"></i>已分配最多的子网</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>子网</th>
+                                    <th>VLAN</th>
+                                    <th class="text-end">已分配</th>
+                                    <th style="width: 30%;">占用率</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sub, usage in top_subnets %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('network.subnet_detail', id=sub.id) }}">{{ sub.name }}</a>
+                                        <span class="text-muted small">({{ sub.cidr }})</span>
+                                    </td>
+                                    <td>{{ sub.vlan.vlan_id if sub.vlan else '-' }}</td>
+                                    <td class="text-end">{{ usage.allocated }} / {{ usage.total }}</td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar {% if usage.usage_percent >= 90 %}bg-danger{% elif usage.usage_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                                 style="width: {{ usage.usage_percent }}%">{{ usage.usage_percent }}%</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="4" class="text-center text-muted py-4">暂无子网</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-clock me-1"></i>最近新增子网</h5>
+                    <a href="{{ url_for('network.subnet_list') }}" class="small">全部</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for sub in recent_subnets %}
+                        <a href="{{ url_for('network.subnet_detail', id=sub.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-sitemap me-2 text-primary"></i>{{ sub.name }}</span>
+                            <span><span class="text-muted small me-2">{{ sub.cidr }}</span>
+                                <span class="badge bg-{{ 'success' if sub.status == 'active' else 'secondary' }}">
+                                    {{ '启用' if sub.status == 'active' else '停用' }}</span></span>
+                        </a>
+                        {% else %}
+                        <div class="text-center text-muted py-4">暂无子网，<a href="{{ url_for('network.subnet_add') }}">立即创建</a></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-1"></i>最近更新的 IP</h5>
+                    <a href="{{ url_for('network.ip_list') }}" class="small">全部</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>IP</th>
+                                    <th>子网</th>
+                                    <th>状态</th>
+                                    <th>使用人/设备</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ip in recent_ips %}
+                                <tr>
+                                    <td>{{ ip.ip_address }}</td>
+                                    <td class="small">{{ ip.subnet.cidr if ip.subnet else '-' }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ {'available':'success','reserved':'info','allocated':'primary','disabled':'secondary'}.get(ip.status,'secondary') }}">
+                                            {{ {'available':'空闲','reserved':'预留','allocated':'已分配','disabled':'禁用'}.get(ip.status, ip.status) }}
+                                        </span>
+                                    </td>
+                                    <td>{{ ip.device.name if ip.device else (ip.hostname or ip.owner or '-') }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="4" class="text-center text-muted py-4">暂无 IP 记录</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

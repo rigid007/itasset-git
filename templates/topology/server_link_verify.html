@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}服务器连接核对 - 网络拓扑系统{% endblock %}
+
+{% block page_title %}服务器与交换机连接核对{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-primary">服务器总数: {{ stats.total }}</span>
+            <span class="badge bg-warning text-dark">虚拟化宿主机: {{ stats.virtual_hosts }}</span>
+            <span class="badge bg-success">已发现上联: {{ stats.with_link }}</span>
+            <span class="badge bg-secondary">未发现连接: {{ stats.no_link }}</span>
+        </div>
+        <div class="d-flex gap-2">
+            <input type="text" id="verifySearch" class="form-control form-control-sm" style="width: 220px"
+                   placeholder="搜索服务器/交换机/端口/IP...">
+            <a class="btn btn-sm btn-outline-success" href="{{ url_for('topology.server_link_verify', export='csv') }}">
+                <i class="fas fa-file-csv"></i> 导出CSV
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <span class="fw-bold"><i class="fas fa-server me-1"></i>交换机端口 ↔ 宿主机物理网卡 MAC ↔ BMC ↔ 管理 IP</span>
+            <span class="text-muted small ms-2">
+                LLDP 发现的链路为物理拓扑最可靠依据；MAC 兜底发现会把宿主机上行口（大量 VM MAC）识别为虚拟化宿主机。
+            </span>
+        </div>
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0" id="verifyTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>服务器</th>
+                        <th>管理IP</th>
+                        <th>BMC IP</th>
+                        <th>BMC MAC</th>
+                        <th>虚拟化</th>
+                        <th>宿主机</th>
+                        <th>物理网卡MAC</th>
+                        <th>对端交换机</th>
+                        <th>交换机端口</th>
+                        <th>发现协议</th>
+                        <th>链路状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td class="fw-semibold">{{ r.server }}</td>
+                        <td><code>{{ r.mgmt_ip or '-' }}</code></td>
+                        <td><code>{{ r.bmc_ip or '-' }}</code></td>
+                        <td><code>{{ r.bmc_mac or '-' }}</code></td>
+                        <td>{{ r.virtualization or '-' }}</td>
+                        <td>
+                            {% if r.is_virtual_host %}
+                            <span class="badge bg-warning text-dark">是</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">否</span>
+                            {% endif %}
+                        </td>
+                        <td class="small"><code>{{ r.host_macs or '-' }}</code></td>
+                        <td>{{ r.switch or '-' }}</td>
+                        <td><code>{{ r.switch_port or '-' }}</code></td>
+                        <td>
+                            {% if r.protocol == 'lldp' %}
+                            <span class="badge bg-info text-dark">LLDP</span>
+                            {% elif r.protocol == 'snmp_mac' %}
+                            <span class="badge bg-secondary">SNMP MAC</span>
+                            {% elif r.protocol == 'ipmac' or r.protocol == 'ipmac_no_ip' %}
+                            <span class="badge bg-secondary">IP/MAC</span>
+                            {% elif r.protocol %}
+                            <span class="badge bg-secondary">{{ r.protocol }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.link_status == 'active' %}
+                            <span class="badge bg-success">active</span>
+                            {% elif r.link_status == 'down' %}
+                            <span class="badge bg-danger">down</span>
+                            {% elif r.link_status == '未发现连接' %}
+                            <span class="badge bg-secondary">{{ r.link_status }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ r.link_status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-4">暂无服务器数据，请先在设备管理中录入服务器。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function () {
+    $('#verifySearch').on('input', function () {
+        var kw = $(this).val().toLowerCase().trim();
+        $('#verifyTable tbody tr').each(function () {
+            $(this).toggle($(this).text().toLowerCase().indexOf(kw) >= 0);
+        });
+    });
+});
+</script>
+{% endblock %}

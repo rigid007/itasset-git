@@ -114,6 +114,179 @@ def real_time_monitor():
 
 
 
+@monitoring_bp.route('/collection-health')
+@login_required
+@permission_required('monitor:view')
+def collection_health():
+    """Collection health overview: latest poll, reachability, staleness, failure streak."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    now = datetime.utcnow()
+
+    devices_page = Device.query.filter_by(is_decommissioned=False).order_by(Device.name).paginate(
+        page=page, per_page=per_page, error_out=False)
+    configs = {c.device_id: c for c in DeviceMonitorConfig.query.all()}
+
+    latest_sub = db.session.query(
+        MonitorData.device_id,
+        func.max(MonitorData.collected_at).label('max_collected')
+    ).group_by(MonitorData.device_id).subquery()
+    latest_rows = db.session.query(MonitorData).join(
+        latest_sub,
+        and_(
+            MonitorData.device_id == latest_sub.c.device_id,
+            MonitorData.collected_at == latest_sub.c.max_collected,
+        )
+    ).all()
+    latest_by_device = {row.device_id: row for row in latest_rows}
+
+    all_devices = Device.query.filter_by(is_decommissioned=False).all()
+    stats = {'total': len(all_devices), 'ok': 0, 'failing': 0, 'stale': 0, 'no_data': 0, 'disabled': 0}
+    for device in all_devices:
+        cfg = configs.get(device.id)
+        enabled = cfg.enabled if cfg else True
+        latest = latest_by_device.get(device.id)
+        if not enabled:
+            stats['disabled'] += 1
+        elif latest is None:
+            stats['no_data'] += 1
+        else:
+            ping_enabled = bool(getattr(cfg, 'enable_ping', True)) if cfg else True
+            snmp_enabled = bool(getattr(cfg, 'enable_snmp', False)) if cfg else bool(device.snmp_community)
+            ping_interval = max(int(getattr(cfg, 'ping_interval', 60) or 60), 5) if cfg else 60
+            snmp_interval = max(int(getattr(cfg, 'snmp_interval', 300) or 300), 5) if cfg else 300
+            intervals = []
+            if ping_enabled:
+                intervals.append(ping_interval)
+            if snmp_enabled:
+                intervals.append(snmp_interval)
+            expected_interval = min(intervals) if intervals else 300
+            if latest.is_reachable and (now - latest.collected_at).total_seconds() <= max(expected_interval * 3, 300):
+                stats['ok'] += 1
+            elif not latest.is_reachable:
+                stats['failing'] += 1
+            else:
+                stats['stale'] += 1
+
+    page_device_ids = [device.id for device in devices_page.items]
+    last_success_by_device = {}
+    last_fail_by_device = {}
+    consecutive_by_device = {}
+
+    if page_device_ids:
+        success_max = db.session.query(
+            MonitorData.device_id.label('device_id'),
+            func.max(MonitorData.collected_at).label('max_collected')
+        ).filter(
+            MonitorData.device_id.in_(page_device_ids),
+            MonitorData.is_reachable.is_(True),
+        ).group_by(MonitorData.device_id).subquery()
+
+        success_rows = db.session.query(MonitorData).join(
+            success_max,
+            and_(
+                MonitorData.device_id == success_max.c.device_id,
+                MonitorData.collected_at == success_max.c.max_collected,
+                MonitorData.is_reachable.is_(True),
+            )
+        ).all()
+        for row in success_rows:
+            last_success_by_device.setdefault(row.device_id, row)
+
+        fail_max = db.session.query(
+            MonitorData.device_id.label('device_id'),
+            func.max(MonitorData.collected_at).label('max_collected')
+        ).filter(
+            MonitorData.device_id.in_(page_device_ids),
+            MonitorData.is_reachable.is_(False),
+        ).group_by(MonitorData.device_id).subquery()
+
+        fail_rows = db.session.query(MonitorData).join(
+            fail_max,
+            and_(
+                MonitorData.device_id == fail_max.c.device_id,
+                MonitorData.collected_at == fail_max.c.max_collected,
+                MonitorData.is_reachable.is_(False),
+            )
+        ).all()
+        for row in fail_rows:
+            last_fail_by_device.setdefault(row.device_id, row)
+
+        fail_base = db.session.query(
+            MonitorData.device_id.label('device_id'),
+            MonitorData.id.label('monitor_data_id')
+        ).outerjoin(
+            success_max,
+            MonitorData.device_id == success_max.c.device_id
+        ).filter(
+            MonitorData.device_id.in_(page_device_ids),
+            MonitorData.is_reachable.is_(False),
+            or_(
+                success_max.c.max_collected.is_(None),
+                MonitorData.collected_at > success_max.c.max_collected,
+            )
+        ).subquery()
+
+        counts = db.session.query(
+            fail_base.c.device_id,
+            func.count(fail_base.c.monitor_data_id).label('consecutive_failures')
+        ).group_by(fail_base.c.device_id).all()
+        consecutive_by_device = {device_id: count for device_id, count in counts}
+
+    items = []
+    for device in devices_page.items:
+        cfg = configs.get(device.id)
+        enabled = cfg.enabled if cfg else True
+        ping_enabled = bool(getattr(cfg, 'enable_ping', True)) if cfg else True
+        snmp_enabled = bool(getattr(cfg, 'enable_snmp', False)) if cfg else bool(device.snmp_community)
+        ping_interval = max(int(getattr(cfg, 'ping_interval', 60) or 60), 5) if cfg else 60
+        snmp_interval = max(int(getattr(cfg, 'snmp_interval', 300) or 300), 5) if cfg else 300
+        candidate_intervals = []
+        if ping_enabled:
+            candidate_intervals.append(ping_interval)
+        if snmp_enabled:
+            candidate_intervals.append(snmp_interval)
+        expected_interval = min(candidate_intervals) if candidate_intervals else 300
+
+        latest = latest_by_device.get(device.id)
+        last_success = last_success_by_device.get(device.id)
+        last_fail = last_fail_by_device.get(device.id)
+        consecutive_failures = consecutive_by_device.get(device.id, 0)
+
+        if not enabled:
+            health = 'disabled'
+        elif latest is None:
+            health = 'no_data'
+        elif latest.is_reachable and (now - latest.collected_at).total_seconds() <= max(expected_interval * 3, 300):
+            health = 'ok'
+        elif not latest.is_reachable:
+            health = 'failing'
+        else:
+            health = 'stale'
+
+        items.append({
+            'device': device,
+            'config': cfg,
+            'enabled': enabled,
+            'expected_interval': expected_interval,
+            'latest': latest,
+            'last_success': last_success,
+            'last_fail': last_fail,
+            'consecutive_failures': consecutive_failures,
+            'health': health,
+        })
+
+    total = Device.query.filter_by(is_decommissioned=False).count()
+    stats['total'] = total
+    return render_template(
+        'monitoring/collection_health.html',
+        items=items,
+        stats=stats,
+        pagination=devices_page,
+        now=now,
+    )
+
+
 @monitoring_bp.route('/get_snmp_data')
 @login_required
 @permission_required('monitor:view')
@@ -169,11 +342,7 @@ def save_snmp_data():
 
     try:
         # 重新采集一次最新数据（确保保存的是最新值）
-        snmp_data = snmp.get_device_snmp_data(
-            ip=device.management_ip,
-            community=device.snmp_community,
-            version=device.snmp_version or 2
-        )
+        snmp_data = get_device_snmp_data(device)
 
         # 更新设备字段
         device.cpu_usage = snmp_data.get('cpu_usage')
@@ -1124,7 +1293,7 @@ def create_schedule():
             )
 
             flash('监控调度创建成功', 'success')
-            return redirect(url_for('monitor_settings.schedule_list'))
+            return redirect(url_for('monitoring.schedule_list'))
             
         except Exception as e:
             db.session.rollback()
@@ -1215,7 +1384,7 @@ def edit_schedule(schedule_id):
             )
 
             flash('监控调度更新成功', 'success')
-            return redirect(url_for('monitor_settings.schedule_list'))
+            return redirect(url_for('monitoring.schedule_list'))
 
         except Exception as e:
             db.session.rollback()
@@ -1384,7 +1553,7 @@ def delete_schedule(schedule_id):
         db.session.rollback()
         flash(f'删除监控调度失败: {str(e)}', 'danger')
 
-    return redirect(url_for('monitor_settings.schedule_list'))
+    return redirect(url_for('monitoring.schedule_list'))
 
 @monitoring_bp.route('/schedules/<int:schedule_id>/toggle', methods=['POST'])
 @login_required
@@ -1419,7 +1588,7 @@ def toggle_schedule(schedule_id):
         db.session.rollback()
         flash(f'操作失败: {str(e)}', 'danger')
 
-    return redirect(url_for('monitor_settings.schedule_list'))
+    return redirect(url_for('monitoring.schedule_list'))
 
 @monitoring_bp.route('/schedules/<int:schedule_id>/run', methods=['POST'])
 @login_required
@@ -1434,7 +1603,7 @@ def run_schedule(schedule_id):
         ok, msg = run_monitor_schedule_now(schedule)
         if not ok:
             flash(f'执行失败: {msg}', 'danger')
-            return redirect(url_for('monitor_settings.schedule_list'))
+            return redirect(url_for('monitoring.schedule_list'))
 
         log_audit(
             action='execute',
@@ -1450,7 +1619,7 @@ def run_schedule(schedule_id):
         db.session.rollback()
         flash(f'执行失败: {str(e)}', 'danger')
 
-    return redirect(url_for('monitor_settings.schedule_list'))
+    return redirect(url_for('monitoring.schedule_list'))
 
 # ========== 通知配置管理 ==========
 @monitoring_bp.route('/notifications')
@@ -1591,7 +1760,7 @@ def create_notification():
             )
 
             flash('通知配置创建成功', 'success')
-            return redirect(url_for('monitor_settings.notification_list'))
+            return redirect(url_for('monitoring.notification_list'))
 
         except Exception as e:
             db.session.rollback()
@@ -1744,7 +1913,7 @@ def edit_notification(notification_id):
             )
 
             flash('通知配置更新成功', 'success')
-            return redirect(url_for('monitor_settings.notification_list'))
+            return redirect(url_for('monitoring.notification_list'))
 
         except Exception as e:
             db.session.rollback()
@@ -1779,7 +1948,7 @@ def delete_notification(notification_id):
         db.session.rollback()
         flash(f'删除通知配置失败: {str(e)}', 'danger')
 
-    return redirect(url_for('monitor_settings.notification_list'))
+    return redirect(url_for('monitoring.notification_list'))
 
 @monitoring_bp.route('/notifications/<int:notification_id>/test', methods=['POST'])
 @login_required
@@ -1815,7 +1984,7 @@ def test_notification(notification_id):
         db.session.rollback()
         flash(f'测试通知异常: {str(e)}', 'danger')
 
-    return redirect(url_for('monitor_settings.notification_list'))
+    return redirect(url_for('monitoring.notification_list'))
 
 # ========== 设备监控配置 ==========
 @monitoring_bp.route('/device_configs')
@@ -2297,12 +2466,12 @@ def save_device_config(device_id):
         )
 
         flash('设备监控配置保存成功', 'success')
-        return redirect(url_for('monitor_settings.device_config_detail', device_id=device_id))
+        return redirect(url_for('monitoring.device_config_detail', device_id=device_id))
         
     except Exception as e:
         db.session.rollback()
         flash(f'保存配置失败: {str(e)}', 'danger')
-        return redirect(url_for('monitor_settings.device_config_detail', device_id=device_id))
+        return redirect(url_for('monitoring.device_config_detail', device_id=device_id))
 
 @monitoring_bp.route('/device_configs/<int:device_id>/toggle', methods=['POST'])
 @login_required
@@ -2314,7 +2483,7 @@ def toggle_device_config(device_id):
         
         if not config:
             flash('设备监控配置不存在', 'warning')
-            return redirect(url_for('monitor_settings.device_config_list'))
+            return redirect(url_for('monitoring.device_config_list'))
         
         config.enabled = not config.enabled
 
@@ -2335,7 +2504,7 @@ def toggle_device_config(device_id):
         db.session.rollback()
         flash(f'操作失败: {str(e)}', 'danger')
     
-    return redirect(url_for('monitor_settings.device_config_list'))
+    return redirect(url_for('monitoring.device_config_list'))
 
 @monitoring_bp.route('/device_configs/batch_update', methods=['POST'])
 @login_required
@@ -2738,9 +2907,9 @@ def api_monitoring_status():
                 'network_usage': round(network_avg, 2),
             },
             'alerts': {
-                'critical': random.randint(0, 2),
-                'warning': random.randint(0, 5),
-                'info': random.randint(0, 10),
+                'critical': sum(1 for a in AlertEvent.query.filter_by(status='active').all() if a.severity == 'critical'),
+                'warning': sum(1 for a in AlertEvent.query.filter_by(status='active').all() if a.severity == 'warning'),
+                'info': sum(1 for a in AlertEvent.query.filter_by(status='active').all() if a.severity == 'info'),
             },
             'last_updated': datetime.now(timezone.utc).isoformat()
         }
@@ -2870,65 +3039,25 @@ def api_performance_metrics():
 @login_required
 @permission_required('monitor:view')
 def api_alerts():
-    """获取告警信息"""
+    """Get real alert events from the database."""
     try:
-        # 模拟告警数据（在实际应用中应从数据库获取）
+        alerts_db = AlertEvent.query.order_by(AlertEvent.first_occurred.desc()).limit(200).all()
         alerts = []
-        
-        # 检查设备状态
-        devices = Device.query.all()
-        for device in devices:
-            if device.status == 'offline':
-                alerts.append({
-                    'id': f"alert_{device.id}_{datetime.now(timezone.utc).timestamp()}",
-                    'severity': 'critical',
-                    'device_id': device.id,
-                    'device_name': device.name,
-                    'message': f'设备 {device.name} 离线',
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                    'acknowledged': False
-                })
-            elif device.status == 'warning':
-                alerts.append({
-                    'id': f"alert_{device.id}_{datetime.now(timezone.utc).timestamp()}",
-                    'severity': 'warning',
-                    'device_id': device.id,
-                    'device_name': device.name,
-                    'message': f'设备 {device.name} 状态异常',
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                    'acknowledged': False
-                })
-        
-        # 模拟一些性能告警
-        metrics = PerformanceMetric.query.order_by(PerformanceMetric.timestamp.desc()).limit(10).all()
-        for metric in metrics:
-            if metric.cpu_usage and metric.cpu_usage > 90:
-                alerts.append({
-                    'id': f"cpu_alert_{metric.id}",
-                    'severity': 'warning',
-                    'device_id': metric.device_id,
-                    'device_name': metric.device.name if metric.device else 'Unknown',
-                    'message': f'CPU使用率过高: {metric.cpu_usage}%',
-                    'timestamp': metric.timestamp.isoformat(),
-                    'acknowledged': False
-                })
-            if metric.memory_usage and metric.memory_usage > 90:
-                alerts.append({
-                    'id': f"memory_alert_{metric.id}",
-                    'severity': 'warning',
-                    'device_id': metric.device_id,
-                    'device_name': metric.device.name if metric.device else 'Unknown',
-                    'message': f'内存使用率过高: {metric.memory_usage}%',
-                    'timestamp': metric.timestamp.isoformat(),
-                    'acknowledged': False
-                })
-        
-        # 排序：未确认的优先，然后按严重程度排序
-        alerts.sort(key=lambda x: (not x['acknowledged'], 
-                                  0 if x['severity'] == 'critical' else 
-                                  1 if x['severity'] == 'warning' else 2))
-        
-        # 统计数据
+        for a in alerts_db:
+            alerts.append({
+                'id': a.id,
+                'severity': a.severity,
+                'device_id': a.device_id,
+                'device_name': a.device.name if a.device else 'Unknown',
+                'message': a.message or a.title,
+                'timestamp': a.first_occurred.isoformat() if a.first_occurred else None,
+                'acknowledged': a.status == 'acknowledged',
+            })
+
+        alerts.sort(key=lambda x: (not x['acknowledged'],
+                                   0 if x['severity'] == 'critical' else
+                                   1 if x['severity'] == 'warning' else 2))
+
         alert_stats = {
             'total': len(alerts),
             'critical': sum(1 for a in alerts if a['severity'] == 'critical'),
@@ -2936,13 +3065,12 @@ def api_alerts():
             'info': sum(1 for a in alerts if a['severity'] == 'info'),
             'unacknowledged': sum(1 for a in alerts if not a['acknowledged']),
         }
-        
+
         return jsonify({
-            'alerts': alerts[:50],  # 只返回最近的50个告警
+            'alerts': alerts[:50],
             'stats': alert_stats,
             'last_updated': datetime.now(timezone.utc).isoformat()
         })
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2950,16 +3078,26 @@ def api_alerts():
 @login_required
 @permission_required('monitor:edit')
 def api_acknowledge_alert(alert_id):
-    """确认告警"""
+    """Acknowledge an alert in the database."""
     try:
-        # 在实际应用中，这里应该更新数据库中的告警状态
-        # 由于我们使用的是模拟数据，这里只是返回成功响应
+        try:
+            alert_id = int(alert_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Alert not found'}), 404
+        alert = AlertEvent.query.get(alert_id)
+        if not alert:
+            return jsonify({'success': False, 'message': 'Alert not found'}), 404
+        alert.status = 'acknowledged'
+        alert.acknowledged_at = datetime.now(timezone.utc)
+        alert.acknowledged_by = current_user.username
+        db.session.commit()
         return jsonify({
             'success': True,
-            'message': '告警已确认',
+            'message': 'Alert acknowledged',
             'alert_id': alert_id
         })
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @monitoring_bp.route('/api/settings/monitoring', methods=['GET', 'POST'])
@@ -3232,6 +3370,25 @@ def discover_interfaces(device_id):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
+def _get_latest_interface_monitor_rows(device_id):
+    """Return latest InterfaceMonitorData per interface for one device."""
+    latest_sub = db.session.query(
+        InterfaceMonitorData.interface_id,
+        func.max(InterfaceMonitorData.collected_at).label('max_collected')
+    ).filter(
+        InterfaceMonitorData.device_id == device_id
+    ).group_by(InterfaceMonitorData.interface_id).subquery()
+
+    rows = db.session.query(InterfaceMonitorData).join(
+        latest_sub,
+        and_(
+            InterfaceMonitorData.interface_id == latest_sub.c.interface_id,
+            InterfaceMonitorData.collected_at == latest_sub.c.max_collected,
+        )
+    ).all()
+    return {row.interface_id: row for row in rows}
+
+
 #==================================================================
 
 # ------------------- 页面路由 -------------------
@@ -3250,9 +3407,9 @@ def interface_monitor():
     if device_id:
         device = Device.query.get_or_404(device_id)
         interfaces = Interface.query.filter_by(device_id=device_id).all()
+        latest_by_interface = _get_latest_interface_monitor_rows(device_id)
         for iface in interfaces:
-            latest = InterfaceMonitorData.query.filter_by(interface_id=iface.id) \
-                        .order_by(InterfaceMonitorData.collected_at.desc()).first()
+            latest = latest_by_interface.get(iface.id)
             if latest:
                 interface_stats[iface.id] = {
                     'bytes_in': latest.bytes_in,
@@ -3301,13 +3458,13 @@ def get_latest_interface_stats(device_id):
     """获取指定设备所有接口的最新监控数据"""
     # 确认设备存在
     print("get_latest_interface_stats called, device_id:", device_id)
-    device = Device.query.get_or_404(device_id)
+    Device.query.get_or_404(device_id)
     # 查询该设备所有接口
     interfaces = Interface.query.filter_by(device_id=device_id).all()
+    latest_by_interface = _get_latest_interface_monitor_rows(device_id)
     result = []
     for iface in interfaces:
-        latest = InterfaceMonitorData.query.filter_by(interface_id=iface.id) \
-                    .order_by(InterfaceMonitorData.collected_at.desc()).first()
+        latest = latest_by_interface.get(iface.id)
         if latest:
             result.append({
                 'interface_id': iface.id,

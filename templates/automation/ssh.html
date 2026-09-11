@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}在线终端 - 自动化{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <h1 class="h2"><i class="fas fa-terminal me-2"></i>在线终端</h1>
+            <p class="text-muted mb-0">通过 SSH 连接设备（Linux / 网络设备 / 已配置 SSH 的 Windows），凭据取自设备配置</p>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <select class="form-select form-select-sm" id="deviceSelect">
+                        <option value="">选择设备</option>
+                        {% for d in devices %}
+                        <option value="{{ d.id }}">{{ d.name }}（{{ d.management_ip or d.ip_address }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-sm btn-primary" id="connectBtn"><i class="fas fa-plug"></i> 连接</button>
+                    <button class="btn btn-sm btn-danger" id="disconnectBtn" disabled><i class="fas fa-unlink"></i> 断开</button>
+                </div>
+                <div class="col-md-4 text-end" id="connStatus">
+                    <span class="text-muted small">未连接</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body p-0">
+            <div id="terminal" style="height: 560px; background: #000;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const term = new Terminal({ cursorBlink: true, fontSize: 14, theme: { background: '#000' } });
+    term.open(document.getElementById('terminal'));
+    const statusEl = document.getElementById('connStatus');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const deviceSelect = document.getElementById('deviceSelect');
+
+    const socket = io('/ssh', { transports: ['websocket'] });
+    let connected = false;
+
+    function setStatus(text, cls) {
+        statusEl.innerHTML = `<span class="${cls || 'text-muted'} small">${text}</span>`;
+    }
+
+    socket.on('connect', function () { setStatus('终端通道已就绪', 'text-success'); });
+    socket.on('connect_error', function (e) { setStatus('连接失败: ' + (e.message || e), 'text-danger'); });
+    socket.on('ssh_connected', function (d) {
+        connected = true;
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        setStatus(d.message, 'text-success');
+        term.focus();
+    });
+    socket.on('ssh_output', function (d) { term.write(d.data); });
+    socket.on('ssh_error', function (d) { setStatus(d.message, 'text-danger'); });
+    socket.on('ssh_disconnected', function (d) {
+        connected = false;
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        setStatus(d.message || '连接已断开', 'text-muted');
+    });
+
+    connectBtn.addEventListener('click', function () {
+        const deviceId = deviceSelect.value;
+        if (!deviceId) { setStatus('请先选择设备', 'text-warning'); return; }
+        term.reset();
+        socket.emit('connect_device', { device_id: parseInt(deviceId), cols: term.cols, rows: term.rows });
+        setStatus('正在连接...', 'text-info');
+    });
+    disconnectBtn.addEventListener('click', function () {
+        socket.emit('disconnect_device');
+    });
+
+    term.onData(function (data) {
+        if (connected) socket.emit('ssh_input', { data: data });
+    });
+    term.onResize(function (size) {
+        if (connected) socket.emit('resize', { cols: size.cols, rows: size.rows });
+    });
+});
+</script>
+{% endblock %}

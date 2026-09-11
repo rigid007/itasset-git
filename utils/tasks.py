@@ -7,21 +7,14 @@ import json
 import logging
 import time
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
-from typing import Tuple, Dict, Any, Optional, List
 
-from pysnmp.entity.rfc3413.oneliner import cmdgen
-import redis
-from flask import current_app
-from sqlalchemy.orm.exc import StaleDataError
 
 from extensions import db
-from models.models import ConnectionPath, Device, Interface, DeviceMonitorLog
+from models.models import ConnectionPath, Device, Interface, DeviceMonitorLog, InterfaceMonitorData
 from models.config_models import SystemLog
-from models.monitoring import MetricData
-from utils.utils import snmp_walk, snmp_get, walk_interfaces, snmp_get_with_timeout
-from blueprints.topology import is_valid_target_ip
+from utils.utils import snmp_walk, walk_interfaces, snmp_get_with_timeout
 
 # ==================== 日志配置 ====================
 logger = logging.getLogger(__name__)
@@ -170,7 +163,6 @@ def get_ifindex_via_snmp(device, port_name):
     
     try:
         desc_entries = snmp_walk(ip, '1.3.6.1.2.1.2.2.1.2', community, version=version, timeout=3)
-        index_entries = snmp_walk(ip, '1.3.6.1.2.1.2.2.1.1', community, version=version, timeout=3)
 
         desc_to_index = {}
         for oid_desc, desc in desc_entries:
@@ -580,136 +572,146 @@ POLL_WORKERS = 40
 POLL_TIME_BUDGET = 240  # 秒；在 5min 间隔内留出余量
 
 
-def _collect_device_interfaces(app, device_id, redis_params):
+def _collect_device_interfaces(app, device_id):
     """
-    子线程内采集单台设备的接口流量数据，返回记录列表并自行推送到 Redis。
-    每个线程使用独立的 Redis 连接（redis-py 连接对象非线程安全），避免共享连接。
+    子线程内采集单台设备的接口流量数据，并直接写入 InterfaceMonitorData。
+
+    旧实现只把数据推到 Redis 队列，但项目中没有消费者，导致：
+      1. Redis 队列无限膨胀
+      2. 接口监控页面查询不到最新历史数据
+    这里改为直接入库，与页面/保留清理逻辑闭环。
     """
-    records = []
+    written = 0
     try:
         with app.app_context():
             device = Device.query.get(device_id)
             if not device:
-                return records
+                return 0
             ip = device.management_ip or device.ip_address
             community = getattr(device, 'snmp_community', 'public')
             version = getattr(device, 'snmp_version', '2c')
             if not ip:
-                return records
+                return 0
 
             interfaces = Interface.query.filter_by(device_id=device.id).all()
             valid_ifaces = [i for i in interfaces if i.ifindex]
-            for interface in valid_ifaces:
-                oid_in = f'1.3.6.1.2.1.2.2.1.10.{interface.ifindex}'
-                oid_out = f'1.3.6.1.2.1.2.2.1.16.{interface.ifindex}'
-                oid_admin = f'1.3.6.1.2.1.2.2.1.7.{interface.ifindex}'
-                oid_oper = f'1.3.6.1.2.1.2.2.1.8.{interface.ifindex}'
-                oid_speed = f'1.3.6.1.2.1.2.2.1.5.{interface.ifindex}'
 
+            def _walk_table(oid_base):
+                result = {}
                 try:
-                    bytes_in = snmp_get_with_timeout(ip, community, version, oid_in, timeout=3)
-                    bytes_out = snmp_get_with_timeout(ip, community, version, oid_out, timeout=3)
-                    admin_val = snmp_get_with_timeout(ip, community, version, oid_admin, timeout=3)
-                    oper_val = snmp_get_with_timeout(ip, community, version, oid_oper, timeout=3)
-                    speed_val = snmp_get_with_timeout(ip, community, version, oid_speed, timeout=3)
-                except Exception as e:
-                    logger.debug(f"接口 {interface.name} SNMP 请求异常: {e}，跳过")
-                    continue
+                    entries = snmp_walk(ip, oid_base, community, version=version, timeout=3)
+                except Exception:
+                    entries = []
+                for oid, val in entries or []:
+                    parts = oid.split('.')
+                    try:
+                        result[int(parts[-1])] = val
+                    except (ValueError, TypeError):
+                        continue
+                return result
 
+            table_oids = {
+                'bytes_in': '1.3.6.1.2.1.2.2.1.10',
+                'bytes_out': '1.3.6.1.2.1.2.2.1.16',
+                'packets_in': '1.3.6.1.2.1.2.2.1.11',
+                'packets_out': '1.3.6.1.2.1.2.2.1.17',
+                'errors_in': '1.3.6.1.2.1.2.2.1.14',
+                'errors_out': '1.3.6.1.2.1.2.2.1.20',
+                'drops_in': '1.3.6.1.2.1.2.2.1.13',
+                'drops_out': '1.3.6.1.2.1.2.2.1.19',
+                'admin_status': '1.3.6.1.2.1.2.2.1.7',
+                'oper_status': '1.3.6.1.2.1.2.2.1.8',
+                'speed': '1.3.6.1.2.1.2.2.1.5',
+            }
+            tables = {name: _walk_table(oid) for name, oid in table_oids.items()}
+            # Prefer 64-bit HC counters (ifHCInOctets / ifHCOutOctets) for
+            # accurate byte deltas on high-speed interfaces; fall back to the
+            # legacy 32-bit if*Octets table when a device does not support them.
+            hc_oids = {
+                'bytes_in': '1.3.6.1.2.1.31.1.1.1.6',
+                'bytes_out': '1.3.6.1.2.1.31.1.1.1.10',
+            }
+            for _name, _oid in hc_oids.items():
+                _hc = _walk_table(_oid)
+                if _hc:
+                    tables[_name] = _hc
+
+            def _int_val(name, ifindex):
+                try:
+                    return int(tables[name].get(ifindex))
+                except (ValueError, TypeError):
+                    return 0
+
+            now = datetime.utcnow()
+            interface_updates = []
+            records = []
+            for interface in valid_ifaces:
+                ifindex = int(interface.ifindex)
+                admin_val = tables['admin_status'].get(ifindex)
+                oper_val = tables['oper_status'].get(ifindex)
                 admin_status = 'up' if str(admin_val) == '1' else 'down' if str(admin_val) == '2' else 'unknown'
                 oper_status = 'up' if str(oper_val) == '1' else 'down' if str(oper_val) == '2' else 'unknown'
 
-                try:
-                    bytes_in_val = int(bytes_in) if bytes_in is not None else 0
-                    bytes_out_val = int(bytes_out) if bytes_out is not None else 0
-                    speed_val_int = int(speed_val) if speed_val is not None else 0
-                except (ValueError, TypeError):
-                    logger.debug(f"接口 {interface.name} 数值转换失败，跳过")
-                    continue
+                if interface.admin_status != admin_status or interface.oper_status != oper_status:
+                    interface.admin_status = admin_status
+                    interface.oper_status = oper_status
+                    interface.updated_at = datetime.utcnow()
+                    interface_updates.append(interface)
 
-                records.append({
-                    'interface_id': interface.id,
-                    'device_id': device.id,
-                    'bytes_in': bytes_in_val,
-                    'bytes_out': bytes_out_val,
-                    'packets_in': 0,
-                    'packets_out': 0,
-                    'errors_in': 0,
-                    'errors_out': 0,
-                    'drops_in': 0,
-                    'drops_out': 0,
-                    'speed_in': None,
-                    'speed_out': None,
-                    'bandwidth_usage': None,
-                    'admin_status': admin_status,
-                    'oper_status': oper_status,
-                    'speed': speed_val_int,
-                    'collected_at': datetime.now(timezone.utc).isoformat(),
-                    'created_at': datetime.now(timezone.utc).isoformat()
-                })
+                records.append(InterfaceMonitorData(
+                    interface_id=interface.id,
+                    device_id=device.id,
+                    bytes_in=_int_val('bytes_in', ifindex),
+                    bytes_out=_int_val('bytes_out', ifindex),
+                    packets_in=_int_val('packets_in', ifindex),
+                    packets_out=_int_val('packets_out', ifindex),
+                    errors_in=_int_val('errors_in', ifindex),
+                    errors_out=_int_val('errors_out', ifindex),
+                    drops_in=_int_val('drops_in', ifindex),
+                    drops_out=_int_val('drops_out', ifindex),
+                    speed_in=None,
+                    speed_out=None,
+                    bandwidth_usage=None,
+                    admin_status=admin_status,
+                    oper_status=oper_status,
+                    speed=_int_val('speed', ifindex),
+                    collected_at=now,
+                    created_at=now,
+                ))
+
+            try:
+                if records:
+                    db.session.bulk_save_objects(records)
+                if interface_updates:
+                    logger.info('Device #%s interface status updated: %s', device_id, len(interface_updates))
+                db.session.commit()
+                written = len(records)
+            except Exception:
+                db.session.rollback()
+                logger.exception('Device #%s interface metrics persist failed', device_id)
+                return 0
     except Exception as e:
         logger.error(f"采集设备 #{device_id} 接口时异常: {e}")
-        return records
-
-    # 本线程独立连接，批量推送到 Redis
-    if records and redis_params:
         try:
-            r = redis.Redis(
-                host=redis_params['host'],
-                port=redis_params['port'],
-                db=redis_params['db'],
-                password=redis_params['password'],
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5,
-            )
-            pipe = r.pipeline()
-            for rec in records:
-                pipe.rpush(redis_params['queue_key'], json.dumps(rec))
-            pipe.execute()
-            r.close()
-        except redis.exceptions.RedisError as e:
-            logger.error(f"设备 #{device_id} 推送失败: {e}")
-    return records
+            db.session.rollback()
+        except Exception:
+            pass
+        return 0
+    return written
 
 
 def poll_all_devices_interfaces(app):
     """
-    定时采集任务（生产者，并发版）：
-    并发采集所有在线设备的接口流量数据，并推送到 Redis 队列。
-    单轮设有时间预算，超过预算即停止提交新设备，避免任务无限堆积。
+    定时采集任务：并发采集所有在线设备的接口流量数据并直接写入数据库。
+
+    移除 Redis 生产者逻辑，避免接口流量队列无消费者导致内存增长和历史数据丢失。
     """
     if app is None:
         from flask import current_app
         app = current_app._get_current_object()
-    logger.info("=========== 开始执行接口数据采集任务（生产者，并发）===============")
+    logger.info("=========== 开始执行接口数据采集任务（直接入库）===============")
 
     with app.app_context():
-        redis_host = app.config.get('REDIS_HOST', 'localhost')
-        redis_port = app.config.get('REDIS_PORT', 6379)
-        redis_db = app.config.get('REDIS_DB', 0)
-        redis_password = app.config.get('REDIS_PASSWORD', None)
-        redis_queue_key = app.config.get('REDIS_QUEUE_KEY', 'interface_monitor:queue')
-
-        # 主线程先验证 Redis 连通性
-        try:
-            test_r = redis.Redis(
-                host=redis_host, port=redis_port, db=redis_db,
-                password=redis_password, decode_responses=True,
-                socket_connect_timeout=5, socket_timeout=5,
-            )
-            test_r.ping()
-            test_r.close()
-            logger.info(f"Redis 连接成功：{redis_host}:{redis_port}/{redis_db}")
-        except Exception as e:
-            logger.error(f"Redis 连接失败，任务终止：{e}")
-            return
-
-        redis_params = {
-            'host': redis_host, 'port': redis_port, 'db': redis_db,
-            'password': redis_password, 'queue_key': redis_queue_key,
-        }
-
         devices = Device.query.filter(Device.status.in_(['online', 'active'])).all()
         device_ids = [d.id for d in devices]
         # 主线程读取完毕，立即归还连接，避免扫描期间长期占用连接池
@@ -728,21 +730,18 @@ def poll_all_devices_interfaces(app):
                     skipped = len(device_ids) - len(futures)
                     logger.warning(f"接口采集达到时间预算，停止提交剩余 {skipped} 台设备（下轮继续）")
                     break
-                futures[executor.submit(_collect_device_interfaces, app, did, redis_params)] = did
+                futures[executor.submit(_collect_device_interfaces, app, did)] = did
 
             for future in as_completed(futures):
                 try:
-                    recs = future.result() or []
-                    total_records += len(recs)
+                    written = future.result() or 0
+                    total_records += written
                     processed += 1
                 except Exception as e:
                     logger.error(f"接口采集子任务异常: {e}")
 
         elapsed = time.time() - start
-        logger.info(f"=========== 接口数据采集任务执行完毕 =============")
+        logger.info("=========== 接口数据采集任务执行完毕 =============")
         logger.info(f"处理设备数: {processed}/{len(device_ids)}（跳过 {skipped}）")
-        logger.info(f"推送记录总数: {total_records}")
+        logger.info(f"写入记录总数: {total_records}")
         logger.info(f"总耗时: {elapsed:.2f}秒")
-
-
-
